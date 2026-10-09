@@ -32,6 +32,7 @@
     {
       "source": "functions",
       "codebase": "default",
+      "runtime": "nodejs24",
       "ignore": [
         "node_modules",
         ".git",

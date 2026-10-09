@@ -303,7 +303,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
    - Firestore has a hard limit of 500 operations per batch/transaction.
    - Batch writes (such as `finalizeSession`) must be chunked to $\le 400$ items.
 4. **Cloud Functions v2 Limits:**
-   - All callable functions must use lightweight resources (Node 20, minimal cold-start overhead).
+   - All callable functions must use lightweight resources (Node 24, minimal cold-start overhead).
    - Follow instructions in `docs/BUDGET_ALERTS.md` to keep GCP Billing alerts configured at £1.00.
 
 ---
@@ -326,7 +326,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   └── design/
 │       └── repair_cafe_management_system.md # Full architectural design doc
 │
-├── functions/                         # Cloud Functions (Node 20 / TypeScript)
+├── functions/                         # Cloud Functions (Node 24 / TypeScript)
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── src/
