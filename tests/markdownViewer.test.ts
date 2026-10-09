@@ -16,7 +16,7 @@ describe('MarkdownViewer & Inline Parsing', () => {
       expect(result).toHaveLength(3);
       expect(result[0]).toBe('This is ');
       expect(React.isValidElement(result[1])).toBe(true);
-      const boldElem = result[1] as React.ReactElement;
+      const boldElem = result[1] as React.ReactElement<{ children: React.ReactNode }>;
       expect(boldElem.type).toBe('strong');
       expect(boldElem.props.children).toBe('bold');
       expect(result[2]).toBe(' text');
@@ -27,7 +27,7 @@ describe('MarkdownViewer & Inline Parsing', () => {
       expect(result).toHaveLength(3);
       expect(result[0]).toBe('This is ');
       expect(React.isValidElement(result[1])).toBe(true);
-      const italicElem = result[1] as React.ReactElement;
+      const italicElem = result[1] as React.ReactElement<{ children: React.ReactNode }>;
       expect(italicElem.type).toBe('em');
       expect(italicElem.props.children).toBe('italic');
       expect(result[2]).toBe(' text');
@@ -38,7 +38,7 @@ describe('MarkdownViewer & Inline Parsing', () => {
       expect(result).toHaveLength(3);
       expect(result[0]).toBe('Check ');
       expect(React.isValidElement(result[1])).toBe(true);
-      const codeElem = result[1] as React.ReactElement;
+      const codeElem = result[1] as React.ReactElement<{ children: React.ReactNode }>;
       expect(codeElem.type).toBe('code');
       expect(codeElem.props.children).toBe('DANGER_DO_NOT_ENERGIZE');
       expect(result[2]).toBe(' status');
@@ -49,7 +49,7 @@ describe('MarkdownViewer & Inline Parsing', () => {
       expect(result).toHaveLength(3);
       expect(result[0]).toBe('Visit ');
       expect(React.isValidElement(result[1])).toBe(true);
-      const linkElem = result[1] as React.ReactElement;
+      const linkElem = result[1] as React.ReactElement<{ href: string; children: React.ReactNode }>;
       expect(linkElem.type).toBe('a');
       expect(linkElem.props.href).toBe('https://suttonrepaircafe.org.uk');
       expect(linkElem.props.children).toBe('Sutton Repair Café');
@@ -77,9 +77,13 @@ Paragraph of terms with [link](https://example.com) and \`code\`.
 
       const viewer = MarkdownViewer({ content: markdown });
       expect(React.isValidElement(viewer)).toBe(true);
-      expect(viewer.props.className).toContain('markdown-body');
+      if (!React.isValidElement(viewer)) {
+        throw new Error('Expected viewer to be a valid React element');
+      }
+      const viewerElem = viewer as React.ReactElement<{ className?: string; children?: React.ReactElement<{ type: string }>[] }>;
+      expect(viewerElem.props.className).toContain('markdown-body');
       
-      const children = viewer.props.children as React.ReactElement[];
+      const children = viewerElem.props.children || [];
       expect(Array.isArray(children)).toBe(true);
       expect(children.length).toBeGreaterThan(0);
 

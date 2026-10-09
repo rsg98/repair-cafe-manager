@@ -5,11 +5,9 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   ShieldAlert, 
-  Lock, 
   Sliders,
   Check,
-  ShieldCheck,
-  History
+  ShieldCheck
 } from 'lucide-react';
 import { Session, RepairItem, ApplianceClass, PatInitialOutcome, PatFinalOutcome } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';

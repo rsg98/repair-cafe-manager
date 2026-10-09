@@ -111,7 +111,8 @@ export async function submitRegistration(params: {
       contactPhone: submission.customer.contactPhone,
       agreedToTerms: submission.customer.agreedToTerms,
       termsVersion: submission.customer.termsVersion,
-      registeredAt: now
+      registeredAt: now,
+      submittedAt: now
     };
 
     const privateRef = doc(db, 'sessions', sessionId, 'repairs', repairId, 'private', 'customer');

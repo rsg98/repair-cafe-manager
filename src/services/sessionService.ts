@@ -5,8 +5,6 @@ import {
   updateDoc, 
   collection, 
   getDocs, 
-  query, 
-  where,
   terminate,
   clearIndexedDbPersistence
 } from 'firebase/firestore';
@@ -64,7 +62,7 @@ export async function createSession(params: {
     volunteerPinHash,
     cardRangeStart: params.cardRangeStart,
     cardRangeEnd: params.cardRangeEnd,
-    createdAt: new Date().toISOString()
+    createdAt: Date.now()
   };
 
   // 1. Create session document

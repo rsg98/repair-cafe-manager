@@ -140,6 +140,9 @@ export interface RepairItem {
     outcome: PatFinalOutcome;
     certificateNotes?: string;
   };
+
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface PrivateCustomerData {
@@ -147,7 +150,8 @@ export interface PrivateCustomerData {
   contactPhone?: string; // Scrubbed to "[REDACTED]" on finalize
   agreedToTerms: boolean;
   termsVersion: string;
-  submittedAt: number;
+  submittedAt?: number;
+  registeredAt?: number;
   redactedAt?: number;
 }
 

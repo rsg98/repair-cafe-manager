@@ -3,7 +3,6 @@ import {
   ClipboardList, 
   CheckCircle2, 
   Info, 
-  ShieldCheck, 
   Plus, 
   Trash2, 
   ArrowRight,

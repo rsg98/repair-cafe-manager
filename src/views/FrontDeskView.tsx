@@ -8,10 +8,9 @@ import {
   Calendar, 
   Archive,
   RefreshCw,
-  Clock,
   Tablet
 } from 'lucide-react';
-import { Session, RepairItem, ItemStatus } from '../types';
+import { Session, RepairItem } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useRepairs } from '../hooks/useRepairs';
 import { 

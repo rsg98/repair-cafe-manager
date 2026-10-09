@@ -8,8 +8,7 @@ import {
   Wrench, 
   Home, 
   HelpCircle, 
-  XCircle,
-  FileText
+  XCircle
 } from 'lucide-react';
 import { Session, RepairItem, RepairOutcome } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';
