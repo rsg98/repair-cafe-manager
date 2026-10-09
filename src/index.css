@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased selection:bg-brand-500 selection:text-white;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Card token badge styling */
+.card-number-badge {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+}
+
+/* Print styles for QR codes and physical tokens */
+@media print {
+  nav, header, button, .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+}

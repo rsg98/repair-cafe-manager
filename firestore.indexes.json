@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "repairs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sessionId", "order": "ASCENDING" },
+        { "fieldPath": "cardNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "repairs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sessionId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

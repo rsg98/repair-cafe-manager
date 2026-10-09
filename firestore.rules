@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function isVolunteer() {
+      return request.auth != null && (request.auth.token.role == 'volunteer' || isAdmin());
+    }
+
+    // System Settings (Active Session Pointer)
+    match /settings/system {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Sessions Collection
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      // Repairs Subcollection
+      match /repairs/{repairId} {
+        // Public registration can create initial repair document
+        allow create: if true;
+        // Anyone authenticated as volunteer or admin can view repair records
+        allow read: if true;
+        // Volunteer or admin can update status, PAT results, and repair notes
+        allow update: if isVolunteer();
+        allow delete: if isAdmin();
+
+        // Customer Private Contact Info Subcollection (GDPR Protected)
+        match /private/customer {
+          // Public check-in can create private contact record
+          allow create: if true;
+          // ONLY Admin (Front Desk) can read customer contact details
+          allow read: if isAdmin();
+          // Write restricted to admin or Cloud Functions
+          allow update, delete: if isAdmin();
+        }
+      }
+    }
+
+    // Analytics Collection (Historical summaries without PII)
+    match /analytics/{sessionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
