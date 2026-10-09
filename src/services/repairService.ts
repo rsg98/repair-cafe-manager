@@ -166,7 +166,7 @@ export async function assignCardToken(params: {
     );
     const existingSnap = await getDocs(existingQ);
     const activeConflict = existingSnap.docs
-      .map(d => ({ id: d.id, ...(d.data() as RepairItem) }))
+      .map(d => ({ ...(d.data() as Omit<RepairItem, 'id'>), id: d.id }))
       .find(d => d.id !== repairId && d.status !== 'COMPLETED' && d.status !== 'TAKEN_HOME');
 
     if (activeConflict) {

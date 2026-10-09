@@ -2,13 +2,12 @@ import {
   doc, 
   getDoc, 
   setDoc, 
-  updateDoc, 
   collection, 
   getDocs, 
-  writeBatch,
-  deleteField,
-  terminate,
-  clearIndexedDbPersistence
+  writeBatch, 
+  deleteField, 
+  terminate, 
+  clearIndexedDbPersistence 
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, auth } from './firebase';

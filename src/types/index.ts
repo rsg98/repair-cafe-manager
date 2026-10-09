@@ -177,4 +177,5 @@ export interface SessionAnalytics {
   mainsItemsCount: number;
   patTestedCount: number;
   patFailureRatePercent: number;
+  finalizedAt?: number;
 }
