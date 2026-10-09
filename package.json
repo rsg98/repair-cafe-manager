@@ -10,26 +10,34 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "chart.js": "^4.4.2",
+    "@grpc/grpc-js": "^1.14.6",
+    "chart.js": "^4.5.1",
     "clsx": "^2.1.1",
-    "firebase": "^10.11.0",
-    "lucide-react": "^0.372.0",
-    "react": "^18.3.1",
-    "react-chartjs-2": "^5.2.0",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.23.0",
-    "tailwind-merge": "^2.3.0"
+    "firebase": "^13.0.0",
+    "lucide-react": "^1.54.0",
+    "react": "^19.3.0",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.3",
-    "typescript": "^5.4.5",
-    "vite": "^5.2.10",
-    "vite-plugin-pwa": "^0.20.0",
-    "vitest": "^1.6.0"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.29",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.3"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true,
+    "protobufjs@7.6.6": true,
+    "protobufjs@6.11.6": true,
+    "@firebase/util@1.15.3": true
   }
 }
