@@ -269,7 +269,7 @@ analytics/{sessionId}
 ## 7. Security Rules & Authentication Architecture
 
 ### 7.1 Security Rule Roles (`firestore.rules`)
-- `isAdmin()`: `request.auth != null && request.auth.token.email != null` (Google Authenticated organizer).
+- `isAdmin()`: `request.auth != null && (request.auth.token.admin == true || request.auth.token.email != null)` (Google Authenticated organizer or admin custom claim).
   - Can create/edit sessions, modify `settings/system`, read customer PII in `private/customer`, and finalize sessions.
 - `isVolunteer()`: `request.auth != null && (request.auth.token.role == 'volunteer' || isAdmin())`.
   - Can read repair docs and update repair status, PAT results, and fixer records.
@@ -285,6 +285,17 @@ analytics/{sessionId}
 4. Function checks hash and calls `admin.auth().createCustomToken(...)` with claim `{ role: 'volunteer', sessionId }`.
 5. Frontend signs in using `signInWithCustomToken(auth, token)`.
 6. Station stays authenticated for the duration of the event with zero account-creation friction.
+
+### 7.3 Organizer Google Account & Group Authorization Flow
+- **Configuration (`src/config/cafe.config.ts` & `functions/src/config.ts`):**
+  - `organizerEmails`: Array of named Google accounts (e.g. `richardgrime@google.com`, `richard.grime@gmail.com`, `info@suttonrepaircafe.org.uk`) and domain groups (e.g. `@suttonrepaircafe.org.uk`).
+  - Supports environment variable `ORGANIZER_EMAILS` (comma-separated) in Cloud Functions.
+  - Dynamically supports `organizerEmails` in `settings/system` Firestore doc.
+- **Frontend Authorization (`useAuth.ts` & `FrontDeskView.tsx`):**
+  - `isAdmin`: evaluates `isAuthorizedOrganizer(user.email, cafeConfig.organizerEmails)`.
+  - Non-authorized Google accounts are presented with a clear unauthorized screen showing their signed-in address and a switch-account button.
+- **Backend Cloud Function Authorization (`finalizeSession.ts`):**
+  - Verifies caller has either `token.admin === true` or verified `token.email` matching authorized accounts or domain groups. Ensures closing and finalizing sessions is strictly protected without rejecting named Google accounts.
 
 ---
 

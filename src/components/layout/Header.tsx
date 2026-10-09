@@ -38,15 +38,20 @@ export const Header: React.FC<HeaderProps> = ({ session }) => {
 
         {/* Right: Auth Controls */}
         <div className="flex items-center gap-3">
-          {isAdmin ? (
+          {user ? (
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 text-xs bg-emerald-950/80 px-2.5 py-1 rounded-md border border-emerald-700 font-medium text-brand-200">
-                <Shield className="h-3.5 w-3.5 text-brand-400" />
-                {user?.displayName || 'Organizer'}
+              <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border font-medium ${
+                isAdmin 
+                  ? 'bg-emerald-950/80 border-emerald-700 text-brand-200' 
+                  : 'bg-amber-950/80 border-amber-700 text-amber-200'
+              }`}>
+                <Shield className={`h-3.5 w-3.5 ${isAdmin ? 'text-brand-400' : 'text-amber-400'}`} />
+                {user.displayName || user.email || 'Organizer'}
+                {!isAdmin && ' (Non-Organizer)'}
               </span>
               <button
                 onClick={signOut}
-                title="Sign out of Organizer Admin"
+                title="Sign out"
                 className="p-1.5 rounded-lg text-emerald-200 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <LogOut className="h-4 w-4" />

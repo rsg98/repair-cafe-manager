@@ -4,7 +4,7 @@ service cloud.firestore {
 
     // Helper functions
     function isAdmin() {
-      return request.auth != null && request.auth.token.email != null;
+      return request.auth != null && (request.auth.token.admin == true || request.auth.token.email != null);
     }
 
     function isVolunteer() {

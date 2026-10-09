@@ -1,5 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { defaultOrganizerEmails } from "./config";
+import { isAuthorizedOrganizer } from "./authUtils";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -9,15 +11,53 @@ const db = admin.firestore();
 
 /**
  * Callable Cloud Function: finalizeSession
- * - Gated strictly to Google Auth administrators
+ * - Gated strictly to Google Auth administrators and authorized organizer accounts/groups
  * - Batches through all repair records in chunks of 400 (under Firestore's 500 limit)
  * - Redacts customer PII in private/customer subcollection (UK GDPR Article 5(1)(e))
  * - Aggregates community impact metrics (landfill diversion, repair duration, success rates)
  * - Stores immutable summary in analytics/{sessionId}
  */
 export const finalizeSession = onCall(async (request) => {
-  // 1. Verify caller has admin role
-  if (!request.auth || !request.auth.token || !request.auth.token.admin) {
+  // 1. Verify caller has admin/organizer role
+  if (!request.auth || !request.auth.token) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Only authenticated organizers may finalize a Repair Café session."
+    );
+  }
+
+  const callerEmail = request.auth.token.email;
+  const hasAdminClaim = Boolean(request.auth.token.admin);
+
+  // Retrieve allowed organizer patterns from env, defaults, and Firestore settings/system
+  const envEmails = process.env.ORGANIZER_EMAILS
+    ? process.env.ORGANIZER_EMAILS.split(",").map((e) => e.trim()).filter(Boolean)
+    : [];
+
+  let firestoreAllowed: string[] = [];
+  try {
+    const settingsSnap = await db.collection("settings").doc("system").get();
+    if (settingsSnap.exists) {
+      const data = settingsSnap.data();
+      if (Array.isArray(data?.organizerEmails)) {
+        firestoreAllowed = data.organizerEmails;
+      }
+    }
+  } catch (err) {
+    console.warn("Could not read organizerEmails from settings/system:", err);
+  }
+
+  const allowedPatterns = [
+    ...defaultOrganizerEmails,
+    ...envEmails,
+    ...firestoreAllowed
+  ];
+
+  const isAuthorized =
+    hasAdminClaim ||
+    (callerEmail != null && isAuthorizedOrganizer(callerEmail, allowedPatterns));
+
+  if (!isAuthorized) {
     throw new HttpsError(
       "permission-denied",
       "Only authenticated organizers may finalize a Repair Café session."

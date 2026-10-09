@@ -7,6 +7,8 @@ import {
   signOut as firebaseSignOut 
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
+import { cafeConfig } from '../config/cafe.config';
+import { isAuthorizedOrganizer } from '../utils/authUtils';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -40,7 +42,7 @@ export function useAuth() {
     }
   };
 
-  const isAdmin = !!(user && user.email);
+  const isAdmin = !!(user && user.email && isAuthorizedOrganizer(user.email, cafeConfig.organizerEmails));
 
   return {
     user,

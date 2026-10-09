@@ -31,7 +31,7 @@ interface FrontDeskViewProps {
 }
 
 export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
-  const { isAdmin, signInWithGoogle } = useAuth();
+  const { user, isAdmin, signInWithGoogle, signOut } = useAuth();
   const { repairs, loading } = useRepairs(session?.id);
 
   // New session modal / form state
@@ -72,6 +72,29 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
   };
 
   if (!isAdmin) {
+    if (user) {
+      return (
+        <div className="max-w-md mx-auto my-16 p-8 bg-white rounded-3xl shadow-md border border-amber-200 text-center">
+          <div className="h-14 w-14 bg-amber-100 text-amber-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Lock className="h-7 w-7 text-amber-700" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800">Unauthorized Organizer Account</h2>
+          <p className="mt-2 text-sm text-slate-600 mb-2">
+            You are signed in as <span className="font-semibold text-slate-800">{user.email}</span>.
+          </p>
+          <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+            This account is not in the list of authorized organizers for {cafeConfig.cafeName}. Please switch to an authorized Google account or ask a café administrator to add your email to <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">organizerEmails</code> in <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">cafe.config.ts</code>.
+          </p>
+          <button
+            onClick={signOut}
+            className="w-full py-3 px-4 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-900 transition-colors shadow-sm flex items-center justify-center gap-2 text-sm"
+          >
+            Sign Out & Switch Account
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-md mx-auto my-16 p-8 bg-white rounded-3xl shadow-md border border-slate-200 text-center">
         <div className="h-14 w-14 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -79,7 +102,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
         </div>
         <h2 className="text-xl font-bold text-slate-800">Front Desk Organizer Login</h2>
         <p className="mt-2 text-sm text-slate-600 mb-6">
-          Access to the Front Desk queue and session administration requires Google sign-in.
+          Access to the Front Desk queue and session administration requires signing in with an authorized Google account.
         </p>
         <button
           onClick={signInWithGoogle}

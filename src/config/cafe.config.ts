@@ -16,6 +16,12 @@ export interface CafeConfig {
    * containing the café's detailed Terms & Conditions and House Rules.
    */
   termsAndConditions: string;
+  /**
+   * List of named Google email accounts or domain groups (e.g. "@suttonrepaircafe.org.uk")
+   * authorized to access Front Desk organizer operations and close/finalize sessions.
+   * If empty, any authenticated Google account is permitted.
+   */
+  organizerEmails: string[];
 }
 
 export const cafeConfig: CafeConfig = {
@@ -33,5 +39,11 @@ export const cafeConfig: CafeConfig = {
   // Other repair cafes deploying this software can set this to true if multi-item check-in is permitted.
   allowMultiItemRegistration: false,
   termsVersion: "2026.1",
-  termsAndConditions: "/terms.md"
+  termsAndConditions: "/terms.md",
+  organizerEmails: [
+    "info@suttonrepaircafe.org.uk",
+    "richardgrime@google.com",
+    "richard.grime@gmail.com",
+    "@suttonrepaircafe.org.uk"
+  ]
 };
