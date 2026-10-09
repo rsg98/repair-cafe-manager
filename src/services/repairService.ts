@@ -34,6 +34,30 @@ export function generateReferenceToken(): string {
 }
 
 // Pure state calculation helpers (exported for unit test coverage)
+/**
+ * Recursively removes keys with undefined values or NaN numbers from an object.
+ * Cloud Firestore throws an error if undefined or NaN is passed to updateDoc or setDoc.
+ */
+export function removeUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => removeUndefined(item)) as unknown as T;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined && !(typeof value === 'number' && Number.isNaN(value))) {
+      result[key] = typeof value === 'object' && value !== null
+        ? removeUndefined(value)
+        : value;
+    }
+  }
+  return result as T;
+}
+
 export function calculateNextStatusOnCardAssign(powerType: PowerType): ItemStatus {
   return powerType === 'MAINS_240V' ? 'WAITING_PAT1' : 'WAITING_REPAIR';
 }
@@ -103,7 +127,7 @@ export async function submitRegistration(params: {
     };
 
     const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
-    await setDoc(repairRef, repairData);
+    await setDoc(repairRef, removeUndefined(repairData));
 
     // 2. Create Segregated Private Customer Data Document
     const customerData: PrivateCustomerData = {
@@ -116,7 +140,7 @@ export async function submitRegistration(params: {
     };
 
     const privateRef = doc(db, 'sessions', sessionId, 'repairs', repairId, 'private', 'customer');
-    await setDoc(privateRef, customerData);
+    await setDoc(privateRef, removeUndefined(customerData));
   }
 
   return repairIds;
@@ -208,14 +232,14 @@ export async function submitPatInitial(params: {
   const nextStatus = calculateNextStatusOnPatInitial(params.outcome);
 
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
-  await updateDoc(repairRef, {
+  await updateDoc(repairRef, removeUndefined({
     status: nextStatus,
     patInitial: {
       ...patData,
       testedAt: now
     },
     updatedAt: now
-  });
+  }));
 
   return nextStatus;
 }
@@ -249,11 +273,11 @@ export async function submitRepairRecord(params: {
     updatedAt: now
   };
 
-  if (weightKg !== undefined) {
+  if (weightKg !== undefined && !Number.isNaN(weightKg)) {
     updates['item.weightKg'] = weightKg;
   }
 
-  await updateDoc(repairRef, updates);
+  await updateDoc(repairRef, removeUndefined(updates));
   return nextStatus;
 }
 
@@ -277,14 +301,14 @@ export async function submitPatFinal(params: {
   const nextStatus = calculateNextStatusOnPatFinal(params.outcome);
 
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
-  await updateDoc(repairRef, {
+  await updateDoc(repairRef, removeUndefined({
     status: nextStatus,
     patFinal: {
       ...patData,
       testedAt: now
     },
     updatedAt: now
-  });
+  }));
 
   return nextStatus;
 }

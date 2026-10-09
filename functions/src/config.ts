@@ -9,7 +9,5 @@
  */
 export const defaultOrganizerEmails: string[] = [
   "info@suttonrepaircafe.org.uk",
-  "richardgrime@google.com",
-  "richard.grime@gmail.com",
   "@suttonrepaircafe.org.uk"
 ];

@@ -42,8 +42,6 @@ export const cafeConfig: CafeConfig = {
   termsAndConditions: "/terms.md",
   organizerEmails: [
     "info@suttonrepaircafe.org.uk",
-    "richardgrime@google.com",
-    "richard.grime@gmail.com",
     "@suttonrepaircafe.org.uk"
   ]
 };

@@ -102,7 +102,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
         visualPass,
         fuseRatingAmps,
         testVoltageVolts,
-        earthContinuityOhms: applianceClass === 'CLASS_I' ? parseFloat(earthContinuityOhms) : undefined,
+        earthContinuityOhms: applianceClass === 'CLASS_I' && !isNaN(parseFloat(earthContinuityOhms)) ? parseFloat(earthContinuityOhms) : undefined,
         insulationResistanceMOhms: parseFloat(insulationResistanceMOhms) || 0,
         outcome: initialOutcome,
         cautionNotes: cautionNotes.trim() || undefined
@@ -136,7 +136,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
         instrumentSerial: instrumentSerial.trim(),
         visualPass,
         fuseRatingAmps,
-        earthContinuityOhms: applianceClass === 'CLASS_I' ? parseFloat(earthContinuityOhms) : undefined,
+        earthContinuityOhms: applianceClass === 'CLASS_I' && !isNaN(parseFloat(earthContinuityOhms)) ? parseFloat(earthContinuityOhms) : undefined,
         insulationResistanceMOhms: parseFloat(insulationResistanceMOhms) || 0,
         outcome: finalOutcome,
         certificateNotes: cautionNotes.trim() || undefined

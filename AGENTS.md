@@ -288,7 +288,7 @@ analytics/{sessionId}
 
 ### 7.3 Organizer Google Account & Group Authorization Flow
 - **Configuration (`src/config/cafe.config.ts` & `functions/src/config.ts`):**
-  - `organizerEmails`: Array of named Google accounts (e.g. `richardgrime@google.com`, `richard.grime@gmail.com`, `info@suttonrepaircafe.org.uk`) and domain groups (e.g. `@suttonrepaircafe.org.uk`).
+  - `organizerEmails`: Array of named Google accounts (e.g. `coordinator@example.com`, `info@suttonrepaircafe.org.uk`) and domain groups (e.g. `@suttonrepaircafe.org.uk`).
   - Supports environment variable `ORGANIZER_EMAILS` (comma-separated) in Cloud Functions.
   - Dynamically supports `organizerEmails` in `settings/system` Firestore doc.
 - **Frontend Authorization (`useAuth.ts` & `FrontDeskView.tsx`):**

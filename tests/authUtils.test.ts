@@ -4,21 +4,21 @@ import { isAuthorizedOrganizer } from '../src/utils/authUtils';
 describe('Organizer Authentication & Group Authorization (isAuthorizedOrganizer)', () => {
   const allowedList = [
     'info@suttonrepaircafe.org.uk',
-    'richardgrime@google.com',
-    'richard.grime@gmail.com',
+    'admin@example.com',
+    'organizer@gmail.com',
     '@suttonrepaircafe.org.uk',
     'volunteers.suttonrepaircafe.org.uk'
   ];
 
   it('authorizes exact named Google email addresses', () => {
     expect(isAuthorizedOrganizer('info@suttonrepaircafe.org.uk', allowedList)).toBe(true);
-    expect(isAuthorizedOrganizer('richardgrime@google.com', allowedList)).toBe(true);
-    expect(isAuthorizedOrganizer('richard.grime@gmail.com', allowedList)).toBe(true);
+    expect(isAuthorizedOrganizer('admin@example.com', allowedList)).toBe(true);
+    expect(isAuthorizedOrganizer('organizer@gmail.com', allowedList)).toBe(true);
   });
 
   it('handles case-insensitivity and whitespace gracefully', () => {
-    expect(isAuthorizedOrganizer('  RICHARDGRIME@GOOGLE.COM  ', allowedList)).toBe(true);
-    expect(isAuthorizedOrganizer('Richard.Grime@Gmail.Com', allowedList)).toBe(true);
+    expect(isAuthorizedOrganizer('  ADMIN@EXAMPLE.COM  ', allowedList)).toBe(true);
+    expect(isAuthorizedOrganizer('Organizer@Gmail.Com', allowedList)).toBe(true);
     expect(isAuthorizedOrganizer('INFO@SUTTONREPAIRCAFE.ORG.UK', allowedList)).toBe(true);
   });
 
