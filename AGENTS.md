@@ -44,7 +44,7 @@ Agents operating on this host must strictly adhere to the following command exec
 | **Frontend Framework** | React 18 (`react`, `react-dom`), React Router v6 (`react-router-dom`) |
 | **Language & Tooling** | TypeScript 5.4 (Strict mode), Vite 5.2 |
 | **PWA & Offline** | `vite-plugin-pwa` (Workbox caching, manifest, multi-tab IndexedDB cache) |
-| **Styling & UI** | Tailwind CSS 3.4, PostCSS, Lucide React icons, mobile-first touch UI |
+| **Styling & UI** | Tailwind CSS 4 (`@tailwindcss/vite`), Lucide React icons, mobile-first touch UI |
 | **Data & Analytics** | Chart.js 4.4, `react-chartjs-2`, client-side CSV export |
 | **Backend & Cloud** | Google Firebase Web SDK v10 (Modular): Auth, Cloud Firestore, Cloud Functions v2 |
 | **Unit Testing** | Vitest 1.6 (`vitest run`) |
