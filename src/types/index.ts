@@ -53,7 +53,10 @@ export type RepairOutcome =
 
 export interface SystemSettings {
   activeSessionId: string | null;
-  updatedAt: number;
+  updatedAt?: number;
+  allowRegistration?: boolean;
+  cafeName?: string;
+  organizerEmails?: string[];
 }
 
 export interface Session {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -10,6 +10,8 @@ import {
   RefreshCw,
   Tablet
 } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { Session, RepairItem } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useRepairs } from '../hooks/useRepairs';
@@ -70,6 +72,18 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
     setTabletPreset(preset);
     localStorage.setItem('frontdesk_tablet_preset', preset);
   };
+
+  // Keep Firestore settings/system.organizerEmails in sync with cafeConfig for backend verification
+  useEffect(() => {
+    if (isAdmin && user) {
+      const settingsRef = doc(db, 'settings', 'system');
+      setDoc(settingsRef, {
+        organizerEmails: cafeConfig.organizerEmails
+      }, { merge: true }).catch(err => {
+        console.warn("Could not sync organizerEmails to settings/system:", err);
+      });
+    }
+  }, [isAdmin, user]);
 
   if (!isAdmin) {
     if (user) {

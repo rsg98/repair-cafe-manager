@@ -29,7 +29,13 @@ export const finalizeSession = onCall(async (request) => {
   const callerEmail = request.auth.token.email;
   const hasAdminClaim = Boolean(request.auth.token.admin);
 
-  // Retrieve allowed organizer patterns from env, defaults, and Firestore settings/system
+  // Retrieve allowed organizer patterns from client request data, env, defaults, and Firestore settings/system
+  const clientEmails = Array.isArray(request.data?.organizerEmails)
+    ? (request.data.organizerEmails as unknown[])
+        .filter((e): e is string => typeof e === "string")
+        .map((e) => e.trim().toLowerCase())
+    : [];
+
   const envEmails = process.env.ORGANIZER_EMAILS
     ? process.env.ORGANIZER_EMAILS.split(",").map((e) => e.trim()).filter(Boolean)
     : [];
@@ -47,11 +53,16 @@ export const finalizeSession = onCall(async (request) => {
     console.warn("Could not read organizerEmails from settings/system:", err);
   }
 
-  const allowedPatterns = [
-    ...defaultOrganizerEmails,
-    ...envEmails,
-    ...firestoreAllowed
+  // Prefer explicitly configured emails (Firestore settings, client cafeConfig, or env)
+  const explicitlyConfigured = [
+    ...firestoreAllowed,
+    ...clientEmails,
+    ...envEmails
   ];
+
+  const allowedPatterns = explicitlyConfigured.length > 0
+    ? explicitlyConfigured
+    : defaultOrganizerEmails;
 
   const isAuthorized =
     hasAdminClaim ||
