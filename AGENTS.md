@@ -439,8 +439,7 @@ Edit `src/config/cafe.config.ts`:
 - Change `cafeName`, `tagline`, `venueName`, `contactEmail`, `websiteUrl`.
 - Replace `/public/logo.svg`.
 - Adjust `defaultCardRange` to match the café's physical token inventory.
-- Set `allowMultiItemRegistration` (`false` for strict single-item queuing, `true` for batched multi-item check-in).
-- Update `termsAndConditions` with the local organization's legal notice and disclaimer.
+- Update `termsAndConditions` path (default `"/terms.md"`) and edit `public/terms.md` with the local organization's legal notice, house rules, and safety disclaimers.
 
 ### Recipe B: Adding a New Item Category or Power Type
 1. Update types in `src/types/index.ts`:

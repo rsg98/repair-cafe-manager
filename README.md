@@ -57,7 +57,8 @@ export const cafeConfig = {
   websiteUrl: "https://yourtownrepaircafe.org",
   defaultCardRange: { start: 1, end: 100 },
   allowMultiItemRegistration: false, // Set to true if your cafe allows multiple items per customer
-  termsAndConditions: `...Your legal terms...`
+  termsVersion: "2026.1",
+  termsAndConditions: "/terms.md" // Relative path or URL to Markdown document (e.g. /public/terms.md)
 };
 ```
 

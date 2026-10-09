@@ -77,7 +77,7 @@ Each deployed instance reads its identity from a central, clean configuration fi
 * `tagline`: e.g., "Fixing things together in Seears Park"
 * `logoUrl`: Path to cafe logo image or inline SVG.
 * `primaryColor` / `accentColor`: Theme styling applied dynamically via Tailwind/CSS variables.
-* `termsAndConditions`: Markdown text specifying the cafe's specific legal disclaimer, house rules, safety policies, and limitation of liability.
+* `termsAndConditions`: Relative path (e.g., `"/terms.md"`) or external URL to a Markdown document specifying the cafe's specific legal disclaimer, house rules, safety policies, and limitation of liability.
 * `contactEmail` & `websiteUrl`: External links for volunteer coordination and public info.
 * `defaultCardRange`: Configurable physical token range (e.g., 1 to 100, expandable during live sessions).
 * `allowMultiItemRegistration`: Boolean flag (`true` | `false`). Controls whether a customer can register multiple items in a single check-in submission. Default is `false` for Sutton Repair Cafe to ensure queue fairness among visitors; other independent cafes can enable (`true`) if permitted by their local queue policy.
