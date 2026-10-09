@@ -106,7 +106,7 @@ export async function finalizeSessionClient(sessionId: string): Promise<void> {
     const sessionRef = doc(db, 'sessions', sessionId);
     await updateDoc(sessionRef, {
       status: 'FINALIZED',
-      finalizedAt: new Date().toISOString()
+      finalizedAt: Date.now()
     });
 
     const settingsRef = doc(db, 'settings', 'system');

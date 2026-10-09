@@ -78,7 +78,7 @@ export async function submitRegistration(params: {
   }
 
   const repairIds: string[] = [];
-  const now = new Date().toISOString();
+  const now = Date.now();
 
   for (let i = 0; i < submission.items.length; i++) {
     const itemInput = submission.items[i];
@@ -164,7 +164,7 @@ export async function assignCardToken(params: {
   await updateDoc(repairRef, {
     cardNumber,
     status: nextStatus,
-    updatedAt: new Date().toISOString()
+    updatedAt: Date.now()
   });
 }
 
@@ -204,7 +204,7 @@ export async function submitPatInitial(params: {
   cautionNotes?: string;
 }): Promise<ItemStatus> {
   const { sessionId, repairId, ...patData } = params;
-  const now = new Date().toISOString();
+  const now = Date.now();
   const nextStatus = calculateNextStatusOnPatInitial(params.outcome);
 
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
@@ -236,7 +236,7 @@ export async function submitRepairRecord(params: {
   isMainsPower: boolean;
 }): Promise<ItemStatus> {
   const { sessionId, repairId, isMainsPower, weightKg, ...repairData } = params;
-  const now = new Date().toISOString();
+  const now = Date.now();
   const nextStatus = calculateNextStatusOnRepair(params.outcome, isMainsPower);
 
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
@@ -273,7 +273,7 @@ export async function submitPatFinal(params: {
   certificateNotes?: string;
 }): Promise<ItemStatus> {
   const { sessionId, repairId, ...patData } = params;
-  const now = new Date().toISOString();
+  const now = Date.now();
   const nextStatus = calculateNextStatusOnPatFinal(params.outcome);
 
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
@@ -297,7 +297,7 @@ export async function completeCollection(sessionId: string, repairId: string): P
   await updateDoc(repairRef, {
     status: 'COMPLETED',
     cardNumber: null, // Release physical card number for reuse
-    updatedAt: new Date().toISOString()
+    updatedAt: Date.now()
   });
 }
 

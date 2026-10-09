@@ -126,6 +126,7 @@ export interface RepairItem {
     repairNotes?: string;
     partsUsed?: string;
     outcome: RepairOutcome;
+    repairedAt?: number;
   };
 
   // PAT 2 (Post-repair safety certification for mains items)
