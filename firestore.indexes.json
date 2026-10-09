@@ -4,6 +4,14 @@
       "collectionGroup": "repairs",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "cardNumber", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "repairs",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "sessionId", "order": "ASCENDING" },
         { "fieldPath": "cardNumber", "order": "ASCENDING" }
       ]

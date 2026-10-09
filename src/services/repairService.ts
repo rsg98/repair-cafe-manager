@@ -162,15 +162,18 @@ export async function assignCardToken(params: {
   try {
     const existingQ = query(
       repairsCol,
-      where('cardNumber', '==', cardNumber),
-      where('status', 'not-in', ['COMPLETED', 'TAKEN_HOME'])
+      where('cardNumber', '==', cardNumber)
     );
     const existingSnap = await getDocs(existingQ);
-    if (!existingSnap.empty && existingSnap.docs[0].id !== repairId) {
-      throw new Error(`Card #${cardNumber} is currently in use by another active item (${existingSnap.docs[0].data().item?.brandModel}).`);
+    const activeConflict = existingSnap.docs
+      .map(d => ({ id: d.id, ...(d.data() as RepairItem) }))
+      .find(d => d.id !== repairId && d.status !== 'COMPLETED' && d.status !== 'TAKEN_HOME');
+
+    if (activeConflict) {
+      throw new Error(`Card #${cardNumber} is currently in use by another active item (${activeConflict.item?.brandModel}).`);
     }
   } catch (err: unknown) {
-    // If offline, ignore query failure and proceed with local update
+    // If offline or query error, ignore unless it's the duplicate card error
     if (err instanceof Error && err.message.includes('currently in use')) {
       throw err;
     }
@@ -202,13 +205,18 @@ export async function getRepairByCardNumber(
   const repairsCol = collection(db, 'sessions', sessionId, 'repairs');
   const q = query(
     repairsCol,
-    where('cardNumber', '==', cardNumber),
-    where('status', 'not-in', ['COMPLETED', 'TAKEN_HOME'])
+    where('cardNumber', '==', cardNumber)
   );
 
   const snap = await getDocs(q);
   if (snap.empty) return null;
-  return snap.docs[0].data() as RepairItem;
+
+  const activeDoc = snap.docs.find(d => {
+    const data = d.data() as RepairItem;
+    return data.status !== 'COMPLETED' && data.status !== 'TAKEN_HOME';
+  });
+
+  return activeDoc ? (activeDoc.data() as RepairItem) : null;
 }
 
 /**
