@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { SessionAnalytics, ItemStatus } from '../src/types';
+import { SessionAnalytics, ItemStatus, RepairItem } from '../src/types';
 import { exportAnalyticsToCsv } from '../src/services/analyticsService';
-import { removeUndefined, checkCardConflict } from '../src/services/repairService';
+import { 
+  removeUndefined, 
+  checkCardConflict, 
+  filterRepairs, 
+  isTerminalStatus, 
+  canAssignCard 
+} from '../src/services/repairService';
 
 describe('Analytics and CSV Export Utilities', () => {
   const sampleAnalytics: SessionAnalytics[] = [
@@ -177,3 +183,255 @@ describe('Card Assignment Conflict Check (checkCardConflict - Issue #5)', () => 
     expect(result.conflictItem).toBeUndefined();
   });
 });
+
+describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', () => {
+  const sampleRepairs: RepairItem[] = [
+    {
+      id: 'rep-1',
+      sessionId: 'sess-1',
+      registrationId: 'reg-1',
+      referenceToken: 'REF-A38F',
+      cardNumber: 1,
+      customerName: 'Sarah Jenkins',
+      status: 'WAITING_PAT1',
+      item: {
+        category: 'ELECTRICAL',
+        brandModel: 'Russell Hobbs Toaster',
+        faultDescription: 'No power',
+        powerType: 'MAINS_240V'
+      }
+    },
+    {
+      id: 'rep-2',
+      sessionId: 'sess-1',
+      registrationId: 'reg-2',
+      referenceToken: 'REF-B42C',
+      cardNumber: 2,
+      // legacy item without customerName on repair document
+      status: 'IN_PAT1',
+      item: {
+        category: 'ELECTRICAL',
+        brandModel: 'Dyson Vacuum',
+        faultDescription: 'Cord frayed',
+        powerType: 'MAINS_240V'
+      }
+    },
+    {
+      id: 'rep-3',
+      sessionId: 'sess-1',
+      registrationId: 'reg-3',
+      referenceToken: 'REF-C99D',
+      cardNumber: 3,
+      customerName: 'David Miller',
+      status: 'WAITING_REPAIR',
+      item: {
+        category: 'MECHANICAL',
+        brandModel: 'Bicycle Gear Cable',
+        faultDescription: 'Slipping chain',
+        powerType: 'BATTERY_OR_DC'
+      }
+    },
+    {
+      id: 'rep-4',
+      sessionId: 'sess-1',
+      registrationId: 'reg-4',
+      referenceToken: 'REF-E55K',
+      cardNumber: 4,
+      customerName: 'Alice Wong',
+      status: 'IN_REPAIR',
+      item: {
+        category: 'TEXTILE',
+        brandModel: 'Winter Coat',
+        faultDescription: 'Broken zipper',
+        powerType: 'OTHER'
+      }
+    },
+    {
+      id: 'rep-5',
+      sessionId: 'sess-1',
+      registrationId: 'reg-5',
+      referenceToken: 'REF-F12M',
+      cardNumber: 5,
+      customerName: 'Bob Clark',
+      status: 'WAITING_PAT2',
+      item: {
+        category: 'ELECTRICAL',
+        brandModel: 'Sony Amplifier',
+        faultDescription: 'Volume pot scratchy',
+        powerType: 'MAINS_240V'
+      }
+    },
+    {
+      id: 'rep-6',
+      sessionId: 'sess-1',
+      registrationId: 'reg-6',
+      referenceToken: 'REF-G77P',
+      cardNumber: 6,
+      customerName: 'Carol Danvers',
+      status: 'READY_FOR_COLLECTION',
+      item: {
+        category: 'CLOCK',
+        brandModel: 'Seiko Wall Clock',
+        faultDescription: 'Stopped ticking',
+        powerType: 'BATTERY_OR_DC'
+      }
+    },
+    {
+      id: 'rep-7',
+      sessionId: 'sess-1',
+      registrationId: 'reg-7',
+      referenceToken: 'REF-H88Q',
+      cardNumber: 7,
+      customerName: 'Sarah Connor',
+      status: 'COMPLETED',
+      item: {
+        category: 'ELECTRICAL',
+        brandModel: 'Kettle',
+        faultDescription: 'Lid latch stuck',
+        powerType: 'MAINS_240V'
+      }
+    }
+  ];
+
+  const fallbackNames: Record<string, string> = {
+    'rep-2': 'Gordon Freeman'
+  };
+
+  it('searches by customer name (direct customerName on repair item)', () => {
+    const results = filterRepairs(sampleRepairs, 'Sarah', 'ALL');
+    expect(results.length).toBe(2);
+    expect(results.map(r => r.id)).toEqual(['rep-1', 'rep-7']);
+  });
+
+  it('searches case-insensitively by partial customer name', () => {
+    const results = filterRepairs(sampleRepairs, 'david', 'ALL');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-3');
+    expect(results[0].customerName).toBe('David Miller');
+  });
+
+  it('searches by fallback customer name for legacy items', () => {
+    const results = filterRepairs(sampleRepairs, 'Gordon', 'ALL', fallbackNames);
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-2');
+    expect(results[0].referenceToken).toBe('REF-B42C');
+  });
+
+  it('searches by reference token', () => {
+    const results = filterRepairs(sampleRepairs, 'REF-C99D', 'ALL');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-3');
+  });
+
+  it('searches by brand/model', () => {
+    const results = filterRepairs(sampleRepairs, 'dyson', 'ALL');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-2');
+  });
+
+  it('searches by card number', () => {
+    const results = filterRepairs(sampleRepairs, '5', 'ALL');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-5');
+  });
+
+  it('filters WAITING_PAT1 including both WAITING_PAT1 and IN_PAT1 items', () => {
+    const results = filterRepairs(sampleRepairs, '', 'WAITING_PAT1');
+    expect(results.length).toBe(2);
+    expect(results.map(r => r.id)).toEqual(['rep-1', 'rep-2']);
+  });
+
+  it('filters WAITING_REPAIR including both WAITING_REPAIR and IN_REPAIR items', () => {
+    const results = filterRepairs(sampleRepairs, '', 'WAITING_REPAIR');
+    expect(results.length).toBe(2);
+    expect(results.map(r => r.id)).toEqual(['rep-3', 'rep-4']);
+  });
+
+  it('filters WAITING_PAT2 including both WAITING_PAT2 and IN_PAT2 items', () => {
+    const results = filterRepairs(sampleRepairs, '', 'WAITING_PAT2');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-5');
+  });
+
+  it('filters READY_FOR_COLLECTION accurately', () => {
+    const results = filterRepairs(sampleRepairs, '', 'READY_FOR_COLLECTION');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-6');
+  });
+
+  it('filters COMPLETED accurately', () => {
+    const results = filterRepairs(sampleRepairs, '', 'COMPLETED');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-7');
+  });
+
+  it('combines customer name search with status filtering', () => {
+    // Both rep-1 and rep-7 are named Sarah, but only rep-1 is in WAITING_PAT1
+    const results = filterRepairs(sampleRepairs, 'Sarah', 'WAITING_PAT1');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-1');
+  });
+});
+
+describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () => {
+  it('identifies terminal / completed lifecycle states accurately', () => {
+    expect(isTerminalStatus('COMPLETED')).toBe(true);
+    expect(isTerminalStatus('TAKEN_HOME')).toBe(true);
+    expect(isTerminalStatus('UNFIXABLE')).toBe(true);
+
+    expect(isTerminalStatus('REGISTERED')).toBe(false);
+    expect(isTerminalStatus('WAITING_PAT1')).toBe(false);
+    expect(isTerminalStatus('IN_PAT1')).toBe(false);
+    expect(isTerminalStatus('WAITING_REPAIR')).toBe(false);
+    expect(isTerminalStatus('IN_REPAIR')).toBe(false);
+    expect(isTerminalStatus('WAITING_PAT2')).toBe(false);
+    expect(isTerminalStatus('IN_PAT2')).toBe(false);
+    expect(isTerminalStatus('READY_FOR_COLLECTION')).toBe(false);
+  });
+
+  it('permits assigning card ONLY to newly registered items awaiting a card', () => {
+    // Unassigned registered items can have cards assigned
+    expect(canAssignCard({ status: 'REGISTERED', cardNumber: null })).toBe(true);
+    expect(canAssignCard({ status: 'REGISTERED', cardNumber: undefined })).toBe(true);
+
+    // Registered items with a card already assigned cannot
+    expect(canAssignCard({ status: 'REGISTERED', cardNumber: 4 })).toBe(false);
+
+    // Terminal / completed items CAN NEVER have cards assigned, even without a card number
+    expect(canAssignCard({ status: 'COMPLETED', cardNumber: null })).toBe(false);
+    expect(canAssignCard({ status: 'COMPLETED', cardNumber: 10 })).toBe(false);
+    expect(canAssignCard({ status: 'TAKEN_HOME', cardNumber: null })).toBe(false);
+    expect(canAssignCard({ status: 'TAKEN_HOME', cardNumber: 12 })).toBe(false);
+    expect(canAssignCard({ status: 'UNFIXABLE', cardNumber: null })).toBe(false);
+    expect(canAssignCard({ status: 'UNFIXABLE', cardNumber: 14 })).toBe(false);
+
+    // Items progressing in the active queue cannot have cards assigned
+    expect(canAssignCard({ status: 'WAITING_PAT1', cardNumber: 1 })).toBe(false);
+    expect(canAssignCard({ status: 'WAITING_REPAIR', cardNumber: 2 })).toBe(false);
+    expect(canAssignCard({ status: 'WAITING_PAT2', cardNumber: 3 })).toBe(false);
+    expect(canAssignCard({ status: 'READY_FOR_COLLECTION', cardNumber: 4 })).toBe(false);
+    expect(canAssignCard({ status: 'READY_FOR_COLLECTION', cardNumber: null })).toBe(false);
+  });
+
+  it('detects card conflict with an UNFIXABLE item that used the card', () => {
+    const listWithUnfixable: Array<{
+      id: string;
+      cardNumber?: number | null;
+      status: ItemStatus;
+      item?: { brandModel: string };
+    }> = [
+      {
+        id: 'rep-unfixable',
+        cardNumber: 8,
+        status: 'UNFIXABLE',
+        item: { brandModel: 'Dead Kettle' }
+      }
+    ];
+
+    const result = checkCardConflict(8, listWithUnfixable, 'rep-other');
+    expect(result.hasConflict).toBe(true);
+    expect(result.conflictItem?.brandModel).toBe('Dead Kettle');
+    expect(result.conflictItem?.status).toBe('UNFIXABLE');
+  });
+});
+

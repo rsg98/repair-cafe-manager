@@ -238,12 +238,16 @@ export async function finalizeSessionDirectly(sessionId: string): Promise<void> 
     now
   );
 
-  // 3. Chunked GDPR Redaction of customer PII in private/customer subcollections
-  const CHUNK_SIZE = 400;
+  // 3. Chunked GDPR Redaction of customer PII in private/customer subcollections & repair docs
+  const CHUNK_SIZE = 200;
   for (let i = 0; i < repairsSnap.docs.length; i += CHUNK_SIZE) {
     const chunk = repairsSnap.docs.slice(i, i + CHUNK_SIZE);
     const batch = writeBatch(db);
     for (const repairDoc of chunk) {
+      const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairDoc.id);
+      batch.update(repairRef, {
+        customerName: '[REDACTED]'
+      });
       const privateCustomerRef = doc(db, 'sessions', sessionId, 'repairs', repairDoc.id, 'private', 'customer');
       batch.set(
         privateCustomerRef,

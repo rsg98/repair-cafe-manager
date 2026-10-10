@@ -105,8 +105,11 @@ export const finalizeSession = onCall(async (request) => {
   let patFailedCount = 0;
   const categoryBreakdown: Record<string, number> = {};
 
-  // Track customer private docs for chunked redaction
-  const customerPrivateDocRefs: admin.firestore.DocumentReference[] = [];
+  // Track customer private docs and repair docs for chunked redaction
+  const redactionPairs: Array<{
+    repairRef: admin.firestore.DocumentReference;
+    privateRef: admin.firestore.DocumentReference;
+  }> = [];
 
   for (const doc of repairsSnap.docs) {
     totalItems++;
@@ -160,19 +163,25 @@ export const finalizeSession = onCall(async (request) => {
       }
     }
 
-    // Queue private customer doc for redaction
+    // Queue repair doc and private customer doc for redaction
     const privateRef = doc.ref.collection("private").doc("customer");
-    customerPrivateDocRefs.push(privateRef);
+    redactionPairs.push({
+      repairRef: doc.ref,
+      privateRef,
+    });
   }
 
   // 3. Chunked Batch Redaction (Max 400 operations per batch)
-  const CHUNK_SIZE = 400;
-  for (let i = 0; i < customerPrivateDocRefs.length; i += CHUNK_SIZE) {
-    const chunk = customerPrivateDocRefs.slice(i, i + CHUNK_SIZE);
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < redactionPairs.length; i += CHUNK_SIZE) {
+    const chunk = redactionPairs.slice(i, i + CHUNK_SIZE);
     const batch = db.batch();
 
-    for (const ref of chunk) {
-      batch.update(ref, {
+    for (const pair of chunk) {
+      batch.update(pair.repairRef, {
+        customerName: "[REDACTED]",
+      });
+      batch.update(pair.privateRef, {
         firstName: "[REDACTED]",
         contactPhone: admin.firestore.FieldValue.delete(),
         redactedAt: admin.firestore.FieldValue.serverTimestamp(),

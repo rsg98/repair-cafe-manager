@@ -103,8 +103,9 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
   - Automatically routes `MAINS_240V` items to `WAITING_PAT1`.
   - Automatically routes other power types to `WAITING_REPAIR`.
   - Enforces duplicate card checks to prevent assigning a card already assigned to an item in the session.
+- **Queue Search & Filtering:** Table displays customer first name alongside card tokens and reference tokens. Search box matches customer name, card number, reference token, or item description. Status filter dropdown reflects live item counts across all queues including Waiting PAT 1, Waiting Repair, and Waiting PAT 2.
 - **Checkout & Card Recovery:** Confirms customer collection, marks item `COMPLETED`, preserves original `cardNumber` intact for session auditability (cards are not reused in the same session), and greys out the row in the Front Desk queue to prevent accidental card reassignment.
-- **Session Finalization:** Triggers the backend Cloud Function `finalizeSession` to scrub PII and compile analytics.
+- **Session Finalization:** Triggers the backend Cloud Function `finalizeSession` (with automatic client-side fallback) to scrub PII (`customerName` on repair doc and `firstName`/`contactPhone` in `private/customer`) and compile analytics.
 
 ### Station 3: PAT Electrical Safety Station (`/pat`)
 - **Access:** Authenticated via the 4-digit daily session PIN (mints custom token with `{ role: 'volunteer' }`).
@@ -232,6 +233,7 @@ sessions/{sessionId}
         ├── registrationId: string
         ├── referenceToken: string ("REF-XXXX")
         ├── cardNumber: number | null
+        ├── customerName?: string                     (Redacted to "[REDACTED]" on finalize)
         ├── status: ItemStatus
         ├── item: { category, brandModel, faultDescription, powerType, weightKg }
         ├── patInitial?: { ... }
@@ -259,8 +261,8 @@ analytics/{sessionId}
    - Security rule: `/private/customer` can only be read by authenticated administrators (`isAdmin()`).
    - Volunteer tablets never cache visitor contact information in IndexedDB.
 2. **Cloud Function Redaction (`finalizeSession`):**
-   - Batches updates in chunks of 400 (strictly under Firestore's 500 operation transaction limit).
-   - Updates `firstName` to `"[REDACTED]"`, deletes `contactPhone`, and sets `redactedAt`.
+   - Batches updates in chunks of 200 (strictly under Firestore's 500 operation transaction limit with 2 updates per repair item).
+   - Updates `customerName` on the repair doc to `"[REDACTED]"`, updates `firstName` to `"[REDACTED]"` in `private/customer`, deletes `contactPhone`, and sets `redactedAt`.
 3. **Client-Side Cache Purge:**
    - On session finalization, the front-desk app calls `terminate(db)` and `clearIndexedDbPersistence(db)` to ensure zero lingering local snapshots.
 

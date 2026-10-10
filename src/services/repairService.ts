@@ -115,6 +115,7 @@ export async function submitRegistration(params: {
       sessionId,
       registrationId: submission.registrationId,
       referenceToken: submission.referenceToken,
+      customerName: submission.customer.firstName,
       status: 'REGISTERED',
       item: {
         category: itemInput.category,
@@ -180,6 +181,53 @@ export function checkCardConflict(
 }
 
 /**
+ * Filters repairs by search term (matching customer name, token, brand/model, or card number)
+ * and status filter (handling queue groupings like WAITING_PAT1, WAITING_REPAIR, WAITING_PAT2).
+ */
+export function filterRepairs(
+  repairs: RepairItem[],
+  searchTerm: string,
+  statusFilter: string,
+  fallbackCustomerNames?: Record<string, string>
+): RepairItem[] {
+  const term = searchTerm.trim().toLowerCase();
+
+  return repairs.filter((r) => {
+    const customerName = (r.customerName || fallbackCustomerNames?.[r.id] || '').toLowerCase();
+    const matchesSearch = !term || (
+      customerName.includes(term) ||
+      r.referenceToken.toLowerCase().includes(term) ||
+      r.item.brandModel.toLowerCase().includes(term) ||
+      (r.cardNumber !== undefined && r.cardNumber !== null && String(r.cardNumber).includes(term))
+    );
+
+    if (!matchesSearch) return false;
+    if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'WAITING_PAT1') return r.status === 'WAITING_PAT1' || r.status === 'IN_PAT1';
+    if (statusFilter === 'WAITING_REPAIR') return r.status === 'WAITING_REPAIR' || r.status === 'IN_REPAIR';
+    if (statusFilter === 'WAITING_PAT2') return r.status === 'WAITING_PAT2' || r.status === 'IN_PAT2';
+    return r.status === statusFilter;
+  });
+}
+
+/**
+ * Determines whether a repair item has reached a terminal / completed lifecycle state.
+ * Terminal states include COMPLETED (collected), TAKEN_HOME (released to fixer),
+ * and UNFIXABLE (quarantined or unrepairable).
+ */
+export function isTerminalStatus(status: ItemStatus): boolean {
+  return status === 'COMPLETED' || status === 'TAKEN_HOME' || status === 'UNFIXABLE';
+}
+
+/**
+ * Determines whether a card token can be assigned to a repair item.
+ * Strictly only allowable for items in REGISTERED status that do not currently have a card assigned.
+ */
+export function canAssignCard(item: { status: ItemStatus; cardNumber?: number | null }): boolean {
+  return item.status === 'REGISTERED' && (item.cardNumber === null || item.cardNumber === undefined);
+}
+
+/**
  * Assigns a physical reusable card number to a repair item and routes it
  * Works both online and in offline mode.
  */
@@ -205,7 +253,7 @@ export async function assignCardToken(params: {
     const { hasConflict, conflictItem } = checkCardConflict(cardNumber, existingList, repairId);
 
     if (hasConflict && conflictItem) {
-      const isCompletedOrCollected = conflictItem.status === 'COMPLETED' || conflictItem.status === 'TAKEN_HOME';
+      const isCompletedOrCollected = isTerminalStatus(conflictItem.status);
       const statusNote = isCompletedOrCollected 
         ? 'already used by a completed/collected item' 
         : 'currently in use by another active item';
@@ -225,8 +273,14 @@ export async function assignCardToken(params: {
   }
 
   const data = snap.data() as RepairItem;
-  if (data.status === 'COMPLETED' || data.status === 'TAKEN_HOME') {
-    throw new Error(`Cannot assign a card to an item that is already ${data.status === 'COMPLETED' ? 'completed' : 'taken home'}.`);
+  if (!canAssignCard(data)) {
+    if (isTerminalStatus(data.status)) {
+      throw new Error(`Cannot assign a card to an item that is already ${data.status.toLowerCase().replace('_', ' ')}.`);
+    }
+    if (data.cardNumber) {
+      throw new Error(`Item already has card #${data.cardNumber} assigned.`);
+    }
+    throw new Error(`Cannot assign a card to an item in status ${data.status}.`);
   }
 
   const nextStatus = calculateNextStatusOnCardAssign(data.item.powerType);
@@ -256,7 +310,7 @@ export async function getRepairByCardNumber(
 
   const activeDoc = snap.docs.find(d => {
     const data = d.data() as RepairItem;
-    return data.status !== 'COMPLETED' && data.status !== 'TAKEN_HOME';
+    return !isTerminalStatus(data.status);
   });
 
   return activeDoc ? (activeDoc.data() as RepairItem) : null;

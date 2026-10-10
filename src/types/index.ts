@@ -95,6 +95,7 @@ export interface RepairItem {
   registrationId: string;
   referenceToken: string;
   cardNumber?: number; // Physical token #1..#N assigned by front desk
+  customerName?: string; // Visitor first name for Front Desk display & search (scrubbed on finalize)
 
   item: {
     category: ItemCategory;

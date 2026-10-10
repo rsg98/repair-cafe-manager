@@ -22,7 +22,10 @@ import {
 import { 
   assignCardToken, 
   completeCollection, 
-  getPrivateCustomerData 
+  getPrivateCustomerData,
+  filterRepairs,
+  isTerminalStatus,
+  canAssignCard
 } from '../services/repairService';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { CardToken } from '../components/common/CardToken';
@@ -64,6 +67,8 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
   // Search and filter
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  // Fallback cache for customer names on legacy items missing customerName field
+  const [fetchedNames, setFetchedNames] = useState<Record<string, string>>({});
 
   // Finalize session confirmation
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -84,6 +89,39 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
       });
     }
   }, [isAdmin, user]);
+
+  // Fetch missing customer names for existing repairs (admin only)
+  useEffect(() => {
+    if (!session || !isAdmin) return;
+    const missingNameRepairs = repairs.filter(r => !r.customerName && !fetchedNames[r.id]);
+    if (missingNameRepairs.length === 0) return;
+
+    let isMounted = true;
+    Promise.all(
+      missingNameRepairs.map(async (r) => {
+        try {
+          const pii = await getPrivateCustomerData(session.id, r.id);
+          if (pii?.firstName) {
+            return { id: r.id, name: pii.firstName };
+          }
+        } catch {
+          // ignore permission or network error
+        }
+        return null;
+      })
+    ).then((results) => {
+      if (!isMounted) return;
+      const newEntries: Record<string, string> = {};
+      results.forEach(res => {
+        if (res) newEntries[res.id] = res.name;
+      });
+      if (Object.keys(newEntries).length > 0) {
+        setFetchedNames(prev => ({ ...prev, ...newEntries }));
+      }
+    });
+
+    return () => { isMounted = false; };
+  }, [repairs, session, isAdmin, fetchedNames]);
 
   if (!isAdmin) {
     if (user) {
@@ -214,7 +252,13 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
   const handleCompleteCollection = async (repairId: string) => {
     if (!session) return;
     if (confirm("Confirm customer collection and return of physical card token?")) {
-      await completeCollection(session.id, repairId);
+      try {
+        await completeCollection(session.id, repairId);
+      } catch (err: unknown) {
+        console.error("Error completing collection:", err);
+        const message = err instanceof Error ? err.message : "Failed to complete collection.";
+        alert(message);
+      }
     }
   };
 
@@ -236,16 +280,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
   };
 
   // Filtered repairs
-  const filteredRepairs = repairs.filter(r => {
-    const matchesSearch = 
-      r.referenceToken.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.item.brandModel.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.cardNumber && String(r.cardNumber).includes(searchTerm));
-
-    if (!matchesSearch) return false;
-    if (statusFilter === 'ALL') return true;
-    return r.status === statusFilter;
-  });
+  const filteredRepairs = filterRepairs(repairs, searchTerm, statusFilter, fetchedNames);
 
   // Calculate live session counters
   const counts = {
@@ -361,7 +396,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
               <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search token (e.g. REF-A38F), card #, or item name..."
+                placeholder="Search customer name, token (e.g. REF-A38F), card #, or item..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
@@ -374,9 +409,9 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
             >
               <option value="ALL">All Statuses ({repairs.length})</option>
               <option value="REGISTERED">Needs Card (#) ({counts.registered})</option>
-              <option value="WAITING_PAT1">Waiting PAT 1</option>
-              <option value="WAITING_REPAIR">Waiting Repair</option>
-              <option value="WAITING_PAT2">Waiting PAT 2</option>
+              <option value="WAITING_PAT1">Waiting PAT 1 ({counts.waitingPat1})</option>
+              <option value="WAITING_REPAIR">Waiting Repair ({counts.waitingRepair})</option>
+              <option value="WAITING_PAT2">Waiting PAT 2 ({counts.waitingPat2})</option>
               <option value="READY_FOR_COLLECTION">Ready for Pickup ({counts.ready})</option>
               <option value="COMPLETED">Completed ({counts.completed})</option>
             </select>
@@ -389,6 +424,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Card #</th>
+                    <th className="py-3 px-4">Customer</th>
                     <th className="py-3 px-4">Ref Token</th>
                     <th className="py-3 px-4">Item & Fault</th>
                     <th className="py-3 px-4">Power Type</th>
@@ -400,20 +436,21 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500">
+                      <td colSpan={8} className="py-8 text-center text-slate-500">
                         <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-brand-600" />
                         Loading repairs...
                       </td>
                     </tr>
                   ) : filteredRepairs.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500">
+                      <td colSpan={8} className="py-8 text-center text-slate-500">
                         No items found matching the current search.
                       </td>
                     </tr>
                   ) : (
                     filteredRepairs.map((r) => {
-                      const isCompleted = r.status === 'COMPLETED';
+                      const isCompleted = isTerminalStatus(r.status);
+                      const customerName = r.customerName || fetchedNames[r.id] || '—';
                     return (
                       <tr 
                         key={r.id} 
@@ -426,11 +463,18 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           {r.cardNumber ? (
                             <CardToken number={r.cardNumber} size="sm" dimmed={isCompleted} />
+                          ) : isCompleted ? (
+                            <span className="text-xs text-slate-400 font-mono">—</span>
                           ) : (
                             <span className="text-xs italic text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-bold">
                               Unassigned
                             </span>
                           )}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className={`font-semibold ${isCompleted ? 'text-slate-600' : 'text-slate-800'}`}>
+                            {customerName}
+                          </span>
                         </td>
                         <td className="py-3.5 px-4 font-mono font-bold text-xs text-slate-600">
                           {r.referenceToken}
@@ -470,7 +514,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                         </td>
                         <td className="py-3.5 px-4 text-right space-x-2 whitespace-nowrap">
                           {/* Assign Card Token */}
-                          {!r.cardNumber && !isCompleted && r.status !== 'TAKEN_HOME' && (
+                          {canAssignCard(r) && (
                             <button
                               onClick={() => {
                                 setSelectedRepairId(r.id);
@@ -493,7 +537,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                           </button>
 
                           {/* Collection Action */}
-                          {r.status === 'READY_FOR_COLLECTION' && (
+                          {(r.status === 'READY_FOR_COLLECTION' || r.status === 'UNFIXABLE') && (
                             <button
                               onClick={() => handleCompleteCollection(r.id)}
                               className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm inline-flex items-center gap-1"
