@@ -146,6 +146,39 @@ export async function submitRegistration(params: {
   return repairIds;
 }
 
+export interface CardConflictResult {
+  hasConflict: boolean;
+  conflictItem?: {
+    brandModel?: string;
+    status: ItemStatus;
+  };
+}
+
+/**
+ * Checks whether a card number is already assigned to another item in the session.
+ * Since cards are not reused within the same session, any existing item (active,
+ * completed, or taken home) with the same card number constitutes a conflict.
+ */
+export function checkCardConflict(
+  cardNumber: number,
+  repairs: Array<{ id: string; cardNumber?: number | null; status: ItemStatus; item?: { brandModel?: string } }>,
+  currentRepairId?: string
+): CardConflictResult {
+  const conflict = repairs.find(
+    r => r.cardNumber === cardNumber && r.id !== currentRepairId
+  );
+  if (!conflict) {
+    return { hasConflict: false };
+  }
+  return {
+    hasConflict: true,
+    conflictItem: {
+      brandModel: conflict.item?.brandModel,
+      status: conflict.status
+    }
+  };
+}
+
 /**
  * Assigns a physical reusable card number to a repair item and routes it
  * Works both online and in offline mode.
@@ -158,23 +191,29 @@ export async function assignCardToken(params: {
   const { sessionId, repairId, cardNumber } = params;
   const repairsCol = collection(db, 'sessions', sessionId, 'repairs');
 
-  // Check for duplicate card number in active items
+  // Check for duplicate card number in session items
   try {
     const existingQ = query(
       repairsCol,
       where('cardNumber', '==', cardNumber)
     );
     const existingSnap = await getDocs(existingQ);
-    const activeConflict = existingSnap.docs
-      .map(d => ({ ...(d.data() as Omit<RepairItem, 'id'>), id: d.id }))
-      .find(d => d.id !== repairId && d.status !== 'COMPLETED' && d.status !== 'TAKEN_HOME');
+    const existingList = existingSnap.docs.map(d => ({
+      ...(d.data() as Omit<RepairItem, 'id'>),
+      id: d.id
+    }));
+    const { hasConflict, conflictItem } = checkCardConflict(cardNumber, existingList, repairId);
 
-    if (activeConflict) {
-      throw new Error(`Card #${cardNumber} is currently in use by another active item (${activeConflict.item?.brandModel}).`);
+    if (hasConflict && conflictItem) {
+      const isCompletedOrCollected = conflictItem.status === 'COMPLETED' || conflictItem.status === 'TAKEN_HOME';
+      const statusNote = isCompletedOrCollected 
+        ? 'already used by a completed/collected item' 
+        : 'currently in use by another active item';
+      throw new Error(`Card #${cardNumber} has already been assigned in this session (${statusNote}: ${conflictItem.brandModel || 'Item'}).`);
     }
   } catch (err: unknown) {
     // If offline or query error, ignore unless it's the duplicate card error
-    if (err instanceof Error && err.message.includes('currently in use')) {
+    if (err instanceof Error && (err.message.includes('currently in use') || err.message.includes('already been assigned'))) {
       throw err;
     }
   }
@@ -186,6 +225,10 @@ export async function assignCardToken(params: {
   }
 
   const data = snap.data() as RepairItem;
+  if (data.status === 'COMPLETED' || data.status === 'TAKEN_HOME') {
+    throw new Error(`Cannot assign a card to an item that is already ${data.status === 'COMPLETED' ? 'completed' : 'taken home'}.`);
+  }
+
   const nextStatus = calculateNextStatusOnCardAssign(data.item.powerType);
 
   await updateDoc(repairRef, {
@@ -322,13 +365,13 @@ export async function submitPatFinal(params: {
 }
 
 /**
- * Marks item as completed upon customer pickup and card return
+ * Marks item as completed upon customer pickup and card return.
+ * Preserves the original card ID intact for session auditability (cards are not reused in the same session).
  */
 export async function completeCollection(sessionId: string, repairId: string): Promise<void> {
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
   await updateDoc(repairRef, {
     status: 'COMPLETED',
-    cardNumber: null, // Release physical card number for reuse
     updatedAt: Date.now()
   });
 }

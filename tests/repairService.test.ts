@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { SessionAnalytics } from '../src/types';
+import { SessionAnalytics, ItemStatus } from '../src/types';
 import { exportAnalyticsToCsv } from '../src/services/analyticsService';
-import { removeUndefined } from '../src/services/repairService';
+import { removeUndefined, checkCardConflict } from '../src/services/repairService';
 
 describe('Analytics and CSV Export Utilities', () => {
   const sampleAnalytics: SessionAnalytics[] = [
@@ -109,5 +109,71 @@ describe('Firestore Data Sanitization (removeUndefined)', () => {
       { id: 1, name: 'Alice' },
       { id: 2, name: 'Bob' }
     ]);
+  });
+});
+
+describe('Card Assignment Conflict Check (checkCardConflict - Issue #5)', () => {
+  const existingRepairs: Array<{
+    id: string;
+    cardNumber?: number | null;
+    status: ItemStatus;
+    item?: { brandModel: string };
+  }> = [
+    {
+      id: 'rep-1',
+      cardNumber: 1,
+      status: 'WAITING_REPAIR',
+      item: { brandModel: 'Sony Radio' }
+    },
+    {
+      id: 'rep-2',
+      cardNumber: 2,
+      status: 'COMPLETED',
+      item: { brandModel: 'Bosch Toaster' }
+    },
+    {
+      id: 'rep-3',
+      cardNumber: 3,
+      status: 'TAKEN_HOME',
+      item: { brandModel: 'Singer Sewing Machine' }
+    },
+    {
+      id: 'rep-4',
+      cardNumber: null,
+      status: 'REGISTERED',
+      item: { brandModel: 'Desk Fan' }
+    }
+  ];
+
+  it('detects conflict with an active item using the same card number', () => {
+    const result = checkCardConflict(1, existingRepairs, 'rep-new');
+    expect(result.hasConflict).toBe(true);
+    expect(result.conflictItem?.brandModel).toBe('Sony Radio');
+    expect(result.conflictItem?.status).toBe('WAITING_REPAIR');
+  });
+
+  it('detects conflict with a COMPLETED item using the same card number (cards not reused in session)', () => {
+    const result = checkCardConflict(2, existingRepairs, 'rep-new');
+    expect(result.hasConflict).toBe(true);
+    expect(result.conflictItem?.brandModel).toBe('Bosch Toaster');
+    expect(result.conflictItem?.status).toBe('COMPLETED');
+  });
+
+  it('detects conflict with a TAKEN_HOME item using the same card number', () => {
+    const result = checkCardConflict(3, existingRepairs, 'rep-new');
+    expect(result.hasConflict).toBe(true);
+    expect(result.conflictItem?.brandModel).toBe('Singer Sewing Machine');
+    expect(result.conflictItem?.status).toBe('TAKEN_HOME');
+  });
+
+  it('allows the same item to retain its own card number without false conflict', () => {
+    const result = checkCardConflict(1, existingRepairs, 'rep-1');
+    expect(result.hasConflict).toBe(false);
+  });
+
+  it('allows an unused card number to be assigned', () => {
+    const result = checkCardConflict(42, existingRepairs, 'rep-new');
+    expect(result.hasConflict).toBe(false);
+    expect(result.conflictItem).toBeUndefined();
   });
 });

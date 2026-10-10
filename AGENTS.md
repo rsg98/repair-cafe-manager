@@ -102,8 +102,8 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
 - **Card Token Assignment:** Maps customer reference tokens to physical numbered cards (#1..#N) that are reused every session.
   - Automatically routes `MAINS_240V` items to `WAITING_PAT1`.
   - Automatically routes other power types to `WAITING_REPAIR`.
-  - Enforces duplicate card checks to prevent assigning a card currently in use by another active item.
-- **Checkout & Card Recovery:** Confirms collection, clears `cardNumber` to `null` for reuse, and marks item `COMPLETED`.
+  - Enforces duplicate card checks to prevent assigning a card already assigned to an item in the session.
+- **Checkout & Card Recovery:** Confirms customer collection, marks item `COMPLETED`, preserves original `cardNumber` intact for session auditability (cards are not reused in the same session), and greys out the row in the Front Desk queue to prevent accidental card reassignment.
 - **Session Finalization:** Triggers the backend Cloud Function `finalizeSession` to scrub PII and compile analytics.
 
 ### Station 3: PAT Electrical Safety Station (`/pat`)
@@ -207,7 +207,7 @@ submitPatFinal(...)    │            │
             ▼
 ┌───────────────────────┐
 │       COMPLETED       │
-│  (Card # freed)       │
+│  (Card # preserved)   │
 └───────────────────────┘
 ```
 

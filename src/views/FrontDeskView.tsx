@@ -412,11 +412,20 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                       </td>
                     </tr>
                   ) : (
-                    filteredRepairs.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                    filteredRepairs.map((r) => {
+                      const isCompleted = r.status === 'COMPLETED';
+                    return (
+                      <tr 
+                        key={r.id} 
+                        className={`transition-colors ${
+                          isCompleted 
+                            ? 'bg-slate-100/75 text-slate-500 opacity-60 hover:bg-slate-100' 
+                            : 'hover:bg-slate-50/80'
+                        }`}
+                      >
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           {r.cardNumber ? (
-                            <CardToken number={r.cardNumber} size="sm" />
+                            <CardToken number={r.cardNumber} size="sm" dimmed={isCompleted} />
                           ) : (
                             <span className="text-xs italic text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-bold">
                               Unassigned
@@ -427,12 +436,18 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                           {r.referenceToken}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-800">{r.item.brandModel}</div>
+                          <div className={`font-bold ${isCompleted ? 'text-slate-600' : 'text-slate-800'}`}>
+                            {r.item.brandModel}
+                          </div>
                           <div className="text-xs text-slate-500 line-clamp-1">{r.item.faultDescription}</div>
                         </td>
                         <td className="py-3.5 px-4 text-xs">
                           {r.item.powerType === 'MAINS_240V' ? (
-                            <span className="font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded">
+                            <span className={`font-bold px-2 py-0.5 rounded ${
+                              isCompleted 
+                                ? 'text-slate-600 bg-slate-200' 
+                                : 'text-orange-700 bg-orange-100'
+                            }`}>
                               Mains 240V
                             </span>
                           ) : (
@@ -455,7 +470,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                         </td>
                         <td className="py-3.5 px-4 text-right space-x-2 whitespace-nowrap">
                           {/* Assign Card Token */}
-                          {!r.cardNumber && (
+                          {!r.cardNumber && !isCompleted && r.status !== 'TAKEN_HOME' && (
                             <button
                               onClick={() => {
                                 setSelectedRepairId(r.id);
@@ -488,7 +503,8 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                           )}
                         </td>
                       </tr>
-                    ))
+                    );
+                  })
                   )}
                 </tbody>
               </table>
