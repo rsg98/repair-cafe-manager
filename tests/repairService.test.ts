@@ -6,8 +6,7 @@ import {
   checkCardConflict, 
   filterRepairs, 
   isTerminalStatus, 
-  canAssignCard,
-  extractCustomerName
+  canAssignCard
 } from '../src/services/repairService';
 
 describe('Analytics and CSV Export Utilities', () => {
@@ -208,7 +207,7 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
       registrationId: 'reg-2',
       referenceToken: 'REF-B42C',
       cardNumber: 2,
-      // legacy item without customerName on repair document
+      customerName: 'Gordon Freeman',
       status: 'IN_PAT1',
       item: {
         category: 'ELECTRICAL',
@@ -294,10 +293,6 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
     }
   ];
 
-  const fallbackNames: Record<string, string> = {
-    'rep-2': 'Gordon Freeman'
-  };
-
   it('searches by customer name (direct customerName on repair item)', () => {
     const results = filterRepairs(sampleRepairs, 'Sarah', 'ALL');
     expect(results.length).toBe(2);
@@ -311,8 +306,8 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
     expect(results[0].customerName).toBe('David Miller');
   });
 
-  it('searches by fallback customer name for legacy items', () => {
-    const results = filterRepairs(sampleRepairs, 'Gordon', 'ALL', fallbackNames);
+  it('searches case-insensitively for full or partial customer names', () => {
+    const results = filterRepairs(sampleRepairs, 'Gordon', 'ALL');
     expect(results.length).toBe(1);
     expect(results[0].id).toBe('rep-2');
     expect(results[0].referenceToken).toBe('REF-B42C');
@@ -373,84 +368,29 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
     expect(results[0].id).toBe('rep-1');
   });
 
-  it('searches customer names resolved via alternative fields or fallbackCustomerNames', () => {
-    const legacyRepairs: any[] = [
+  it('handles items with missing or empty customerName gracefully', () => {
+    const repairsWithMissingName: RepairItem[] = [
       {
-        id: 'legacy-1',
-        referenceToken: 'REF-L111',
-        item: { brandModel: 'Toaster' },
-        status: 'WAITING_REPAIR',
-        customer: { firstName: 'Diana' }
-      },
-      {
-        id: 'legacy-2',
-        referenceToken: 'REF-L222',
-        item: { brandModel: 'Lamp' },
-        status: 'WAITING_PAT1',
-        firstName: 'Edward'
-      },
-      {
-        id: 'legacy-3',
-        referenceToken: 'REF-L333',
-        item: { brandModel: 'Radio' },
-        status: 'REGISTERED'
+        id: 'rep-no-name',
+        sessionId: 'sess-1',
+        registrationId: 'reg-none',
+        referenceToken: 'REF-NONE',
+        status: 'REGISTERED',
+        item: {
+          category: 'ELECTRICAL',
+          brandModel: 'Lamp',
+          faultDescription: 'No power',
+          powerType: 'MAINS_240V'
+        }
       }
     ];
 
-    // Diana matches via legacy customer.firstName
-    const dianaResults = filterRepairs(legacyRepairs, 'diana', 'ALL');
-    expect(dianaResults.length).toBe(1);
-    expect(dianaResults[0].id).toBe('legacy-1');
+    const results = filterRepairs(repairsWithMissingName, 'Lamp', 'ALL');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('rep-no-name');
 
-    // Edward matches via legacy firstName
-    const edwardResults = filterRepairs(legacyRepairs, 'edward', 'ALL');
-    expect(edwardResults.length).toBe(1);
-    expect(edwardResults[0].id).toBe('legacy-2');
-
-    // legacy-3 matches via fallbackCustomerNames dictionary
-    const fallbackResults = filterRepairs(legacyRepairs, 'fiona', 'ALL', { 'legacy-3': 'Fiona' });
-    expect(fallbackResults.length).toBe(1);
-    expect(fallbackResults[0].id).toBe('legacy-3');
-  });
-});
-
-describe('extractCustomerName utility', () => {
-  it('extracts direct customerName property', () => {
-    expect(extractCustomerName({ customerName: '  John Smith  ' })).toBe('John Smith');
-  });
-
-  it('extracts nested customer.firstName property', () => {
-    expect(extractCustomerName({ customer: { firstName: 'Alice' } })).toBe('Alice');
-  });
-
-  it('extracts nested customer.name property', () => {
-    expect(extractCustomerName({ customer: { name: 'Bob' } })).toBe('Bob');
-  });
-
-  it('extracts root firstName property', () => {
-    expect(extractCustomerName({ firstName: 'Charlie' })).toBe('Charlie');
-  });
-
-  it('extracts customerFirstName property', () => {
-    expect(extractCustomerName({ customerFirstName: 'David' })).toBe('David');
-  });
-
-  it('extracts clientName property', () => {
-    expect(extractCustomerName({ clientName: 'Eve' })).toBe('Eve');
-  });
-
-  it('ignores reference tokens when checking name property', () => {
-    expect(extractCustomerName({ name: 'REF-A38F' })).toBe('');
-    expect(extractCustomerName({ name: 'October Session' })).toBe('');
-    expect(extractCustomerName({ name: 'Grace' })).toBe('Grace');
-  });
-
-  it('returns empty string for null, undefined, or missing properties', () => {
-    expect(extractCustomerName(null)).toBe('');
-    expect(extractCustomerName(undefined)).toBe('');
-    expect(extractCustomerName({})).toBe('');
-    expect(extractCustomerName({ customerName: '' })).toBe('');
-    expect(extractCustomerName({ customerName: '   ' })).toBe('');
+    const noResults = filterRepairs(repairsWithMissingName, 'Alice', 'ALL');
+    expect(noResults.length).toBe(0);
   });
 });
 

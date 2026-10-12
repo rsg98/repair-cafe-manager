@@ -181,66 +181,18 @@ export function checkCardConflict(
 }
 
 /**
- * Synchronously extracts the customer's first name from a repair record.
- * Checks multiple possible fields for resilience across schemas and migrations:
- * - item.customerName
- * - item.customer?.firstName
- * - item.customer?.name
- * - item.firstName
- * - item.customerFirstName
- * - item.clientName
- * - item.name (if not a reference token)
- */
-export function extractCustomerName(item: Partial<RepairItem> | any): string {
-  if (!item || typeof item !== 'object') return '';
-
-  if (typeof item.customerName === 'string' && item.customerName.trim()) {
-    return item.customerName.trim();
-  }
-  if (item.customer && typeof item.customer === 'object') {
-    if (typeof item.customer.firstName === 'string' && item.customer.firstName.trim()) {
-      return item.customer.firstName.trim();
-    }
-    if (typeof item.customer.name === 'string' && item.customer.name.trim()) {
-      return item.customer.name.trim();
-    }
-  }
-  if (typeof item.firstName === 'string' && item.firstName.trim()) {
-    return item.firstName.trim();
-  }
-  if (typeof item.customerFirstName === 'string' && item.customerFirstName.trim()) {
-    return item.customerFirstName.trim();
-  }
-  if (typeof item.clientName === 'string' && item.clientName.trim()) {
-    return item.clientName.trim();
-  }
-  if (typeof item.name === 'string' && item.name.trim()) {
-    const trimmed = item.name.trim();
-    if (!trimmed.startsWith('REF-') && !trimmed.toLowerCase().includes('session')) {
-      return trimmed;
-    }
-  }
-
-  return '';
-}
-
-/**
- * Filters repairs by search term (matching customer name, token, brand/model, or card number)
+ * Filters repairs by search term (matching customer first name, token, brand/model, or card number)
  * and status filter (handling queue groupings like WAITING_PAT1, WAITING_REPAIR, WAITING_PAT2).
  */
 export function filterRepairs(
   repairs: RepairItem[],
   searchTerm: string,
-  statusFilter: string,
-  fallbackCustomerNames?: Record<string, string>
+  statusFilter: string
 ): RepairItem[] {
   const term = searchTerm.trim().toLowerCase();
 
   return repairs.filter((r) => {
-    const directName = extractCustomerName(r);
-    const fallbackName = fallbackCustomerNames?.[r.id] || '';
-    const resolvedCustomerName = directName || fallbackName;
-    const customerName = resolvedCustomerName.toLowerCase();
+    const customerName = (r.customerName || '').toLowerCase();
 
     const matchesSearch = !term || (
       customerName.includes(term) ||
@@ -478,20 +430,6 @@ export async function completeCollection(sessionId: string, repairId: string): P
   });
 }
 
-/**
- * Backfills or updates customerName directly on the repair document in Firestore.
- */
-export async function syncCustomerName(
-  sessionId: string,
-  repairId: string,
-  customerName: string
-): Promise<void> {
-  const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
-  await updateDoc(repairRef, {
-    customerName: customerName.trim(),
-    updatedAt: Date.now()
-  });
-}
 
 /**
  * Reads private customer PII (Only accessible by Google Auth organizers)

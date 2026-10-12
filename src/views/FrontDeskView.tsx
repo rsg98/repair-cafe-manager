@@ -25,9 +25,7 @@ import {
   getPrivateCustomerData,
   filterRepairs,
   isTerminalStatus,
-  canAssignCard,
-  extractCustomerName,
-  syncCustomerName
+  canAssignCard
 } from '../services/repairService';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { CardToken } from '../components/common/CardToken';
@@ -69,11 +67,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
   // Search and filter
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  // Customer name backfill & sync state
-  const [fetchedNames, setFetchedNames] = useState<Record<string, string>>({});
-  const [isSyncingNames, setIsSyncingNames] = useState(false);
-  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
-  const processedRepairIds = useRef<Set<string>>(new Set());
   const hasSyncedSettingsRef = useRef(false);
 
   // Finalize session confirmation
@@ -96,87 +89,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
       });
     }
   }, [isAdmin, user]);
-
-  // Automatically resolve and backfill missing customer names for existing repairs (admin only)
-  useEffect(() => {
-    if (!session?.id || !isAdmin || repairs.length === 0) return;
-
-    // 1. Immediately extract any embedded names on repair docs and update state + Firestore
-    repairs.forEach((r) => {
-      const extracted = extractCustomerName(r);
-      if (extracted && !r.customerName && !processedRepairIds.current.has(r.id)) {
-        processedRepairIds.current.add(r.id);
-        setFetchedNames(prev => ({ ...prev, [r.id]: extracted }));
-        syncCustomerName(session.id, r.id, extracted).catch(err => {
-          console.warn(`Could not backfill customerName to repair ${r.id}:`, err);
-        });
-      }
-    });
-
-    // 2. Identify repairs that don't have a name resolved anywhere on the doc
-    const repairsNeedingFetch = repairs.filter(
-      r => !extractCustomerName(r) && !fetchedNames[r.id] && !processedRepairIds.current.has(r.id)
-    );
-
-    if (repairsNeedingFetch.length === 0) return;
-
-    // Mark as being processed to avoid duplicate async requests
-    repairsNeedingFetch.forEach(r => processedRepairIds.current.add(r.id));
-
-    // Fetch private customer data in parallel
-    Promise.all(
-      repairsNeedingFetch.map(async (r) => {
-        try {
-          const pii = await getPrivateCustomerData(session.id, r.id);
-          const name = pii?.firstName || (pii as any)?.customerName || (pii as any)?.name || '';
-          if (name && name.trim()) {
-            const trimmedName = name.trim();
-            setFetchedNames(prev => ({ ...prev, [r.id]: trimmedName }));
-            await syncCustomerName(session.id, r.id, trimmedName);
-          }
-        } catch (err) {
-          console.error(`Could not resolve customer name for repair ${r.id}:`, err);
-        }
-      })
-    );
-  }, [repairs, session?.id, isAdmin, fetchedNames]);
-
-  // Manual Customer Name Sync Trigger for Front Desk Organizers
-  const handleSyncCustomerNames = async () => {
-    if (!session?.id || !isAdmin) return;
-    setIsSyncingNames(true);
-    setSyncStatusMsg(null);
-    let updatedCount = 0;
-    try {
-      for (const r of repairs) {
-        let name = extractCustomerName(r);
-        if (!name) {
-          const pii = await getPrivateCustomerData(session.id, r.id);
-          name = pii?.firstName || (pii as any)?.customerName || (pii as any)?.name || '';
-        }
-        if (name && name.trim()) {
-          const trimmed = name.trim();
-          if (r.customerName !== trimmed) {
-            await syncCustomerName(session.id, r.id, trimmed);
-            setFetchedNames(prev => ({ ...prev, [r.id]: trimmed }));
-            updatedCount++;
-          }
-        }
-      }
-      setSyncStatusMsg(
-        updatedCount > 0 
-          ? `Synced ${updatedCount} customer ${updatedCount === 1 ? 'name' : 'names'} to session.`
-          : 'All customer names are already synchronized.'
-      );
-      setTimeout(() => setSyncStatusMsg(null), 4000);
-    } catch (err) {
-      console.error("Sync customer names error:", err);
-      setSyncStatusMsg('Error syncing customer names. Check browser console.');
-      setTimeout(() => setSyncStatusMsg(null), 5000);
-    } finally {
-      setIsSyncingNames(false);
-    }
-  };
 
   if (!isAdmin) {
     if (user) {
@@ -335,7 +247,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
   };
 
   // Filtered repairs
-  const filteredRepairs = filterRepairs(repairs, searchTerm, statusFilter, fetchedNames);
+  const filteredRepairs = filterRepairs(repairs, searchTerm, statusFilter);
 
   // Calculate live session counters
   const counts = {
@@ -470,30 +382,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
               <option value="READY_FOR_COLLECTION">Ready for Pickup ({counts.ready})</option>
               <option value="COMPLETED">Completed ({counts.completed})</option>
             </select>
-            <button
-              type="button"
-              onClick={handleSyncCustomerNames}
-              disabled={isSyncingNames}
-              className="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold flex items-center justify-center gap-2 shadow-sm whitespace-nowrap transition-colors disabled:opacity-60"
-              title="Sync and backfill customer first names from customer check-in records"
-            >
-              <RefreshCw className={`h-4 w-4 text-slate-500 ${isSyncingNames ? 'animate-spin' : ''}`} />
-              <span>{isSyncingNames ? 'Syncing...' : 'Sync Names'}</span>
-            </button>
           </div>
-
-          {syncStatusMsg && (
-            <div className="mb-4 p-3 bg-brand-50 border border-brand-200 rounded-xl text-brand-800 text-sm flex items-center justify-between shadow-sm">
-              <span className="font-medium">{syncStatusMsg}</span>
-              <button 
-                type="button"
-                onClick={() => setSyncStatusMsg(null)} 
-                className="text-brand-600 hover:text-brand-800 text-xs font-bold ml-2 underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
 
           {/* Repairs Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -528,7 +417,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                   ) : (
                     filteredRepairs.map((r) => {
                       const isCompleted = isTerminalStatus(r.status);
-                      const customerName = extractCustomerName(r) || fetchedNames[r.id] || '—';
+                      const customerName = r.customerName || '—';
                     return (
                       <tr 
                         key={r.id} 
