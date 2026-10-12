@@ -1,6 +1,5 @@
 export type ItemCategory =
   | 'ELECTRICAL'
-  | 'ELECTRONIC'
   | 'MECHANICAL'
   | 'TEXTILE'
   | 'WOODWORK'
@@ -12,6 +11,7 @@ export type PowerType =
   | 'BATTERY_LOW_VOLTAGE'
   | 'MECHANICAL'
   | 'TEXTILE'
+  | 'NOT_APPLICABLE'
   | 'OTHER';
 
 export type ApplianceClass =

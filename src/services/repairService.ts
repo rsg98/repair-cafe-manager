@@ -17,7 +17,8 @@ import {
   PatInitialOutcome, 
   PatFinalOutcome, 
   RepairOutcome,
-  PowerType
+  PowerType,
+  ItemCategory
 } from '../types';
 import { cafeConfig } from '../config/cafe.config';
 
@@ -60,6 +61,31 @@ export function removeUndefined<T>(obj: T): T {
 
 export function calculateNextStatusOnCardAssign(powerType: PowerType): ItemStatus {
   return powerType === 'MAINS_240V' ? 'WAITING_PAT1' : 'WAITING_REPAIR';
+}
+
+/**
+ * Automatically maps an ItemCategory to its default PowerType on registration.
+ * Non-powered categories (Textiles, Woodwork, Mechanical) default to NOT_APPLICABLE.
+ * Unclear categories (Toy, Other) or Electrical default to MAINS_240V
+ * to ensure they are routed to PAT testing as a safety failsafe.
+ */
+export function getDefaultPowerTypeForCategory(category: ItemCategory): PowerType {
+  switch (category) {
+    case 'TEXTILE':
+      return 'NOT_APPLICABLE';
+    case 'WOODWORK':
+      return 'NOT_APPLICABLE';
+    case 'MECHANICAL':
+      return 'NOT_APPLICABLE';
+    case 'ELECTRICAL':
+      return 'MAINS_240V';
+    case 'TOY':
+      return 'MAINS_240V';
+    case 'OTHER':
+      return 'MAINS_240V';
+    default:
+      return 'MAINS_240V';
+  }
 }
 
 export function calculateNextStatusOnPatInitial(outcome: PatInitialOutcome): ItemStatus {
@@ -121,7 +147,7 @@ export async function submitRegistration(params: {
         category: itemInput.category,
         brandModel: itemInput.brandModel,
         faultDescription: itemInput.faultDescription,
-        powerType: itemInput.powerType
+        powerType: itemInput.powerType || getDefaultPowerTypeForCategory(itemInput.category)
       },
       createdAt: now,
       updatedAt: now

@@ -18,9 +18,10 @@ describe('Repair Item Lifecycle State Machine (Production Service Tests)', () =>
       expect(nextStatus).toBe('WAITING_REPAIR');
     });
 
-    it('routes mechanical / textile items directly to the repair queue', () => {
+    it('routes mechanical / textile / not applicable items directly to the repair queue', () => {
       expect(calculateNextStatusOnCardAssign('MECHANICAL')).toBe('WAITING_REPAIR');
       expect(calculateNextStatusOnCardAssign('TEXTILE')).toBe('WAITING_REPAIR');
+      expect(calculateNextStatusOnCardAssign('NOT_APPLICABLE')).toBe('WAITING_REPAIR');
     });
   });
 

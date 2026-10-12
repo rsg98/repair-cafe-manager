@@ -6,7 +6,8 @@ import {
   checkCardConflict, 
   filterRepairs, 
   isTerminalStatus, 
-  canAssignCard
+  canAssignCard,
+  getDefaultPowerTypeForCategory
 } from '../src/services/repairService';
 
 describe('Analytics and CSV Export Utilities', () => {
@@ -228,7 +229,7 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
         category: 'MECHANICAL',
         brandModel: 'Bicycle Gear Cable',
         faultDescription: 'Slipping chain',
-        powerType: 'BATTERY_OR_DC'
+        powerType: 'MECHANICAL'
       }
     },
     {
@@ -270,10 +271,10 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
       customerName: 'Carol Danvers',
       status: 'READY_FOR_COLLECTION',
       item: {
-        category: 'CLOCK',
+        category: 'MECHANICAL',
         brandModel: 'Seiko Wall Clock',
         faultDescription: 'Stopped ticking',
-        powerType: 'BATTERY_OR_DC'
+        powerType: 'BATTERY_LOW_VOLTAGE'
       }
     },
     {
@@ -453,6 +454,23 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
     expect(result.hasConflict).toBe(true);
     expect(result.conflictItem?.brandModel).toBe('Dead Kettle');
     expect(result.conflictItem?.status).toBe('UNFIXABLE');
+  });
+
+  describe('getDefaultPowerTypeForCategory', () => {
+    it('defaults non-powered categories (TEXTILE, WOODWORK, MECHANICAL) to NOT_APPLICABLE', () => {
+      expect(getDefaultPowerTypeForCategory('TEXTILE')).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('WOODWORK')).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('MECHANICAL')).toBe('NOT_APPLICABLE');
+    });
+
+    it('defaults electrical category to MAINS_240V', () => {
+      expect(getDefaultPowerTypeForCategory('ELECTRICAL')).toBe('MAINS_240V');
+    });
+
+    it('defaults unclear categories (TOY, OTHER) to MAINS_240V as a PAT safety failsafe', () => {
+      expect(getDefaultPowerTypeForCategory('TOY')).toBe('MAINS_240V');
+      expect(getDefaultPowerTypeForCategory('OTHER')).toBe('MAINS_240V');
+    });
   });
 });
 

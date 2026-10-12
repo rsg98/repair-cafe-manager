@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { cafeConfig } from '../config/cafe.config';
 import { Session, ItemCategory, PowerType } from '../types';
-import { submitRegistration, generateReferenceToken } from '../services/repairService';
+import { submitRegistration, generateReferenceToken, getDefaultPowerTypeForCategory } from '../services/repairService';
 import { TermsModal } from '../components/common/TermsModal';
 
 interface CustomerRegisterViewProps {
@@ -35,7 +35,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
       category: 'ELECTRICAL',
       brandModel: '',
       faultDescription: '',
-      powerType: 'MAINS_240V'
+      powerType: getDefaultPowerTypeForCategory('ELECTRICAL')
     }
   ]);
 
@@ -66,7 +66,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
         category: 'ELECTRICAL',
         brandModel: '',
         faultDescription: '',
-        powerType: 'MAINS_240V'
+        powerType: getDefaultPowerTypeForCategory('ELECTRICAL')
       }
     ]);
   };
@@ -79,7 +79,13 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
   const handleItemChange = (index: number, field: keyof ItemInputState, value: string) => {
     setItems(prev => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
+      if (field === 'category') {
+        const category = value as ItemCategory;
+        const autoPowerType = getDefaultPowerTypeForCategory(category);
+        copy[index] = { ...copy[index], category, powerType: autoPowerType };
+      } else {
+        copy[index] = { ...copy[index], [field]: value };
+      }
       return copy;
     });
   };
@@ -299,8 +305,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                       onChange={(e) => handleItemChange(index, 'category', e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
                     >
-                      <option value="ELECTRICAL">Small Electrical (Toaster, Kettle, Lamp)</option>
-                      <option value="ELECTRONIC">Electronics / Audio / Computing</option>
+                      <option value="ELECTRICAL">Electrical & Electronics (Appliances, Audio, Computing, Lamps)</option>
                       <option value="MECHANICAL">Mechanical / Clocks / Bikes / Tools</option>
                       <option value="TEXTILE">Textiles / Clothing / Zips</option>
                       <option value="WOODWORK">Woodwork / Furniture</option>
@@ -320,7 +325,8 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                     >
                       <option value="MAINS_240V">Mains 240V Plug-in (Requires PAT Test)</option>
                       <option value="BATTERY_LOW_VOLTAGE">Battery / USB / Low Voltage DC</option>
-                      <option value="MECHANICAL">Non-powered / Mechanical</option>
+                      <option value="NOT_APPLICABLE">Not Applicable (Non-powered)</option>
+                      <option value="MECHANICAL">Mechanical</option>
                       <option value="TEXTILE">Textile / Fabric</option>
                       <option value="OTHER">Other</option>
                     </select>

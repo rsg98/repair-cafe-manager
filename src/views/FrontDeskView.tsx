@@ -463,7 +463,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                             </span>
                           ) : (
                             <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                              {r.item.powerType.replace('_', ' ')}
+                              {r.item.powerType.replace(/_/g, ' ')}
                             </span>
                           )}
                         </td>
