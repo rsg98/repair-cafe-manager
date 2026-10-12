@@ -153,7 +153,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
         category: 'ELECTRICAL',
         brandModel: '',
         faultDescription: '',
-        powerType: 'MAINS_240V'
+        powerType: getDefaultPowerTypeForCategory('ELECTRICAL')
       }
     ]);
   };

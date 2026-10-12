@@ -69,11 +69,14 @@ export function calculateNextStatusOnCardAssign(powerType: PowerType): ItemStatu
  * Unclear categories (Toy, Other) or Electrical default to MAINS_240V
  * to ensure they are routed to PAT testing as a safety failsafe.
  */
-export function getDefaultPowerTypeForCategory(category: ItemCategory): PowerType {
-  switch (category) {
+export function getDefaultPowerTypeForCategory(category?: ItemCategory | string | null): PowerType {
+  const norm = (category || '').toUpperCase().trim();
+  switch (norm) {
     case 'TEXTILE':
+    case 'TEXTILES':
       return 'NOT_APPLICABLE';
     case 'WOODWORK':
+    case 'WOOD':
       return 'NOT_APPLICABLE';
     case 'MECHANICAL':
       return 'NOT_APPLICABLE';

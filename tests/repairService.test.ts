@@ -463,13 +463,26 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       expect(getDefaultPowerTypeForCategory('MECHANICAL')).toBe('NOT_APPLICABLE');
     });
 
+    it('handles lowercase, mixed case, and common aliases', () => {
+      expect(getDefaultPowerTypeForCategory('textile' as any)).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('Textile' as any)).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('textiles' as any)).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('woodwork' as any)).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('Woodwork' as any)).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('wood' as any)).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('mechanical' as any)).toBe('NOT_APPLICABLE');
+    });
+
     it('defaults electrical category to MAINS_240V', () => {
       expect(getDefaultPowerTypeForCategory('ELECTRICAL')).toBe('MAINS_240V');
+      expect(getDefaultPowerTypeForCategory('electrical' as any)).toBe('MAINS_240V');
     });
 
     it('defaults unclear categories (TOY, OTHER) to MAINS_240V as a PAT safety failsafe', () => {
       expect(getDefaultPowerTypeForCategory('TOY')).toBe('MAINS_240V');
       expect(getDefaultPowerTypeForCategory('OTHER')).toBe('MAINS_240V');
+      expect(getDefaultPowerTypeForCategory('' as any)).toBe('MAINS_240V');
+      expect(getDefaultPowerTypeForCategory(undefined as any)).toBe('MAINS_240V');
     });
   });
 });
