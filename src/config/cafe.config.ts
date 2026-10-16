@@ -1,3 +1,5 @@
+export type StationViewId = 'register' | 'frontdesk' | 'pat' | 'fixer' | 'reports';
+
 export interface CafeConfig {
   cafeName: string;
   tagline: string;
@@ -22,6 +24,13 @@ export interface CafeConfig {
    * If empty, any authenticated Google account is permitted.
    */
   organizerEmails: string[];
+  /**
+   * Maps each allowed hostname to the ordered list of station views enabled on that host.
+   * - The first view in the array becomes the default "/" landing route.
+   * - Any production hostname not listed here will display an unconfigured hostname error.
+   * - In local development, `<prefix>.localhost` matches `<prefix>.*` keys here.
+   */
+  hostnameViews: Record<string, StationViewId[]>;
 }
 
 export const cafeConfig: CafeConfig = {
@@ -43,5 +52,11 @@ export const cafeConfig: CafeConfig = {
   organizerEmails: [
     "info@suttonrepaircafe.org.uk",
     "@suttonrepaircafe.org.uk"
-  ]
+  ],
+  hostnameViews: {
+    "register.suttonrepaircafe.app": ["register"],
+    "fixer.suttonrepaircafe.app": ["fixer", "pat"],
+    "manager.suttonrepaircafe.app": ["register", "frontdesk", "pat", "fixer", "reports"]
+  }
 };
+

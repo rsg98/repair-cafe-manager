@@ -8,9 +8,13 @@ import { getAuthBannerState } from '../../utils/authUtils';
 
 interface HeaderProps {
   session: Session | null;
+  showAuthControls?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ session }) => {
+export const Header: React.FC<HeaderProps> = ({
+  session,
+  showAuthControls = true,
+}) => {
   // Resolve current Google Auth / custom token user and volunteer PIN state
   const { user, isAdmin, signInWithGoogle, signOut } = useAuth();
   const { isPinUnlocked } = useVolunteerPin(session);
@@ -45,35 +49,37 @@ export const Header: React.FC<HeaderProps> = ({ session }) => {
         </div>
 
         {/* Right: Auth Controls (Organizer via Google Account or Volunteer via PIN) */}
-        <div className="flex items-center gap-3">
-          {bannerState.role !== 'UNAUTHENTICATED' ? (
-            <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border font-medium ${
-                isAuthorizedRole
-                  ? 'bg-emerald-950/80 border-emerald-700 text-brand-200' 
-                  : 'bg-amber-950/80 border-amber-700 text-amber-200'
-              }`}>
-                <Shield className={`h-3.5 w-3.5 ${isAuthorizedRole ? 'text-brand-400' : 'text-amber-400'}`} />
-                {bannerState.label}
-              </span>
+        {showAuthControls && (
+          <div className="flex items-center gap-3">
+            {bannerState.role !== 'UNAUTHENTICATED' ? (
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border font-medium ${
+                  isAuthorizedRole
+                    ? 'bg-emerald-950/80 border-emerald-700 text-brand-200' 
+                    : 'bg-amber-950/80 border-amber-700 text-amber-200'
+                }`}>
+                  <Shield className={`h-3.5 w-3.5 ${isAuthorizedRole ? 'text-brand-400' : 'text-amber-400'}`} />
+                  {bannerState.label}
+                </span>
+                <button
+                  onClick={signOut}
+                  title="Sign out"
+                  className="p-1.5 rounded-lg text-emerald-200 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={signOut}
-                title="Sign out"
-                className="p-1.5 rounded-lg text-emerald-200 hover:text-white hover:bg-white/10 transition-colors"
+                onClick={signInWithGoogle}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white text-emerald-900 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-50 active:bg-emerald-100 transition-colors"
               >
-                <LogOut className="h-4 w-4" />
+                <LogIn className="h-3.5 w-3.5" />
+                <span>Organizer Login</span>
               </button>
-            </div>
-          ) : (
-            <button
-              onClick={signInWithGoogle}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white text-emerald-900 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-50 active:bg-emerald-100 transition-colors"
-            >
-              <LogIn className="h-3.5 w-3.5" />
-              <span>Organizer Login</span>
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

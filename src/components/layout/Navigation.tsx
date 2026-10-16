@@ -1,15 +1,68 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { ClipboardList, LayoutDashboard, Zap, Hammer, BarChart3 } from 'lucide-react';
+import { StationViewId } from '../../config/cafe.config';
+import { ALL_STATION_VIEWS } from '../../utils/hostnameViews';
 
-export const Navigation: React.FC = () => {
-  const links = [
-    { to: '/register', label: '1. Register Item', icon: ClipboardList },
-    { to: '/frontdesk', label: '2. Front Desk', icon: LayoutDashboard },
-    { to: '/pat', label: '3. PAT Station', icon: Zap },
-    { to: '/fixer', label: '4. Fixer Station', icon: Hammer },
-    { to: '/reports', label: '5. Reports', icon: BarChart3 },
-  ];
+interface NavigationProps {
+  allowedViews?: readonly StationViewId[];
+}
+
+const STATION_NAV_ITEMS: Record<
+  StationViewId,
+  { to: string; fullLabel: string; shortLabel: string; icon: React.ComponentType<{ className?: string }> }
+> = {
+  register: {
+    to: '/register',
+    fullLabel: '1. Register Item',
+    shortLabel: 'Register Item',
+    icon: ClipboardList,
+  },
+  frontdesk: {
+    to: '/frontdesk',
+    fullLabel: '2. Front Desk',
+    shortLabel: 'Front Desk',
+    icon: LayoutDashboard,
+  },
+  pat: {
+    to: '/pat',
+    fullLabel: '3. PAT Station',
+    shortLabel: 'PAT Station',
+    icon: Zap,
+  },
+  fixer: {
+    to: '/fixer',
+    fullLabel: '4. Fixer Station',
+    shortLabel: 'Fixer Station',
+    icon: Hammer,
+  },
+  reports: {
+    to: '/reports',
+    fullLabel: '5. Reports',
+    shortLabel: 'Reports',
+    icon: BarChart3,
+  },
+};
+
+export const Navigation: React.FC<NavigationProps> = ({
+  allowedViews = ALL_STATION_VIEWS,
+}) => {
+  // Hide navigation bar completely when a hostname only exposes a single view (e.g. register.suttonrepaircafe.app)
+  if (allowedViews.length <= 1) {
+    return null;
+  }
+
+  const isFullSuite = allowedViews.length === ALL_STATION_VIEWS.length;
+  const links = allowedViews
+    .filter((id) => Boolean(STATION_NAV_ITEMS[id]))
+    .map((id) => {
+      const item = STATION_NAV_ITEMS[id];
+      return {
+        to: item.to,
+        label: isFullSuite ? item.fullLabel : item.shortLabel,
+        icon: item.icon,
+      };
+    });
 
   return (
     <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30">
@@ -36,3 +89,4 @@ export const Navigation: React.FC = () => {
     </nav>
   );
 };
+

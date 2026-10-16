@@ -1,10 +1,12 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 import { useActiveSession } from './hooks/useActiveSession';
 import { Header } from './components/layout/Header';
 import { Navigation } from './components/layout/Navigation';
 import { OfflineNotice } from './components/common/OfflineNotice';
 import { cafeConfig } from './config/cafe.config';
+import { resolveHostnameViews } from './utils/hostnameViews';
 
 // Lazy-load each physical station route to split application code into smaller on-demand chunks
 const CustomerRegisterView = React.lazy(() =>
@@ -33,32 +35,71 @@ const StationLoadingFallback: React.FC<{ label?: string }> = ({
   </div>
 );
 
+// Error screen displayed when the current hostname is not mapped in cafeConfig.hostnameViews
+const UnconfiguredHostnameNotice: React.FC<{ hostname: string }> = ({ hostname }) => (
+  <div className="max-w-xl mx-auto my-16 px-4">
+    <div className="p-8 bg-white rounded-2xl shadow-sm border border-rose-200 text-center">
+      <div className="h-14 w-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+        <AlertTriangle className="h-8 w-8" />
+      </div>
+      <h2 className="text-2xl font-bold text-slate-900">
+        Hostname Not Configured
+      </h2>
+      <p className="mt-2 text-sm text-slate-600">
+        This hostname (<code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800">{hostname || 'unknown'}</code>) has not been configured for {cafeConfig.cafeName}.
+      </p>
+      <p className="mt-2 text-xs text-slate-500">
+        Please check the URL or add this hostname to <code className="font-mono">cafeConfig.hostnameViews</code>.
+      </p>
+    </div>
+  </div>
+);
+
 export const App: React.FC = () => {
   const { session, loading } = useActiveSession();
+  const hostConfig = resolveHostnameViews(
+    typeof window !== 'undefined' ? window.location.hostname : '',
+    cafeConfig.hostnameViews
+  );
+  const { allowedViews, defaultRoute } = hostConfig;
 
   // Render outer shell with offline banner, top header, station navigation, and lazy route outlet
   return (
     <BrowserRouter>
       <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
         <OfflineNotice />
-        <Header session={session} />
-        <Navigation />
+        <Header session={session} showAuthControls={hostConfig.showAuthControls} />
+        {hostConfig.showNavigation && <Navigation allowedViews={allowedViews} />}
 
         <main className="flex-1 pb-16">
-          {loading ? (
+          {!hostConfig.isConfigured || !defaultRoute ? (
+            <UnconfiguredHostnameNotice hostname={hostConfig.hostname} />
+          ) : loading ? (
             <StationLoadingFallback label="Connecting to Repair Café..." />
           ) : (
             // Suspense boundary handles asynchronous loading of code-split station views
             <Suspense fallback={<StationLoadingFallback />}>
               <Routes>
-                <Route path="/" element={<Navigate to="/register" replace />} />
-                <Route path="/register" element={<CustomerRegisterView session={session} />} />
-                <Route path="/frontdesk" element={<FrontDeskView session={session} />} />
-                <Route path="/desk" element={<Navigate to="/frontdesk" replace />} />
-                <Route path="/pat" element={<PatStationView session={session} />} />
-                <Route path="/fixer" element={<FixerStationView session={session} />} />
-                <Route path="/reports" element={<ReportsView />} />
-                <Route path="*" element={<Navigate to="/register" replace />} />
+                <Route path="/" element={<Navigate to={defaultRoute} replace />} />
+                {allowedViews.includes('register') && (
+                  <Route path="/register" element={<CustomerRegisterView session={session} />} />
+                )}
+                {allowedViews.includes('frontdesk') && (
+                  <>
+                    <Route path="/frontdesk" element={<FrontDeskView session={session} />} />
+                    <Route path="/desk" element={<Navigate to="/frontdesk" replace />} />
+                  </>
+                )}
+                {allowedViews.includes('pat') && (
+                  <Route path="/pat" element={<PatStationView session={session} />} />
+                )}
+                {allowedViews.includes('fixer') && (
+                  <Route path="/fixer" element={<FixerStationView session={session} />} />
+                )}
+                {allowedViews.includes('reports') && (
+                  <Route path="/reports" element={<ReportsView />} />
+                )}
+                <Route path="*" element={<Navigate to={defaultRoute} replace />} />
               </Routes>
             </Suspense>
           )}
@@ -81,4 +122,5 @@ export const App: React.FC = () => {
 };
 
 export default App;
+
 
