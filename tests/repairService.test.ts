@@ -341,6 +341,10 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
     const results = filterRepairs(sampleRepairs, '5', 'ALL');
     expect(results.length).toBe(1);
     expect(results[0].id).toBe('rep-5');
+
+    const hashPrefixedResults = filterRepairs(sampleRepairs, '#5', 'ALL');
+    expect(hashPrefixedResults.length).toBe(1);
+    expect(hashPrefixedResults[0].id).toBe('rep-5');
   });
 
   it('filters WAITING_PAT1 including both WAITING_PAT1 and IN_PAT1 items', () => {

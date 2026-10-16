@@ -272,16 +272,14 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
               <span>{v.name}</span>
               {/* Role and induction status indicators inside the pill */}
               {v.isOrganiser && (
-                <ShieldCheck
-                  className="h-3.5 w-3.5 text-blue-600"
-                  title="Organiser"
-                />
+                <span title="Organiser" className="inline-flex items-center">
+                  <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                </span>
               )}
               {v.isPatTrained && (
-                <Zap
-                  className="h-3.5 w-3.5 text-amber-600"
-                  title="PAT Trained"
-                />
+                <span title="PAT Trained" className="inline-flex items-center">
+                  <Zap className="h-3.5 w-3.5 text-amber-600" />
+                </span>
               )}
               {!v.inducted && (
                 <span className="text-[10px] uppercase tracking-wide bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-black">

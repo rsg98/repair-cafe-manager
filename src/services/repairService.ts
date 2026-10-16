@@ -219,16 +219,23 @@ export function filterRepairs(
   statusFilter: string
 ): RepairItem[] {
   const term = searchTerm.trim().toLowerCase();
+  const isCardNumberQuery = /^#?\d+$/.test(term);
+  const cardNumberTerm = term.replace(/^#/, '');
 
   return repairs.filter((r) => {
     const customerName = (r.customerName || '').toLowerCase();
+    const matchesCardNumber =
+      r.cardNumber !== undefined &&
+      r.cardNumber !== null &&
+      String(r.cardNumber) === cardNumberTerm;
 
-    const matchesSearch = !term || (
-      customerName.includes(term) ||
-      r.referenceToken.toLowerCase().includes(term) ||
-      r.item.brandModel.toLowerCase().includes(term) ||
-      (r.cardNumber !== undefined && r.cardNumber !== null && String(r.cardNumber).includes(term))
-    );
+    const matchesSearch =
+      !term ||
+      (isCardNumberQuery
+        ? matchesCardNumber || (!term.startsWith('#') && r.item.brandModel.toLowerCase().includes(term))
+        : customerName.includes(term) ||
+          r.referenceToken.toLowerCase().includes(term) ||
+          r.item.brandModel.toLowerCase().includes(term));
 
     if (!matchesSearch) return false;
     if (statusFilter === 'ALL') return true;
