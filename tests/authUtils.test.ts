@@ -4,6 +4,8 @@ import {
   isStationUnlocked,
   shouldFallbackToRedirect,
   isBenignPopupCancel,
+  isPinVolunteerUser,
+  getAuthBannerState,
 } from '../src/utils/authUtils';
 
 describe('Organizer Authentication & Group Authorization (isAuthorizedOrganizer)', () => {
@@ -131,4 +133,89 @@ describe('Google OAuth Popup & Redirect Error Handling (Issue #15)', () => {
     expect(isBenignPopupCancel(undefined)).toBe(false);
   });
 });
+
+describe('Header Banner Authentication Role & Label (Issue #14)', () => {
+  it('detects PIN-authenticated custom token volunteer users', () => {
+    expect(isPinVolunteerUser({ uid: 'volunteer-20261016-sutton', email: null })).toBe(true);
+    expect(isPinVolunteerUser({ uid: 'google-123', email: 'organizer@example.com' })).toBe(false);
+    expect(isPinVolunteerUser(null)).toBe(false);
+  });
+
+  it('displays "Volunteer" in the banner when authenticated via PIN custom token or offline PIN', () => {
+    // Online PIN custom token user (no email, uid starts with volunteer-)
+    expect(
+      getAuthBannerState({
+        user: { uid: 'volunteer-20261016-sutton', email: null, displayName: null },
+        isAdmin: false,
+        isPinUnlocked: true,
+      })
+    ).toEqual({
+      role: 'VOLUNTEER',
+      label: 'Volunteer',
+    });
+
+    // Offline PIN fallback where Firebase user is null but session PIN is unlocked
+    expect(
+      getAuthBannerState({
+        user: null,
+        isAdmin: false,
+        isPinUnlocked: true,
+      })
+    ).toEqual({
+      role: 'VOLUNTEER',
+      label: 'Volunteer',
+    });
+  });
+
+  it('displays Organizer name or email when authenticated via an authorized Google Account', () => {
+    expect(
+      getAuthBannerState({
+        user: { uid: 'google-1', email: 'info@suttonrepaircafe.org.uk', displayName: 'Sarah Fixer' },
+        isAdmin: true,
+        isPinUnlocked: false,
+      })
+    ).toEqual({
+      role: 'ORGANIZER',
+      label: 'Sarah Fixer',
+    });
+
+    expect(
+      getAuthBannerState({
+        user: { uid: 'google-2', email: 'info@suttonrepaircafe.org.uk', displayName: null },
+        isAdmin: true,
+        isPinUnlocked: false,
+      })
+    ).toEqual({
+      role: 'ORGANIZER',
+      label: 'info@suttonrepaircafe.org.uk',
+    });
+  });
+
+  it('displays Non-Organizer warning only for unauthorized Google accounts with an email address', () => {
+    expect(
+      getAuthBannerState({
+        user: { uid: 'google-3', email: 'visitor@gmail.com', displayName: 'Visitor' },
+        isAdmin: false,
+        isPinUnlocked: false,
+      })
+    ).toEqual({
+      role: 'NON_ORGANIZER',
+      label: 'Visitor (Non-Organizer)',
+    });
+  });
+
+  it('returns UNAUTHENTICATED when neither Google Account nor PIN session is active', () => {
+    expect(
+      getAuthBannerState({
+        user: null,
+        isAdmin: false,
+        isPinUnlocked: false,
+      })
+    ).toEqual({
+      role: 'UNAUTHENTICATED',
+      label: '',
+    });
+  });
+});
+
 

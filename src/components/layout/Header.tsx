@@ -3,17 +3,25 @@ import { Wrench, LogIn, LogOut, Shield } from 'lucide-react';
 import { cafeConfig } from '../../config/cafe.config';
 import { Session } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
+import { useVolunteerPin } from '../../hooks/useVolunteerPin';
+import { getAuthBannerState } from '../../utils/authUtils';
 
 interface HeaderProps {
   session: Session | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({ session }) => {
+  // Resolve current Google Auth / custom token user and volunteer PIN state
   const { user, isAdmin, signInWithGoogle, signOut } = useAuth();
+  const { isPinUnlocked } = useVolunteerPin(session);
+  const bannerState = getAuthBannerState({ user, isAdmin, isPinUnlocked });
+  const isAuthorizedRole =
+    bannerState.role === 'ORGANIZER' || bannerState.role === 'VOLUNTEER';
 
   return (
     <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 border-b border-emerald-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        {/* Left: Cafe Brand Identity */}
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 shadow-inner">
             <Wrench className="h-6 w-6 text-brand-300" />
@@ -36,18 +44,17 @@ export const Header: React.FC<HeaderProps> = ({ session }) => {
           </span>
         </div>
 
-        {/* Right: Auth Controls */}
+        {/* Right: Auth Controls (Organizer via Google Account or Volunteer via PIN) */}
         <div className="flex items-center gap-3">
-          {user ? (
+          {bannerState.role !== 'UNAUTHENTICATED' ? (
             <div className="flex items-center gap-2">
               <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border font-medium ${
-                isAdmin 
+                isAuthorizedRole
                   ? 'bg-emerald-950/80 border-emerald-700 text-brand-200' 
                   : 'bg-amber-950/80 border-amber-700 text-amber-200'
               }`}>
-                <Shield className={`h-3.5 w-3.5 ${isAdmin ? 'text-brand-400' : 'text-amber-400'}`} />
-                {user.displayName || user.email || 'Organizer'}
-                {!isAdmin && ' (Non-Organizer)'}
+                <Shield className={`h-3.5 w-3.5 ${isAuthorizedRole ? 'text-brand-400' : 'text-amber-400'}`} />
+                {bannerState.label}
               </span>
               <button
                 onClick={signOut}
@@ -71,3 +78,4 @@ export const Header: React.FC<HeaderProps> = ({ session }) => {
     </header>
   );
 };
+

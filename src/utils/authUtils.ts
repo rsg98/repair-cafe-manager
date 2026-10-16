@@ -124,3 +124,81 @@ export function isBenignPopupCancel(error: unknown): boolean {
   );
 }
 
+/**
+ * Distinct authentication states displayed in the top application banner.
+ */
+export type AuthBannerRole =
+  | 'ORGANIZER'
+  | 'VOLUNTEER'
+  | 'NON_ORGANIZER'
+  | 'UNAUTHENTICATED';
+
+/**
+ * Resolved role and display text for the top application banner.
+ */
+export interface AuthBannerState {
+  role: AuthBannerRole;
+  label: string;
+}
+
+/**
+ * Determines whether a Firebase Auth user represents a PIN-authenticated volunteer
+ * (signed in via custom token with a `volunteer-*` UID and no email address).
+ */
+export function isPinVolunteerUser(
+  user: { uid?: string; email?: string | null } | null | undefined
+): boolean {
+  if (!user) {
+    return false;
+  }
+  // Custom tokens minted by verifyVolunteerPin have uid `volunteer-${sessionId}` and no email
+  return !user.email || Boolean(user.uid && user.uid.startsWith('volunteer-'));
+}
+
+/**
+ * Computes the header banner authentication role and display label.
+ *
+ * Distinguishes between the two primary authenticated states:
+ * - `ORGANIZER`: Authenticated via an authorized Google Account (`isAdmin === true`)
+ * - `VOLUNTEER`: Authenticated via the 4-digit session PIN (custom token or local PIN unlock)
+ * Plus fallback states for unauthorized Google accounts (`NON_ORGANIZER`) and signed-out users (`UNAUTHENTICATED`).
+ */
+export function getAuthBannerState(params: {
+  user: { uid?: string; email?: string | null; displayName?: string | null } | null | undefined;
+  isAdmin: boolean;
+  isPinUnlocked?: boolean;
+}): AuthBannerState {
+  const { user, isAdmin, isPinUnlocked = false } = params;
+
+  // 1. Authorized Google Account organiser
+  if (isAdmin && user) {
+    return {
+      role: 'ORGANIZER',
+      label: user.displayName || user.email || 'Organizer',
+    };
+  }
+
+  // 2. PIN-authenticated volunteer (via Firebase Custom Token or offline session PIN unlock)
+  if (isPinVolunteerUser(user) || isPinUnlocked) {
+    return {
+      role: 'VOLUNTEER',
+      label: 'Volunteer',
+    };
+  }
+
+  // 3. Google Account that is not in the authorized organiser list
+  if (user && user.email) {
+    return {
+      role: 'NON_ORGANIZER',
+      label: `${user.displayName || user.email} (Non-Organizer)`,
+    };
+  }
+
+  // 4. Unauthenticated visitor / station
+  return {
+    role: 'UNAUTHENTICATED',
+    label: '',
+  };
+}
+
+

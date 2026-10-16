@@ -18,14 +18,22 @@ export function useVolunteerPin(session: Session | null) {
   });
   const [error, setError] = useState<string | null>(null);
 
-  // Sync PIN unlock state if the active session changes
+  // Sync PIN unlock state if the active session changes or PIN state is toggled elsewhere
   useEffect(() => {
-    if (session) {
-      const stored = sessionStorage.getItem(`volunteer_unlocked_${session.id}`) === 'true';
-      setIsPinUnlocked(stored);
-    } else {
-      setIsPinUnlocked(false);
-    }
+    const syncPinState = () => {
+      if (session) {
+        const stored = sessionStorage.getItem(`volunteer_unlocked_${session.id}`) === 'true';
+        setIsPinUnlocked(stored);
+      } else {
+        setIsPinUnlocked(false);
+      }
+    };
+
+    syncPinState();
+    window.addEventListener('volunteer-pin-change', syncPinState);
+    return () => {
+      window.removeEventListener('volunteer-pin-change', syncPinState);
+    };
   }, [session]);
 
   const unlock = useCallback(async (pin: string): Promise<boolean> => {
@@ -61,6 +69,7 @@ export function useVolunteerPin(session: Session | null) {
           sessionStorage.setItem(`volunteer_unlocked_${session.id}`, 'true');
           sessionStorage.setItem(`volunteer_token_${session.id}`, res.data.token);
           setIsPinUnlocked(true);
+          window.dispatchEvent(new Event('volunteer-pin-change'));
           return true;
         }
       } catch (err: unknown) {
@@ -74,6 +83,7 @@ export function useVolunteerPin(session: Session | null) {
       if (enteredHash === session.volunteerPinHash) {
         sessionStorage.setItem(`volunteer_unlocked_${session.id}`, 'true');
         setIsPinUnlocked(true);
+        window.dispatchEvent(new Event('volunteer-pin-change'));
         return true;
       } else {
         setError("Invalid PIN. Please check with the Front Desk.");
@@ -91,6 +101,7 @@ export function useVolunteerPin(session: Session | null) {
       sessionStorage.removeItem(`volunteer_token_${session.id}`);
     }
     setIsPinUnlocked(false);
+    window.dispatchEvent(new Event('volunteer-pin-change'));
   }, [session]);
 
   // Compute effective unlock state: organisers bypass PIN without losing their Google Auth session
@@ -101,5 +112,6 @@ export function useVolunteerPin(session: Session | null) {
     authLoading,
   });
 
-  return { isUnlocked, isAdmin, unlock, lock, error };
+  return { isUnlocked, isPinUnlocked, isAdmin, unlock, lock, error };
 }
+

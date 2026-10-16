@@ -13,7 +13,8 @@ import { cafeConfig } from '../config/cafe.config';
 import { 
   isAuthorizedOrganizer, 
   shouldFallbackToRedirect, 
-  isBenignPopupCancel 
+  isBenignPopupCancel,
+  isPinVolunteerUser
 } from '../utils/authUtils';
 import { SystemSettings } from '../types';
 
@@ -81,9 +82,16 @@ export function useAuth() {
     }
   };
 
-  // Sign out the current Firebase Auth session
+  // Sign out the current Firebase Auth session and clear any local volunteer PIN unlock state
   const signOut = async () => {
     try {
+      // Clear any cached session PIN unlock tokens in sessionStorage
+      Object.keys(sessionStorage).forEach((key) => {
+        if (key.startsWith('volunteer_unlocked_') || key.startsWith('volunteer_token_')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+      window.dispatchEvent(new Event('volunteer-pin-change'));
       await firebaseSignOut(auth);
     } catch (err) {
       console.error('Sign out error:', err);
@@ -96,14 +104,17 @@ export function useAuth() {
     new Set([...cafeConfig.organizerEmails, ...dynamicOrganizerEmails])
   );
   const isAdmin = !!(user && user.email && isAuthorizedOrganizer(user.email, allowedOrganizers));
+  const isVolunteer = isPinVolunteerUser(user);
   const loading = !authResolved || !settingsResolved;
 
   return {
     user,
     isAdmin,
+    isVolunteer,
     loading,
     signInWithGoogle,
     signOut
   };
 }
+
 

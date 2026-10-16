@@ -143,7 +143,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
 
   // Render unauthorized message if signed in with a non-organiser Google account
   if (!isAdmin) {
-    if (user) {
+    if (user && user.email) {
       return (
         <div className="max-w-md mx-auto my-16 p-8 bg-white rounded-3xl shadow-md border border-amber-200 text-center">
           {/* Lock badge header */}
@@ -167,6 +167,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
         </div>
       );
     }
+
 
     // Render Google Sign-In prompt when unauthenticated
     return (
