@@ -3,13 +3,18 @@ import {
   User, 
   onAuthStateChanged, 
   signInWithPopup, 
-  GoogleAuthProvider, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut 
 } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../services/firebase';
+import { auth, db, googleAuthProvider } from '../services/firebase';
 import { cafeConfig } from '../config/cafe.config';
-import { isAuthorizedOrganizer } from '../utils/authUtils';
+import { 
+  isAuthorizedOrganizer, 
+  shouldFallbackToRedirect, 
+  isBenignPopupCancel 
+} from '../utils/authUtils';
 import { SystemSettings } from '../types';
 
 export function useAuth() {
@@ -20,6 +25,11 @@ export function useAuth() {
   const [dynamicOrganizerEmails, setDynamicOrganizerEmails] = useState<string[]>([]);
 
   useEffect(() => {
+    // Complete any pending OAuth redirect sign-in initiated when popups were blocked
+    getRedirectResult(auth).catch((err) => {
+      console.warn('Google redirect sign-in check warning:', err);
+    });
+
     // Subscribe to Firebase Authentication state changes
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -52,21 +62,31 @@ export function useAuth() {
     };
   }, []);
 
+  // Initiate Google Sign-In via popup with automatic redirect fallback if blocked by browser/COOP
   const signInWithGoogle = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithPopup(auth, googleAuthProvider);
     } catch (err) {
-      console.error("Google sign-in error:", err);
+      // Automatically fall back to full-page OAuth redirect if the popup was blocked by browser policy
+      if (shouldFallbackToRedirect(err)) {
+        await signInWithRedirect(auth, googleAuthProvider);
+        return;
+      }
+      // Ignore benign user popup closures or duplicate popup cancellations
+      if (isBenignPopupCancel(err)) {
+        return;
+      }
+      console.error('Google sign-in error:', err);
       throw err;
     }
   };
 
+  // Sign out the current Firebase Auth session
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
     } catch (err) {
-      console.error("Sign out error:", err);
+      console.error('Sign out error:', err);
       throw err;
     }
   };
@@ -86,3 +106,4 @@ export function useAuth() {
     signOut
   };
 }
+

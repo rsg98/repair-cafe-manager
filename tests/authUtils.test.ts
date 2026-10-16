@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isAuthorizedOrganizer, isStationUnlocked } from '../src/utils/authUtils';
+import {
+  isAuthorizedOrganizer,
+  isStationUnlocked,
+  shouldFallbackToRedirect,
+  isBenignPopupCancel,
+} from '../src/utils/authUtils';
 
 describe('Organizer Authentication & Group Authorization (isAuthorizedOrganizer)', () => {
   const allowedList = [
@@ -108,3 +113,22 @@ describe('Station Unlock Gate for Authenticated Organisers (isStationUnlocked - 
     ).toBe(true);
   });
 });
+
+describe('Google OAuth Popup & Redirect Error Handling (Issue #15)', () => {
+  it('identifies popup-blocked and unsupported environment errors for redirect fallback', () => {
+    expect(shouldFallbackToRedirect({ code: 'auth/popup-blocked' })).toBe(true);
+    expect(
+      shouldFallbackToRedirect({ code: 'auth/operation-not-supported-in-this-environment' })
+    ).toBe(true);
+    expect(shouldFallbackToRedirect({ code: 'auth/internal-error' })).toBe(false);
+    expect(shouldFallbackToRedirect(null)).toBe(false);
+  });
+
+  it('identifies benign popup cancellation errors so they do not throw unhandled rejections', () => {
+    expect(isBenignPopupCancel({ code: 'auth/popup-closed-by-user' })).toBe(true);
+    expect(isBenignPopupCancel({ code: 'auth/cancelled-popup-request' })).toBe(true);
+    expect(isBenignPopupCancel({ code: 'auth/unauthorized-domain' })).toBe(false);
+    expect(isBenignPopupCancel(undefined)).toBe(false);
+  });
+});
+

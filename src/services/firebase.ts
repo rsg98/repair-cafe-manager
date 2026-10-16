@@ -25,6 +25,11 @@ export const db = initializeFirestore(app, {
   })
 });
 
+// Initialize Firebase Authentication and shared Google OAuth provider
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
+googleAuthProvider.setCustomParameters({ prompt: 'select_account' });
+
+// Initialize Cloud Functions client targeting us-central1
 export const functions = getFunctions(app, 'us-central1');
+

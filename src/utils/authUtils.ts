@@ -84,3 +84,43 @@ export function isStationUnlocked(params: {
   // Standard volunteer tablets require an active session and a verified session PIN
   return params.hasActiveSession && params.isPinUnlocked;
 }
+
+/**
+ * Extracts the Firebase Auth error code from an unknown caught error value.
+ */
+function getFirebaseAuthErrorCode(error: unknown): string | null {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof (error as { code: unknown }).code === 'string'
+  ) {
+    return (error as { code: string }).code;
+  }
+  return null;
+}
+
+/**
+ * Determines whether a failed `signInWithPopup` attempt should automatically fall back
+ * to `signInWithRedirect` (e.g. when a browser blocks popups or restricts popup opener access).
+ */
+export function shouldFallbackToRedirect(error: unknown): boolean {
+  const code = getFirebaseAuthErrorCode(error);
+  return (
+    code === 'auth/popup-blocked' ||
+    code === 'auth/operation-not-supported-in-this-environment'
+  );
+}
+
+/**
+ * Determines whether a `signInWithPopup` error is a benign user/duplicate-popup cancellation
+ * that should be ignored rather than surfaced as an unhandled failure.
+ */
+export function isBenignPopupCancel(error: unknown): boolean {
+  const code = getFirebaseAuthErrorCode(error);
+  return (
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request'
+  );
+}
+
