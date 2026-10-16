@@ -86,17 +86,19 @@ export const finalizeSession = onCall(async (request) => {
     throw new HttpsError("not-found", `Session ${sessionId} was not found.`);
   }
 
-  const sessionData = sessionSnap.data()!;
+  const sessionData = sessionSnap.data() ?? {};
 
   // 2. Fetch all repairs for this session
   const repairsRef = sessionRef.collection("repairs");
   const repairsSnap = await repairsRef.get();
 
+  // Initialize metric counters for session impact reporting
   let totalItems = 0;
   let repairedCount = 0;
   let partialCount = 0;
   let unfixableCount = 0;
   let adviceCount = 0;
+  // Track items taken home, repair durations, weights, and PAT metrics
   let takenHomeCount = 0;
   let totalRepairTimeMinutes = 0;
   let totalWeightKg = 0;
@@ -115,7 +117,7 @@ export const finalizeSession = onCall(async (request) => {
     totalItems++;
     const data = doc.data();
 
-    // Aggregations
+    // Aggregate item category and power type counts
     const cat = data.item?.category || "OTHER";
     categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + 1;
 
@@ -123,15 +125,18 @@ export const finalizeSession = onCall(async (request) => {
       mainsCount++;
     }
 
+    // Accumulate landfill diversion weight in kilograms
     if (data.item?.weightKg && typeof data.item.weightKg === "number") {
       totalWeightKg += data.item.weightKg;
     }
 
+    // Accumulate fixer repair duration and classify repair outcomes
     if (data.repair) {
       if (data.repair.repairTimeMinutes && typeof data.repair.repairTimeMinutes === "number") {
         totalRepairTimeMinutes += data.repair.repairTimeMinutes;
       }
 
+      // Increment outcome counter based on fixer disposition
       switch (data.repair.outcome) {
         case "FIXED":
           repairedCount++;
@@ -139,6 +144,7 @@ export const finalizeSession = onCall(async (request) => {
         case "PARTIAL":
           partialCount++;
           break;
+        // Count unfixable, advice-given, and taken-home dispositions
         case "UNFIXABLE":
           unfixableCount++;
           break;
@@ -150,9 +156,11 @@ export const finalizeSession = onCall(async (request) => {
           break;
       }
     } else if (data.status === "UNFIXABLE") {
+      // Count items quarantined at PAT 1 as unfixable
       unfixableCount++;
     }
 
+    // Tally PAT electrical safety tests and initial failures
     if (data.patInitial) {
       patTestedCount++;
       if (
@@ -177,6 +185,7 @@ export const finalizeSession = onCall(async (request) => {
     const chunk = redactionPairs.slice(i, i + CHUNK_SIZE);
     const batch = db.batch();
 
+    // Redact visitor name on repair doc and scrub private/customer subcollection
     for (const pair of chunk) {
       batch.update(pair.repairRef, {
         customerName: "[REDACTED]",
@@ -196,6 +205,7 @@ export const finalizeSession = onCall(async (request) => {
     ? Math.round(((repairedCount + partialCount) / totalItems) * 100) 
     : 0;
 
+  // Compute mean repair duration across assessed items
   const averageRepairTimeMinutes = (repairedCount + partialCount + unfixableCount + adviceCount) > 0
     ? Math.round(totalRepairTimeMinutes / (repairedCount + partialCount + unfixableCount + adviceCount))
     : 0;
@@ -204,6 +214,14 @@ export const finalizeSession = onCall(async (request) => {
     ? Math.round((patFailedCount / patTestedCount) * 100)
     : 0;
 
+  // Count attending volunteers recorded on the session document
+  const volunteerCount = Array.isArray(sessionData.attendingVolunteers)
+    ? sessionData.attendingVolunteers.length
+    : Array.isArray(sessionData.attendingVolunteerIds)
+      ? sessionData.attendingVolunteerIds.length
+      : 0;
+
+  // Assemble the immutable session analytics summary document
   const analyticsDoc = {
     sessionId,
     sessionName: sessionData.name,
@@ -213,6 +231,7 @@ export const finalizeSession = onCall(async (request) => {
     partialCount,
     unfixableCount,
     adviceCount,
+    // Include volunteer hours, diversion weight, PAT metrics, and volunteer attendance count
     takenHomeCount,
     totalRepairTimeMinutes,
     averageRepairTimeMinutes,
@@ -222,6 +241,7 @@ export const finalizeSession = onCall(async (request) => {
     mainsItemsCount: mainsCount,
     patTestedCount,
     patFailureRatePercent,
+    volunteerCount,
     finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
@@ -232,6 +252,7 @@ export const finalizeSession = onCall(async (request) => {
     status: "FINALIZED",
     finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+  // Clear active session pointer and disable public registration
   batch.update(db.collection("settings").doc("system"), {
     activeSessionId: null,
     allowRegistration: false,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Hammer, 
   Search, 
@@ -8,7 +8,9 @@ import {
   Wrench, 
   Home, 
   HelpCircle, 
-  XCircle
+  XCircle,
+  BookOpen,
+  AlertTriangle
 } from 'lucide-react';
 import { Session, RepairItem, RepairOutcome } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';
@@ -17,18 +19,27 @@ import { CardToken } from '../components/common/CardToken';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { SafetyBanner } from '../components/common/SafetyBanner';
 import { PinModal } from '../components/common/PinModal';
+import { PoliciesModal } from '../components/common/PoliciesModal';
 
 interface FixerStationViewProps {
   session: Session | null;
 }
 
 export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) => {
+  // Enforce daily 4-digit volunteer PIN gate
   const { isUnlocked, unlock, error: pinError } = useVolunteerPin(session);
 
-  // Volunteer persistent settings
+  // Volunteer persistent settings stored in localStorage
   const [fixerName, setFixerName] = useState(() => localStorage.getItem('fixer_volunteer_name') || '');
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
 
-  // Card search
+  // Sort active session's attending volunteers alphabetically for the Fixer dropdown
+  const attendingVolunteers = useMemo(
+    () => [...(session?.attendingVolunteers || [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [session?.attendingVolunteers]
+  );
+
+  // Card search state
   const [searchCardNumber, setSearchCardNumber] = useState('');
   const [searching, setSearching] = useState(false);
   const [currentItem, setCurrentItem] = useState<RepairItem | null>(null);
@@ -44,10 +55,19 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
   const [submittingRepair, setSubmittingRepair] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
+  // Validate cached fixerName against the active session's attending volunteer roster
+  useEffect(() => {
+    if (session && fixerName && !attendingVolunteers.some((v) => v.name === fixerName)) {
+      setFixerName('');
+    }
+  }, [session, attendingVolunteers, fixerName]);
+
+  // Persist selected fixer name to localStorage
   useEffect(() => {
     localStorage.setItem('fixer_volunteer_name', fixerName);
   }, [fixerName]);
 
+  // Point lookup of a repair item by its physical Card Number (#1..#N)
   const handleSearchCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) return;
@@ -59,6 +79,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
     setSuccessBanner(null);
 
     try {
+      // Execute targeted query by cardNumber to stay within Free Tier read guardrails
       const item = await getRepairByCardNumber(session.id, num);
       if (!item) {
         setSearchMessage(`No item found assigned to Card #${num}.`);
@@ -77,16 +98,18 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
     }
   };
 
+  // Submit diagnosis, repair time, landfill weight, and outcome for the current item
   const handleSubmitRepair = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session || !currentItem) return;
     if (!fixerName.trim()) {
-      alert("Please enter your name as the volunteer fixer.");
+      alert("Please select your name from the attending volunteer list.");
       return;
     }
 
     setSubmittingRepair(true);
     try {
+      // Route Mains 240V FIXED/PARTIAL repairs to WAITING_PAT2; others to READY_FOR_COLLECTION
       const isMains = currentItem.item.powerType === 'MAINS_240V';
       const nextStatus = await submitRepairRecord({
         sessionId: session.id,
@@ -101,6 +124,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
         isMainsPower: isMains
       });
 
+      // Build confirmation banner explaining next station routing
       let statusMsg = `Repair record submitted for Card #${currentItem.cardNumber}. Outcome: ${outcome}.`;
       if (nextStatus === 'WAITING_PAT2') {
         statusMsg += " Item routed to PAT Station for final post-repair safety certification.";
@@ -108,6 +132,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
         statusMsg += " Item routed to Front Desk for customer collection.";
       }
 
+      // Reset form state for the next repair item
       setSuccessBanner(statusMsg);
       setCurrentItem(null);
       setSearchCardNumber('');
@@ -149,21 +174,54 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             </div>
           </div>
 
-          <div className="text-xs">
-            <input
-              type="text"
-              placeholder="Your Name (e.g. Alice)"
+          {/* Attending Volunteer Dropdown & Policies Reference Button */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Attending Volunteer Selector */}
+            <select
+              aria-label="Select Volunteer Fixer"
               value={fixerName}
               onChange={(e) => setFixerName(e.target.value)}
-              className="px-3.5 py-2 rounded-xl border border-slate-300 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {/* Default placeholder option reflecting checked-in volunteer count */}
+              <option value="">
+                {attendingVolunteers.length === 0
+                  ? 'No Volunteers Checked In Yet'
+                  : 'Select Your Name...'}
+              </option>
+              {/* Render alphabetically sorted attending volunteers */}
+              {attendingVolunteers.map((v) => (
+                <option key={v.id} value={v.name}>
+                  {v.name}{!v.inducted ? ' (Induction Pending)' : ''}
+                </option>
+              ))}
+            </select>
+            {/* Quick-access button to view Repair Café policies */}
+            <button
+              type="button"
+              onClick={() => setShowPoliciesModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-bold hover:bg-slate-100 transition-colors"
+              title="View Repair Café Policies"
+            >
+              <BookOpen className="h-3.5 w-3.5 text-blue-700" />
+              Policies
+            </button>
           </div>
         </div>
+
+        {/* Warning banner when no volunteers are checked in to the active session */}
+        {session && attendingVolunteers.length === 0 && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <span>No volunteers checked in — ask Front Desk to update session attendance</span>
+          </div>
+        )}
 
         {/* Card Number Lookup */}
         <form onSubmit={handleSearchCard} className="mt-6 flex gap-3">
           <div className="relative flex-1">
             <Search className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
+            {/* Numeric card number input */}
             <input
               type="number"
               placeholder="Enter Physical Card Number (#1..#100)..."
@@ -172,6 +230,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
               className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-300 text-base font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
             />
           </div>
+          {/* Submit button for card lookup */}
           <button
             type="submit"
             disabled={searching || !searchCardNumber}
@@ -181,12 +240,14 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
           </button>
         </form>
 
+        {/* Display lookup warning or informational message */}
         {searchMessage && (
           <div className="mt-4 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-sm font-medium">
             {searchMessage}
           </div>
         )}
 
+        {/* Display repair submission confirmation banner */}
         {successBanner && (
           <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
@@ -203,6 +264,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             <div className="flex items-center gap-3">
               <CardToken number={currentItem.cardNumber} size="lg" />
               <div>
+                {/* Item brand and model title */}
                 <h3 className="text-xl font-black text-slate-900">
                   {currentItem.item.brandModel}
                 </h3>
@@ -212,6 +274,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
               </div>
             </div>
 
+            {/* Current item status badge */}
             <StatusBadge status={currentItem.status} size="md" />
           </div>
 
@@ -221,6 +284,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             cautionNotes={currentItem.patInitial?.cautionNotes} 
           />
 
+          {/* Customer reported fault description */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm">
             <span className="text-xs font-bold text-slate-500 uppercase block mb-1">Customer Fault Description</span>
             <p className="text-slate-800 font-medium">{currentItem.item.faultDescription}</p>
@@ -234,7 +298,9 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 Repair Outcome <span className="text-rose-500">*</span>
               </label>
 
+              {/* Repair outcome button grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Outcome: FIXED */}
                 <button
                   type="button"
                   onClick={() => setOutcome('FIXED')}
@@ -244,6 +310,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                       : 'border-slate-200 hover:border-slate-300 text-slate-700'
                   }`}
                 >
+                  {/* FIXED label and routing hint */}
                   <div className="font-bold flex items-center gap-1.5 text-emerald-900 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                     Fixed / Repaired
@@ -253,6 +320,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   </p>
                 </button>
 
+                {/* Outcome: PARTIAL */}
                 <button
                   type="button"
                   onClick={() => setOutcome('PARTIAL')}
@@ -262,6 +330,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                       : 'border-slate-200 hover:border-slate-300 text-slate-700'
                   }`}
                 >
+                  {/* PARTIAL label and description */}
                   <div className="font-bold flex items-center gap-1.5 text-blue-900 text-sm">
                     <Wrench className="h-4 w-4 text-blue-600" />
                     Partially Fixed
@@ -271,6 +340,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   </p>
                 </button>
 
+                {/* Outcome: ADVICE_GIVEN */}
                 <button
                   type="button"
                   onClick={() => setOutcome('ADVICE_GIVEN')}
@@ -280,6 +350,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                       : 'border-slate-200 hover:border-slate-300 text-slate-700'
                   }`}
                 >
+                  {/* ADVICE_GIVEN label and description */}
                   <div className="font-bold flex items-center gap-1.5 text-purple-900 text-sm">
                     <HelpCircle className="h-4 w-4 text-purple-600" />
                     Advice Given
@@ -289,6 +360,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   </p>
                 </button>
 
+                {/* Outcome: UNFIXABLE */}
                 <button
                   type="button"
                   onClick={() => setOutcome('UNFIXABLE')}
@@ -298,6 +370,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                       : 'border-slate-200 hover:border-slate-300 text-slate-700'
                   }`}
                 >
+                  {/* UNFIXABLE label and description */}
                   <div className="font-bold flex items-center gap-1.5 text-rose-900 text-sm">
                     <XCircle className="h-4 w-4 text-rose-600" />
                     Unfixable / End of Life
@@ -307,6 +380,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   </p>
                 </button>
 
+                {/* Outcome: TAKEN_HOME */}
                 <button
                   type="button"
                   onClick={() => setOutcome('TAKEN_HOME')}
@@ -316,6 +390,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                       : 'border-slate-200 hover:border-slate-300 text-slate-700'
                   }`}
                 >
+                  {/* TAKEN_HOME label and custody notice */}
                   <div className="font-bold flex items-center gap-1.5 text-sky-900 text-sm">
                     <Home className="h-4 w-4 text-sky-600" />
                     Taken Home to Finish
@@ -335,6 +410,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   <Clock className="h-4 w-4 text-slate-500" />
                   Estimated Time Spent (Minutes)
                 </label>
+                {/* Quick duration buttons and custom minute input */}
                 <div className="flex gap-2">
                   {[15, 30, 45, 60].map((mins) => (
                     <button
@@ -350,6 +426,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                       {mins}m
                     </button>
                   ))}
+                  {/* Custom duration numeric input */}
                   <input
                     type="number"
                     min={5}
@@ -368,6 +445,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   <Scale className="h-4 w-4 text-slate-500" />
                   Item Weight Diverted (kg)
                 </label>
+                {/* Weight in kg input */}
                 <input
                   type="number"
                   step="0.1"
@@ -382,6 +460,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
             {/* Diagnosis & Notes */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
+              {/* Root cause diagnosis field */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Diagnosis / What was the root cause?
@@ -395,6 +474,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 />
               </div>
 
+              {/* Repair actions and notes field */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Repair Actions & Notes
@@ -408,6 +488,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 />
               </div>
 
+              {/* Parts and materials used field */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Parts / Materials Used (if any)
@@ -422,6 +503,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
               </div>
             </div>
 
+            {/* Form cancellation and submission actions */}
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
               <button
                 type="button"
@@ -430,6 +512,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
               >
                 Cancel
               </button>
+              {/* Submit repair record button */}
               <button
                 type="submit"
                 disabled={submittingRepair}
@@ -441,6 +524,12 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
           </form>
         </div>
       )}
+
+      {/* Repair Café Policies Reference Modal */}
+      <PoliciesModal
+        isOpen={showPoliciesModal}
+        onClose={() => setShowPoliciesModal(false)}
+      />
     </div>
   );
 };

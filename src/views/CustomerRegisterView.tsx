@@ -307,7 +307,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                     >
                       <option value="ELECTRICAL">Electrical & Electronics (Appliances, Audio, Computing, Lamps)</option>
                       <option value="MECHANICAL">Mechanical / Clocks / Bikes / Tools</option>
-                      <option value="TEXTILE">Textiles / Clothing / Zips</option>
+                      <option value="TEXTILES">Textiles / Clothing / Zips</option>
                       <option value="WOODWORK">Woodwork / Furniture</option>
                       <option value="TOY">Toys / Dolls / Gadgets</option>
                       <option value="OTHER">Other / Miscellaneous</option>
@@ -327,7 +327,6 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                       <option value="BATTERY_LOW_VOLTAGE">Battery / USB / Low Voltage DC</option>
                       <option value="NOT_APPLICABLE">Not Applicable (Non-powered)</option>
                       <option value="MECHANICAL">Mechanical</option>
-                      <option value="TEXTILE">Textile / Fabric</option>
                       <option value="OTHER">Other</option>
                     </select>
                   </div>

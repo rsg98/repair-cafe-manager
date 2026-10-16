@@ -44,7 +44,9 @@ export const ReportsView: React.FC = () => {
       acc.weightKg += curr.totalWeightDivertedKg || 0;
       acc.repairMinutes += curr.totalRepairTimeMinutes || 0;
       acc.patTested += curr.patTestedCount || 0;
+      acc.totalVolunteers += curr.volunteerCount || 0;
 
+      // Aggregate item counts by category across all finalized sessions
       if (curr.categoryBreakdown) {
         for (const [cat, count] of Object.entries(curr.categoryBreakdown)) {
           acc.categories[cat] = (acc.categories[cat] || 0) + count;
@@ -58,19 +60,23 @@ export const ReportsView: React.FC = () => {
       weightKg: 0, 
       repairMinutes: 0, 
       patTested: 0,
+      totalVolunteers: 0,
       categories: {} as Record<string, number>
     }
   );
 
+  // Calculate overall repair success rate percentage
   const overallSuccessRate = totals.totalItems > 0 
     ? Math.round((totals.repairedCount / totals.totalItems) * 100) 
     : 0;
 
+  // Export all session analytics to a grant-ready CSV download
   const handleExportCsv = () => {
     const csv = exportAnalyticsToCsv(analyticsList);
     triggerCsvDownload(csv, `${cafeConfig.cafeName.toLowerCase().replace(/\s+/g, '-')}-impact-report.csv`);
   };
 
+  // Sort categories by highest item volume first
   const categoryEntries = Object.entries(totals.categories).sort((a, b) => b[1] - a[1]);
 
   return (
@@ -78,15 +84,17 @@ export const ReportsView: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
+          {/* Page title and icon */}
           <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
             <BarChart3 className="h-7 w-7 text-emerald-700" />
-            Community Impact & Repair Reports
+            Community Impact &amp; Repair Reports
           </h2>
           <p className="text-xs sm:text-sm text-slate-500">
             Real-time reporting and environmental metrics for {cafeConfig.cafeName}
           </p>
         </div>
 
+        {/* Grant reporting CSV export button */}
         <button
           onClick={handleExportCsv}
           disabled={analyticsList.length === 0}
@@ -104,10 +112,12 @@ export const ReportsView: React.FC = () => {
             <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
               Landfill Diverted
             </span>
+            {/* Leaf icon badge */}
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700">
               <Leaf className="h-5 w-5" />
             </div>
           </div>
+          {/* Total diverted weight in kg */}
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-900 font-mono">
               {Math.round(totals.weightKg * 10) / 10}
@@ -115,7 +125,7 @@ export const ReportsView: React.FC = () => {
             <span className="text-sm font-bold text-slate-500">kg e-waste</span>
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            Estimated electronic & mechanical waste saved from landfill
+            Estimated electronic &amp; mechanical waste saved from landfill
           </p>
         </div>
 
@@ -125,10 +135,12 @@ export const ReportsView: React.FC = () => {
             <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">
               Success Rate
             </span>
+            {/* Success check icon badge */}
             <div className="p-2 rounded-xl bg-blue-50 text-blue-700">
               <CheckCircle2 className="h-5 w-5" />
             </div>
           </div>
+          {/* Overall success percentage and ratio */}
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-900 font-mono">
               {overallSuccessRate}%
@@ -148,10 +160,12 @@ export const ReportsView: React.FC = () => {
             <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">
               Volunteer Effort
             </span>
+            {/* Clock icon badge */}
             <div className="p-2 rounded-xl bg-purple-50 text-purple-700">
               <Clock className="h-5 w-5" />
             </div>
           </div>
+          {/* Total volunteer repair hours */}
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-900 font-mono">
               {Math.round((totals.repairMinutes / 60) * 10) / 10}
@@ -169,10 +183,12 @@ export const ReportsView: React.FC = () => {
             <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
               PAT Screenings
             </span>
+            {/* Lightning icon badge */}
             <div className="p-2 rounded-xl bg-amber-50 text-amber-700">
               <Zap className="h-5 w-5" />
             </div>
           </div>
+          {/* Total PAT-tested appliances */}
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-900 font-mono">
               {totals.patTested}
@@ -180,7 +196,7 @@ export const ReportsView: React.FC = () => {
             <span className="text-sm font-bold text-slate-500">appliances</span>
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            Class I & II 240V mains safety checks completed
+            Class I &amp; II 240V mains safety checks completed
           </p>
         </div>
       </div>
@@ -192,15 +208,18 @@ export const ReportsView: React.FC = () => {
             <PieChart className="h-5 w-5 text-slate-600" />
             Repairs by Item Category
           </h3>
+          {/* Horizontal progress bars for each item category */}
           <div className="space-y-3">
             {categoryEntries.map(([cat, count]) => {
               const pct = totals.totalItems > 0 ? Math.round((count / totals.totalItems) * 100) : 0;
               return (
                 <div key={cat} className="space-y-1">
+                  {/* Category name and item count label */}
                   <div className="flex justify-between text-xs font-bold text-slate-700">
                     <span>{cat}</span>
                     <span>{count} items ({pct}%)</span>
                   </div>
+                  {/* Proportional progress bar */}
                   <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-emerald-600 rounded-full transition-all duration-500" 
@@ -227,15 +246,18 @@ export const ReportsView: React.FC = () => {
           </div>
         ) : analyticsList.length === 0 ? (
           <div className="py-12 text-center text-slate-500 text-sm">
+            {/* Empty state icon and helper text */}
             <Layers className="h-10 w-10 text-slate-300 mx-auto mb-3" />
             No finalized sessions found yet. Once a session is closed and finalized at the Front Desk, 
             its aggregated metrics and environmental savings will appear here.
           </div>
         ) : (
           <div className="overflow-x-auto">
+            {/* Archived sessions table */}
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
                 <tr>
+                  {/* Column headers for session metrics */}
                   <th className="py-3 px-4">Session Date</th>
                   <th className="py-3 px-4">Session Name</th>
                   <th className="py-3 px-4">Total Items</th>
@@ -243,20 +265,27 @@ export const ReportsView: React.FC = () => {
                   <th className="py-3 px-4">Success Rate</th>
                   <th className="py-3 px-4">Weight Diverted</th>
                   <th className="py-3 px-4">Volunteer Hours</th>
+                  <th className="py-3 px-4">Attending Volunteers</th>
                   <th className="py-3 px-4">PAT Fail Rate</th>
                 </tr>
               </thead>
+              {/* Archived session rows */}
               <tbody className="divide-y divide-slate-100 font-medium">
                 {analyticsList.map((a) => (
                   <tr key={a.sessionId} className="hover:bg-slate-50">
+                    {/* Session date, name, and item counts */}
                     <td className="py-3.5 px-4 font-mono text-xs text-slate-600">{a.date}</td>
                     <td className="py-3.5 px-4 font-bold text-slate-900">{a.sessionName}</td>
                     <td className="py-3.5 px-4">{a.totalItems}</td>
                     <td className="py-3.5 px-4 text-emerald-700 font-bold">{a.repairedCount}</td>
                     <td className="py-3.5 px-4 font-bold">{a.successRatePercent}%</td>
                     <td className="py-3.5 px-4 font-mono">{a.totalWeightDivertedKg} kg</td>
+                    {/* Volunteer hours, attending volunteer count, and PAT failure rate */}
                     <td className="py-3.5 px-4 font-mono">
                       {Math.round(((a.totalRepairTimeMinutes || 0) / 60) * 10) / 10} hrs
+                    </td>
+                    <td className="py-3.5 px-4 font-mono">
+                      {a.volunteerCount ?? 0}
                     </td>
                     <td className="py-3.5 px-4 text-xs font-mono">
                       {a.patFailureRatePercent ? `${a.patFailureRatePercent}%` : '0%'}

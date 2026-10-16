@@ -55,3 +55,32 @@ export function isAuthorizedOrganizer(
     return normalizedEmail === norm;
   });
 }
+
+/**
+ * Determines whether a volunteer station (PAT Station or Fixer Station) is unlocked
+ * without requiring the 4-digit session PIN.
+ *
+ * A station is considered unlocked if:
+ * 1. Auth state is currently loading (prevents flashing the PIN modal before Google Auth resolves), OR
+ * 2. The user is already authenticated with a Google account as an authorized organiser (`isAdmin`), OR
+ * 3. There is an active session and the 4-digit volunteer PIN has been verified (`isPinUnlocked`).
+ */
+export function isStationUnlocked(params: {
+  hasActiveSession: boolean;
+  isPinUnlocked: boolean;
+  isAdmin: boolean;
+  authLoading?: boolean;
+}): boolean {
+  // Hold the PIN modal closed while Firebase Auth / organiser settings are resolving
+  if (params.authLoading) {
+    return true;
+  }
+
+  // Authenticated organisers bypass the volunteer PIN gate directly
+  if (params.isAdmin) {
+    return true;
+  }
+
+  // Standard volunteer tablets require an active session and a verified session PIN
+  return params.hasActiveSession && params.isPinUnlocked;
+}

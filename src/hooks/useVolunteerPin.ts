@@ -4,25 +4,38 @@ import { signInWithCustomToken } from 'firebase/auth';
 import { functions, auth } from '../services/firebase';
 import { Session } from '../types';
 import { hashPin } from '../services/sessionService';
+import { useAuth } from './useAuth';
+import { isStationUnlocked } from '../utils/authUtils';
 
 export function useVolunteerPin(session: Session | null) {
-  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+  // Check whether the user is already authenticated via Google as an organiser
+  const { isAdmin, loading: authLoading } = useAuth();
+
+  // Track whether the 4-digit session PIN has been entered in this browser tab
+  const [isPinUnlocked, setIsPinUnlocked] = useState<boolean>(() => {
     if (!session) return false;
     return sessionStorage.getItem(`volunteer_unlocked_${session.id}`) === 'true';
   });
   const [error, setError] = useState<string | null>(null);
 
-  // Sync state if session changes
+  // Sync PIN unlock state if the active session changes
   useEffect(() => {
     if (session) {
       const stored = sessionStorage.getItem(`volunteer_unlocked_${session.id}`) === 'true';
-      setIsUnlocked(stored);
+      setIsPinUnlocked(stored);
     } else {
-      setIsUnlocked(false);
+      setIsPinUnlocked(false);
     }
   }, [session]);
 
   const unlock = useCallback(async (pin: string): Promise<boolean> => {
+    // If already authenticated as an organiser with Google, never overwrite their session with a custom token
+    if (isAdmin) {
+      setError(null);
+      setIsPinUnlocked(true);
+      return true;
+    }
+
     if (!session) {
       setError("No active session running.");
       return false;
@@ -43,11 +56,11 @@ export function useVolunteerPin(session: Session | null) {
         });
 
         if (res.data?.token) {
-          // Sign in with volunteer custom token (role: 'volunteer')
+          // Only sign in with custom volunteer token when not already signed in as an organiser
           await signInWithCustomToken(auth, res.data.token);
           sessionStorage.setItem(`volunteer_unlocked_${session.id}`, 'true');
           sessionStorage.setItem(`volunteer_token_${session.id}`, res.data.token);
-          setIsUnlocked(true);
+          setIsPinUnlocked(true);
           return true;
         }
       } catch (err: unknown) {
@@ -60,7 +73,7 @@ export function useVolunteerPin(session: Session | null) {
       const enteredHash = await hashPin(pin);
       if (enteredHash === session.volunteerPinHash) {
         sessionStorage.setItem(`volunteer_unlocked_${session.id}`, 'true');
-        setIsUnlocked(true);
+        setIsPinUnlocked(true);
         return true;
       } else {
         setError("Invalid PIN. Please check with the Front Desk.");
@@ -70,15 +83,23 @@ export function useVolunteerPin(session: Session | null) {
       setError("PIN validation failed. Please try again.");
       return false;
     }
-  }, [session]);
+  }, [session, isAdmin]);
 
   const lock = useCallback(() => {
     if (session) {
       sessionStorage.removeItem(`volunteer_unlocked_${session.id}`);
       sessionStorage.removeItem(`volunteer_token_${session.id}`);
     }
-    setIsUnlocked(false);
+    setIsPinUnlocked(false);
   }, [session]);
 
-  return { isUnlocked, unlock, lock, error };
+  // Compute effective unlock state: organisers bypass PIN without losing their Google Auth session
+  const isUnlocked = isStationUnlocked({
+    hasActiveSession: Boolean(session),
+    isPinUnlocked,
+    isAdmin,
+    authLoading,
+  });
+
+  return { isUnlocked, isAdmin, unlock, lock, error };
 }

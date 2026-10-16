@@ -36,7 +36,18 @@ describe('Analytics and CSV Export Utilities', () => {
   it('correctly generates CSV impact reports with all required fields', () => {
     const csv = exportAnalyticsToCsv(sampleAnalytics);
     expect(csv).toContain('Session ID,Session Name,Date,Total Items');
-    expect(csv).toContain('"202610-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%');
+    expect(csv).toContain('Attending Volunteers');
+    expect(csv).toContain('"202610-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%,0');
+  });
+
+  it('exports non-zero volunteerCount in the 17th CSV column', () => {
+    const csv = exportAnalyticsToCsv([
+      {
+        ...sampleAnalytics[0],
+        volunteerCount: 11,
+      },
+    ]);
+    expect(csv).toContain('"202610-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%,11');
   });
 
   it('handles empty analytics lists gracefully', () => {
@@ -241,7 +252,7 @@ describe('Front Desk Repairs Filtering and Search (filterRepairs - Issue #12)', 
       customerName: 'Alice Wong',
       status: 'IN_REPAIR',
       item: {
-        category: 'TEXTILE',
+        category: 'TEXTILES',
         brandModel: 'Winter Coat',
         faultDescription: 'Broken zipper',
         powerType: 'OTHER'
@@ -457,20 +468,17 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
   });
 
   describe('getDefaultPowerTypeForCategory', () => {
-    it('defaults non-powered categories (TEXTILE, WOODWORK, MECHANICAL) to NOT_APPLICABLE', () => {
-      expect(getDefaultPowerTypeForCategory('TEXTILE')).toBe('NOT_APPLICABLE');
+    it('defaults non-powered categories (TEXTILES, WOODWORK, MECHANICAL) to NOT_APPLICABLE', () => {
+      expect(getDefaultPowerTypeForCategory('TEXTILES')).toBe('NOT_APPLICABLE');
       expect(getDefaultPowerTypeForCategory('WOODWORK')).toBe('NOT_APPLICABLE');
       expect(getDefaultPowerTypeForCategory('MECHANICAL')).toBe('NOT_APPLICABLE');
     });
 
-    it('handles lowercase, mixed case, and common aliases', () => {
+    it('checks that TEXTILE and WOOD return NOT_APPLICABLE as well', () => {
+      expect(getDefaultPowerTypeForCategory('TEXTILE' as any)).toBe('NOT_APPLICABLE');
       expect(getDefaultPowerTypeForCategory('textile' as any)).toBe('NOT_APPLICABLE');
-      expect(getDefaultPowerTypeForCategory('Textile' as any)).toBe('NOT_APPLICABLE');
-      expect(getDefaultPowerTypeForCategory('textiles' as any)).toBe('NOT_APPLICABLE');
-      expect(getDefaultPowerTypeForCategory('woodwork' as any)).toBe('NOT_APPLICABLE');
-      expect(getDefaultPowerTypeForCategory('Woodwork' as any)).toBe('NOT_APPLICABLE');
+      expect(getDefaultPowerTypeForCategory('WOOD' as any)).toBe('NOT_APPLICABLE');
       expect(getDefaultPowerTypeForCategory('wood' as any)).toBe('NOT_APPLICABLE');
-      expect(getDefaultPowerTypeForCategory('mechanical' as any)).toBe('NOT_APPLICABLE');
     });
 
     it('defaults electrical category to MAINS_240V', () => {

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Build outputs
+dist/
+functions/lib/
+
+# Environment variables & local secrets
+.env
+.env.*
+!.env.example
+
+# Firebase & logs
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+*.log
+
+# OS metadata
+.DS_Store
+
+# Repair Café operational policies (may contain volunteer/committee PII)
+# Keep only POL00-Template.md tracked in version control
+src/policies/*.md
+src/policies/POL01-HealthAndSafety.md
+src/policies/POL02-Safeguarding.md
+src/policies/POL03-Whistleblowing.md
+!src/policies/POL00-Template.md

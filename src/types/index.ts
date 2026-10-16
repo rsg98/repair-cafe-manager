@@ -1,7 +1,7 @@
 export type ItemCategory =
   | 'ELECTRICAL'
   | 'MECHANICAL'
-  | 'TEXTILE'
+  | 'TEXTILES'
   | 'WOODWORK'
   | 'TOY'
   | 'OTHER';
@@ -10,7 +10,6 @@ export type PowerType =
   | 'MAINS_240V'
   | 'BATTERY_LOW_VOLTAGE'
   | 'MECHANICAL'
-  | 'TEXTILE'
   | 'NOT_APPLICABLE'
   | 'OTHER';
 
@@ -59,6 +58,53 @@ export interface SystemSettings {
   organizerEmails?: string[];
 }
 
+/**
+ * Summary of an attending volunteer embedded on a Session document.
+ * Intentionally excludes contact and emergency PII so volunteer tablets never receive PII.
+ */
+export interface SessionVolunteerSummary {
+  id: string;
+  name: string;
+  isOrganiser: boolean;
+  isPatTrained: boolean;
+  inducted: boolean;
+}
+
+/**
+ * Full Volunteer Register record stored in `volunteers/{volunteerId}`.
+ * Accessible only to authenticated organisers (`isAdmin()`).
+ */
+export interface Volunteer {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactRelationship?: string;
+  isOrganiser: boolean;
+  isPatTrained: boolean;
+  inducted: boolean;
+  inductedAt?: number;
+  inductedBy?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Metadata and content for a bundled Repair Café policy Markdown document.
+ */
+export interface PolicyDocument {
+  id: string;
+  title: string;
+  filePath: string;
+  version?: string;
+  lastUpdated?: string;
+  category?: string;
+  summary?: string;
+  content: string;
+}
+
 export interface Session {
   id: string; // e.g., "2026-10-seears"
   name: string; // "October 2026 - Seears Park"
@@ -67,6 +113,8 @@ export interface Session {
   volunteerPinHash: string; // SHA-256 hash of daily 4-digit PIN
   cardRangeStart: number;
   cardRangeEnd: number;
+  attendingVolunteerIds?: string[];
+  attendingVolunteers?: SessionVolunteerSummary[];
   createdAt: number;
   finalizedAt?: number;
 }
@@ -178,5 +226,6 @@ export interface SessionAnalytics {
   mainsItemsCount: number;
   patTestedCount: number;
   patFailureRatePercent: number;
+  volunteerCount?: number;
   finalizedAt?: number;
 }

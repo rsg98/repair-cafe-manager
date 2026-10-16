@@ -125,9 +125,9 @@ describe('Session Analytics Aggregation (calculateSessionAnalytics)', () => {
       cardNumber: 4,
       status: 'COMPLETED',
       item: {
-        category: 'TEXTILE',
+        category: 'TEXTILES',
         brandModel: 'Winter Coat',
-        powerType: 'TEXTILE',
+        powerType: 'NOT_APPLICABLE',
         faultDescription: 'Torn seam',
         weightKg: 1.0
       },
@@ -175,10 +175,26 @@ describe('Session Analytics Aggregation (calculateSessionAnalytics)', () => {
     expect(analytics.categoryBreakdown).toEqual({
       ELECTRICAL: 2,
       MECHANICAL: 1,
-      TEXTILE: 1
+      TEXTILES: 1
     });
 
     expect(analytics.finalizedAt).toBe(123456);
+    // Default volunteerCount when omitted is 0
+    expect(analytics.volunteerCount).toBe(0);
+  });
+
+  it('records volunteerCount when provided to calculateSessionAnalytics', () => {
+    // Pass 9 attending volunteers as the 6th parameter
+    const analyticsWithVolunteers = calculateSessionAnalytics(
+      'sess-100',
+      'Test Session',
+      '2026-10-09',
+      sampleRepairs,
+      123456,
+      9
+    );
+
+    expect(analyticsWithVolunteers.volunteerCount).toBe(9);
   });
 
   it('handles empty session repairs gracefully without division by zero', () => {
@@ -195,5 +211,6 @@ describe('Session Analytics Aggregation (calculateSessionAnalytics)', () => {
     expect(emptyAnalytics.averageRepairTimeMinutes).toBe(0);
     expect(emptyAnalytics.patFailureRatePercent).toBe(0);
     expect(emptyAnalytics.totalWeightDivertedKg).toBe(0);
+    expect(emptyAnalytics.volunteerCount).toBe(0);
   });
 });

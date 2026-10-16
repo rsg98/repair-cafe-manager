@@ -78,10 +78,22 @@ interface MarkdownViewerProps {
 }
 
 /**
+ * Strips an optional leading YAML frontmatter block (`--- ... ---`) anchored strictly
+ * at line 1 of a Markdown document while preserving mid-document `---` horizontal rules.
+ */
+export function stripYamlFrontmatter(content: string): string {
+  // Match optional BOM followed by opening --- on line 1, frontmatter body, and closing ---
+  const frontmatterRegex = /^(\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+  return content.replace(frontmatterRegex, '');
+}
+
+/**
  * Lightweight, safe React Markdown Renderer for document viewing without external libraries
  */
 export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content, className = '' }) => {
-  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  // Strip any leading YAML frontmatter block before splitting into lines
+  const bodyContent = stripYamlFrontmatter(content);
+  const lines = bodyContent.replace(/\r\n/g, '\n').split('\n');
   const elements: React.ReactNode[] = [];
   let i = 0;
   let elementKey = 0;

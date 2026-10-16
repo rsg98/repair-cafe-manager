@@ -1,9 +1,74 @@
 import { describe, it, expect } from 'vitest';
 import React from 'react';
-import { parseInline, MarkdownViewer } from '../src/components/common/MarkdownViewer';
+import {
+  parseInline,
+  stripYamlFrontmatter,
+  MarkdownViewer,
+} from '../src/components/common/MarkdownViewer';
 import { cafeConfig } from '../src/config/cafe.config';
 
 describe('MarkdownViewer & Inline Parsing', () => {
+  describe('stripYamlFrontmatter', () => {
+    it('strips leading YAML frontmatter anchored at line 1', () => {
+      // Markdown with leading YAML frontmatter
+      const withFrontmatter = `---
+id: POL01
+title: Health & Safety Policy
+category: Safety
+---
+# Health & Safety Policy
+
+Body paragraph.`;
+
+      const stripped = stripYamlFrontmatter(withFrontmatter);
+      expect(stripped).toBe(`# Health & Safety Policy\n\nBody paragraph.`);
+    });
+
+    it('preserves mid-document --- horizontal rules when no frontmatter is at line 1', () => {
+      // Markdown without leading frontmatter but with multiple horizontal rules
+      const withHorizontalRules = `# Terms & Conditions
+
+First section.
+
+---
+
+Second section.
+
+---
+
+Third section.`;
+
+      const stripped = stripYamlFrontmatter(withHorizontalRules);
+      expect(stripped).toBe(withHorizontalRules);
+    });
+
+    it('strips leading YAML frontmatter while preserving subsequent --- horizontal rules in MarkdownViewer', () => {
+      // Combined frontmatter + mid-document horizontal rule
+      const combined = `---
+id: POL01
+title: Policy
+---
+# Policy Heading
+
+Section 1
+
+---
+
+Section 2`;
+
+      const viewer = MarkdownViewer({ content: combined });
+      const viewerElem = viewer as React.ReactElement<{
+        children?: React.ReactElement<{ type: string }>[];
+      }>;
+      const children = viewerElem.props.children || [];
+      const types = children.map((c) => c.type);
+
+      // Should render h1 and hr without rendering frontmatter lines
+      expect(types).toContain('h1');
+      expect(types).toContain('hr');
+    });
+  });
+
   describe('parseInline', () => {
     it('returns raw text unchanged when no markdown tokens exist', () => {
       const result = parseInline('Plain text without formatting');

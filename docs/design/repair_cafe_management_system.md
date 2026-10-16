@@ -305,10 +305,10 @@ export interface CustomerRegistrationSubmission {
     termsVersion: string;
   };
   items: Array<{
-    category: 'ELECTRICAL' | 'MECHANICAL' | 'TEXTILE' | 'WOODWORK' | 'TOY' | 'OTHER';
+    category: 'ELECTRICAL' | 'MECHANICAL' | 'TEXTILES' | 'WOODWORK' | 'TOY' | 'OTHER';
     brandModel: string;
     faultDescription: string;
-    powerType: 'MAINS_240V' | 'BATTERY_LOW_VOLTAGE' | 'MECHANICAL' | 'TEXTILE' | 'NOT_APPLICABLE' | 'OTHER';
+    powerType: 'MAINS_240V' | 'BATTERY_LOW_VOLTAGE' | 'MECHANICAL' | 'NOT_APPLICABLE' | 'OTHER';
     applianceClass?: 'CLASS_I' | 'CLASS_II' | 'CLASS_III' | 'LEADS_ADAPTER' | 'NOT_APPLICABLE';
   }>;
 }
@@ -321,10 +321,10 @@ export interface RepairItem {
   cardNumber?: number; // Physical token #1..#N
   
   item: {
-    category: 'ELECTRICAL' | 'MECHANICAL' | 'TEXTILE' | 'WOODWORK' | 'TOY' | 'OTHER';
+    category: 'ELECTRICAL' | 'MECHANICAL' | 'TEXTILES' | 'WOODWORK' | 'TOY' | 'OTHER';
     brandModel: string;
     faultDescription: string;
-    powerType: 'MAINS_240V' | 'BATTERY_LOW_VOLTAGE' | 'MECHANICAL' | 'TEXTILE' | 'NOT_APPLICABLE' | 'OTHER';
+    powerType: 'MAINS_240V' | 'BATTERY_LOW_VOLTAGE' | 'MECHANICAL' | 'NOT_APPLICABLE' | 'OTHER';
     applianceClass?: 'CLASS_I' | 'CLASS_II' | 'CLASS_III' | 'LEADS_ADAPTER' | 'NOT_APPLICABLE';
     weightKg?: number;
   };

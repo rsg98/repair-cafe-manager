@@ -49,5 +49,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // Volunteer Register Collection (Contains Volunteer & Emergency Contact PII - Organiser Only)
+    match /volunteers/{volunteerId} {
+      allow read, write: if isAdmin();
+    }
   }
 }

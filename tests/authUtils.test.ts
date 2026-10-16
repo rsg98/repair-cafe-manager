@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAuthorizedOrganizer } from '../src/utils/authUtils';
+import { isAuthorizedOrganizer, isStationUnlocked } from '../src/utils/authUtils';
 
 describe('Organizer Authentication & Group Authorization (isAuthorizedOrganizer)', () => {
   const allowedList = [
@@ -52,5 +52,59 @@ describe('Organizer Authentication & Group Authorization (isAuthorizedOrganizer)
     expect(isAuthorizedOrganizer(undefined, allowedList)).toBe(false);
     expect(isAuthorizedOrganizer('', allowedList)).toBe(false);
     expect(isAuthorizedOrganizer('   ', allowedList)).toBe(false);
+  });
+});
+
+describe('Station Unlock Gate for Authenticated Organisers (isStationUnlocked - Issue #17)', () => {
+  it('unlocks PAT and Fixer stations automatically when authenticated as a Google organiser (isAdmin)', () => {
+    expect(
+      isStationUnlocked({
+        hasActiveSession: true,
+        isPinUnlocked: false,
+        isAdmin: true,
+        authLoading: false,
+      })
+    ).toBe(true);
+
+    // Also unlocked for organisers even when no session is currently active
+    expect(
+      isStationUnlocked({
+        hasActiveSession: false,
+        isPinUnlocked: false,
+        isAdmin: true,
+        authLoading: false,
+      })
+    ).toBe(true);
+  });
+
+  it('suppresses the PIN modal while Firebase Auth / organiser status is still loading', () => {
+    expect(
+      isStationUnlocked({
+        hasActiveSession: true,
+        isPinUnlocked: false,
+        isAdmin: false,
+        authLoading: true,
+      })
+    ).toBe(true);
+  });
+
+  it('requires the 4-digit session PIN for non-organiser volunteer stations', () => {
+    expect(
+      isStationUnlocked({
+        hasActiveSession: true,
+        isPinUnlocked: false,
+        isAdmin: false,
+        authLoading: false,
+      })
+    ).toBe(false);
+
+    expect(
+      isStationUnlocked({
+        hasActiveSession: true,
+        isPinUnlocked: true,
+        isAdmin: false,
+        authLoading: false,
+      })
+    ).toBe(true);
   });
 });

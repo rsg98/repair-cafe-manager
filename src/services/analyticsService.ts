@@ -24,6 +24,7 @@ export async function getSessionAnalytics(sessionId: string): Promise<SessionAna
  * Converts analytics records into a downloadable CSV string.
  */
 export function exportAnalyticsToCsv(analyticsList: SessionAnalytics[]): string {
+  // Define standard CSV header columns for impact reporting
   const headers = [
     'Session ID',
     'Session Name',
@@ -32,6 +33,7 @@ export function exportAnalyticsToCsv(analyticsList: SessionAnalytics[]): string 
     'Repaired Count',
     'Partial Count',
     'Unfixable Count',
+    // Include outcome breakdowns, diversion weights, PAT metrics, and volunteer attendance
     'Advice Count',
     'Taken Home Count',
     'Success Rate (%)',
@@ -40,9 +42,11 @@ export function exportAnalyticsToCsv(analyticsList: SessionAnalytics[]): string 
     'Average Repair Time (mins)',
     'Mains Powered Count',
     'PAT Tested Count',
-    'PAT Failure Rate (%)'
+    'PAT Failure Rate (%)',
+    'Attending Volunteers'
   ];
 
+  // Format each session analytics summary into a comma-separated row
   const rows = analyticsList.map(a => [
     `"${a.sessionId}"`,
     `"${a.sessionName}"`,
@@ -52,6 +56,7 @@ export function exportAnalyticsToCsv(analyticsList: SessionAnalytics[]): string 
     a.partialCount,
     a.unfixableCount,
     a.adviceCount,
+    // Append taken-home count, success rate, weight, repair times, PAT stats, and volunteer count
     a.takenHomeCount,
     `${a.successRatePercent}%`,
     a.totalWeightDivertedKg,
@@ -59,7 +64,8 @@ export function exportAnalyticsToCsv(analyticsList: SessionAnalytics[]): string 
     a.averageRepairTimeMinutes || 0,
     a.mainsItemsCount,
     a.patTestedCount,
-    `${a.patFailureRatePercent}%`
+    `${a.patFailureRatePercent}%`,
+    a.volunteerCount ?? 0
   ]);
 
   return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');

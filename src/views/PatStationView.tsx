@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Zap, 
   Search, 
@@ -7,33 +7,44 @@ import {
   ShieldAlert, 
   Sliders,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  BookOpen
 } from 'lucide-react';
 import { Session, RepairItem, ApplianceClass, PatInitialOutcome, PatFinalOutcome } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';
 import { getRepairByCardNumber, submitPatInitial, submitPatFinal } from '../services/repairService';
+import { getQualifiedPatTesters } from '../services/volunteerService';
 import { CardToken } from '../components/common/CardToken';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { PinModal } from '../components/common/PinModal';
+import { PoliciesModal } from '../components/common/PoliciesModal';
 
 interface PatStationViewProps {
   session: Session | null;
 }
 
 export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
+  // Enforce daily 4-digit volunteer PIN gate
   const { isUnlocked, unlock, error: pinError } = useVolunteerPin(session);
 
   // Volunteer persistent settings stored in localStorage
   const [testerName, setTesterName] = useState(() => localStorage.getItem('pat_tester_name') || '');
   const [instrumentSerial, setInstrumentSerial] = useState(() => localStorage.getItem('pat_instrument_serial') || '');
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
 
-  // Card search
+  // Filter session's attending volunteers to only those qualified for PAT testing
+  const qualifiedTesters = useMemo(
+    () => getQualifiedPatTesters(session?.attendingVolunteers || []),
+    [session?.attendingVolunteers]
+  );
+
+  // Card search state
   const [searchCardNumber, setSearchCardNumber] = useState('');
   const [searching, setSearching] = useState(false);
   const [currentItem, setCurrentItem] = useState<RepairItem | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
 
-  // Form fields
+  // PAT electrical inspection form fields
   const [visualPass, setVisualPass] = useState(true);
   const [applianceClass, setApplianceClass] = useState<ApplianceClass>('CLASS_I');
   const [fuseRatingAmps, setFuseRatingAmps] = useState<3 | 5 | 13 | 'OTHER'>(13);
@@ -46,15 +57,24 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
   const [submittingTest, setSubmittingTest] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
-  // Save tester credentials
+  // Validate cached testerName against the active session's PAT-qualified roster
+  useEffect(() => {
+    if (session && testerName && !qualifiedTesters.some((v) => v.name === testerName)) {
+      setTesterName('');
+    }
+  }, [session, qualifiedTesters, testerName]);
+
+  // Save tester name selection to localStorage
   useEffect(() => {
     localStorage.setItem('pat_tester_name', testerName);
   }, [testerName]);
 
+  // Save PAT instrument serial number to localStorage
   useEffect(() => {
     localStorage.setItem('pat_instrument_serial', instrumentSerial);
   }, [instrumentSerial]);
 
+  // Look up a repair item by its physical card number (#1..#N)
   const handleSearchCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) return;
@@ -66,6 +86,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
     setSuccessBanner(null);
 
     try {
+      // Point query by cardNumber to stay within Firebase Free Tier guardrails
       const item = await getRepairByCardNumber(session.id, num);
       if (!item) {
         setSearchMessage(`No item found assigned to Card #${num}.`);
@@ -84,16 +105,18 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
     }
   };
 
+  // Submit Pre-Repair (PAT 1) electrical safety screening results
   const handleSubmitPatInitial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session || !currentItem) return;
     if (!testerName.trim() || !instrumentSerial.trim()) {
-      alert("Please provide your tester name and PAT instrument serial number.");
+      alert("Please select your PAT tester name and enter the PAT instrument serial number.");
       return;
     }
 
     setSubmittingTest(true);
     try {
+      // Record PAT 1 measurements and transition item to next lifecycle state
       const nextStatus = await submitPatInitial({
         sessionId: session.id,
         repairId: currentItem.id,
@@ -119,16 +142,18 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
     }
   };
 
+  // Submit Post-Repair (PAT 2) electrical safety certification results
   const handleSubmitPatFinal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session || !currentItem) return;
     if (!testerName.trim() || !instrumentSerial.trim()) {
-      alert("Please provide your tester name and PAT instrument serial number.");
+      alert("Please select your PAT tester name and enter the PAT instrument serial number.");
       return;
     }
 
     setSubmittingTest(true);
     try {
+      // Record PAT 2 measurements and route to READY_FOR_COLLECTION or back to WAITING_REPAIR
       const nextStatus = await submitPatFinal({
         sessionId: session.id,
         repairId: currentItem.id,
@@ -153,6 +178,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
     }
   };
 
+  // Determine whether the loaded item is in the post-repair PAT 2 stage
   const isPat2 = currentItem?.status === 'WAITING_PAT2' || currentItem?.status === 'IN_PAT2';
 
   return (
@@ -182,29 +208,62 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
             </div>
           </div>
 
-          {/* Tester persistent details */}
-          <div className="flex flex-col sm:flex-row gap-2 text-xs">
-            <input
-              type="text"
-              placeholder="Tester Name (e.g. Dave)"
+          {/* Qualified PAT Tester Dropdown, Instrument Serial, & Policies Button */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs">
+            {/* Qualified PAT Tester Selector */}
+            <select
+              aria-label="Select PAT Tester"
               value={testerName}
               onChange={(e) => setTesterName(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 font-medium"
-            />
+              className="px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              {/* Default placeholder option reflecting PAT qualification availability */}
+              <option value="">
+                {qualifiedTesters.length === 0
+                  ? 'No PAT-Trained Volunteers Checked In'
+                  : 'Select PAT Tester...'}
+              </option>
+              {/* Render only PAT-trained attending volunteers */}
+              {qualifiedTesters.map((v) => (
+                <option key={v.id} value={v.name}>
+                  {v.name}{!v.inducted ? ' (Induction Pending)' : ''}
+                </option>
+              ))}
+            </select>
+            {/* Instrument serial number input */}
             <input
               type="text"
               placeholder="PAT Instrument S/N"
               value={instrumentSerial}
               onChange={(e) => setInstrumentSerial(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-slate-600"
+              className="px-3 py-2 rounded-xl border border-slate-300 font-mono text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500"
             />
+            {/* Quick-access button to view Repair Café policies */}
+            <button
+              type="button"
+              onClick={() => setShowPoliciesModal(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-bold hover:bg-slate-100 transition-colors"
+              title="View Repair Café Policies"
+            >
+              <BookOpen className="h-3.5 w-3.5 text-amber-700" />
+              Policies
+            </button>
           </div>
         </div>
+
+        {/* Warning banner when no PAT-trained volunteers are checked in to the active session */}
+        {session && qualifiedTesters.length === 0 && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <span>No PAT-trained volunteers checked in — ask Front Desk to update session attendance</span>
+          </div>
+        )}
 
         {/* Card Number Point-Lookup Form */}
         <form onSubmit={handleSearchCard} className="mt-6 flex gap-3">
           <div className="relative flex-1">
             <Search className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
+            {/* Numeric card number input */}
             <input
               type="number"
               placeholder="Enter Physical Card Number (#1..#100)..."
@@ -213,6 +272,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
               className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-300 text-base font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
             />
           </div>
+          {/* Submit button for card lookup */}
           <button
             type="submit"
             disabled={searching || !searchCardNumber}
@@ -222,12 +282,14 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
           </button>
         </form>
 
+        {/* Display lookup warning or informational message */}
         {searchMessage && (
           <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-medium">
             {searchMessage}
           </div>
         )}
 
+        {/* Display PAT record submission confirmation banner */}
         {successBanner && (
           <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
@@ -244,6 +306,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
             <div className="flex items-center gap-3">
               <CardToken number={currentItem.cardNumber} size="lg" />
               <div>
+                {/* Item brand and model title */}
                 <h3 className="text-xl font-black text-slate-900">
                   {currentItem.item.brandModel}
                 </h3>
@@ -253,6 +316,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
               </div>
             </div>
 
+            {/* Current lifecycle status and PAT stage indicator */}
             <div className="flex items-center gap-2">
               <StatusBadge status={currentItem.status} size="md" />
               <span className="text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-900 px-3 py-1 rounded-lg border border-amber-300">
@@ -261,6 +325,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
             </div>
           </div>
 
+          {/* Reported customer fault description */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm">
             <span className="text-xs font-bold text-slate-500 uppercase block mb-1">Reported Fault</span>
             <p className="text-slate-800 font-medium">{currentItem.item.faultDescription}</p>
@@ -269,6 +334,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
           {/* Test Parameters */}
           <form onSubmit={isPat2 ? handleSubmitPatFinal : handleSubmitPatInitial} className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Appliance insulation class selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Appliance Class
@@ -278,6 +344,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                   onChange={(e) => setApplianceClass(e.target.value as ApplianceClass)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-semibold"
                 >
+                  {/* Standard BS 1363 / IET appliance classes */}
                   <option value="CLASS_I">Class I (Earthed Metal chassis)</option>
                   <option value="CLASS_II">Class II (Double Insulated ⧈)</option>
                   <option value="LEADS_ADAPTER">Detachable Lead / Power Adapter</option>
@@ -285,6 +352,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                 </select>
               </div>
 
+              {/* BS 1363 Plug Fuse Rating selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   BS 1363 Plug Fuse Rating
@@ -297,6 +365,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                   }}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-semibold"
                 >
+                  {/* UK standard plug fuse ratings */}
                   <option value="3">3 Amp (Table lamps, radios, clocks)</option>
                   <option value="5">5 Amp (Small electronics)</option>
                   <option value="13">13 Amp (Kettles, toasters, irons)</option>
@@ -304,6 +373,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                 </select>
               </div>
 
+              {/* DC Test Voltage selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   DC Test Voltage
@@ -313,6 +383,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                   onChange={(e) => setTestVoltageVolts(parseInt(e.target.value, 10) as 250 | 500)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-semibold"
                 >
+                  {/* 500V standard vs 250V Surge-protected / SMPS */}
                   <option value="500">500V DC (Standard Appliances)</option>
                   <option value="250">250V DC (Sensitive Electronics / SMPS)</option>
                 </select>
@@ -321,6 +392,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
             {/* Test Measurements */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
+              {/* Visual inspection pass/fail toggle */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Visual Inspection Check
@@ -334,11 +406,13 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                       : 'bg-rose-100 text-rose-900 border-rose-300'
                   }`}
                 >
+                  {/* Render check icon when visual inspection passes */}
                   {visualPass ? <Check className="h-4 w-4" /> : null}
                   {visualPass ? 'Visual Passed' : 'Visual Failed'}
                 </button>
               </div>
 
+              {/* Earth Continuity measurement input (required for Class I) */}
               {applianceClass === 'CLASS_I' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -352,10 +426,12 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                     onChange={(e) => setEarthContinuityOhms(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold text-sm"
                   />
+                  {/* Threshold guidance for Class I earth bond */}
                   <span className="text-[10px] text-slate-500">Threshold: ≤ 0.10 Ω + lead</span>
                 </div>
               )}
 
+              {/* Insulation Resistance measurement input */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Insulation Resistance (MΩ)
@@ -368,6 +444,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                   onChange={(e) => setInsulationResistanceMOhms(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold text-sm"
                 />
+                {/* Threshold guidance for Class I and Class II insulation */}
                 <span className="text-[10px] text-slate-500">Threshold: ≥ 1.0 MΩ (Class I) / ≥ 2.0 MΩ (Class II)</span>
               </div>
             </div>
@@ -378,8 +455,10 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                 {isPat2 ? "Final Safety Certification Outcome" : "Initial Screening Outcome"}
               </label>
 
+              {/* PAT 1 vs PAT 2 outcome buttons */}
               {!isPat2 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Outcome: PASS */}
                   <button
                     type="button"
                     onClick={() => setInitialOutcome('PASS')}
@@ -389,6 +468,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         : 'border-slate-200 hover:border-slate-300 text-slate-700'
                     }`}
                   >
+                    {/* PASS header and description */}
                     <div className="font-bold flex items-center gap-1.5">
                       <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                       PASS: Safe for Inspection
@@ -398,6 +478,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                     </p>
                   </button>
 
+                  {/* Outcome: FAIL_REPAIRABLE_CORD */}
                   <button
                     type="button"
                     onClick={() => setInitialOutcome('FAIL_REPAIRABLE_CORD')}
@@ -407,6 +488,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         : 'border-slate-200 hover:border-slate-300 text-slate-700'
                     }`}
                   >
+                    {/* FAIL_REPAIRABLE_CORD header and description */}
                     <div className="font-bold flex items-center gap-1.5 text-amber-900">
                       <AlertTriangle className="h-5 w-5 text-amber-600" />
                       FAIL: Repairable Cord / Plug Defect
@@ -416,6 +498,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                     </p>
                   </button>
 
+                  {/* Outcome: DANGER_DO_NOT_ENERGIZE */}
                   <button
                     type="button"
                     onClick={() => setInitialOutcome('DANGER_DO_NOT_ENERGIZE')}
@@ -425,6 +508,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         : 'border-slate-200 hover:border-slate-300 text-slate-700'
                     }`}
                   >
+                    {/* DANGER_DO_NOT_ENERGIZE header and description */}
                     <div className="font-bold flex items-center gap-1.5 text-rose-900">
                       <ShieldAlert className="h-5 w-5 text-rose-600" />
                       DANGER: Fatal / Catastrophic Hazard
@@ -434,6 +518,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                     </p>
                   </button>
 
+                  {/* Outcome: UNTESTABLE */}
                   <button
                     type="button"
                     onClick={() => setInitialOutcome('UNTESTABLE')}
@@ -443,6 +528,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         : 'border-slate-200 hover:border-slate-300 text-slate-700'
                     }`}
                   >
+                    {/* UNTESTABLE header and description */}
                     <div className="font-bold flex items-center gap-1.5 text-slate-800">
                       <Sliders className="h-5 w-5 text-slate-500" />
                       UNTESTABLE: Custom / Missing Power Cord
@@ -454,6 +540,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* PAT 2 Outcome: PASS */}
                   <button
                     type="button"
                     onClick={() => setFinalOutcome('PASS')}
@@ -463,6 +550,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         : 'border-slate-200 hover:border-slate-300 text-slate-700'
                     }`}
                   >
+                    {/* PAT 2 PASS header and description */}
                     <div className="font-bold flex items-center gap-1.5 text-emerald-900">
                       <ShieldCheck className="h-5 w-5 text-emerald-600" />
                       PASS: Certified Safe for Collection
@@ -472,6 +560,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                     </p>
                   </button>
 
+                  {/* PAT 2 Outcome: FAIL */}
                   <button
                     type="button"
                     onClick={() => setFinalOutcome('FAIL')}
@@ -481,6 +570,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         : 'border-slate-200 hover:border-slate-300 text-slate-700'
                     }`}
                   >
+                    {/* PAT 2 FAIL header and description */}
                     <div className="font-bold flex items-center gap-1.5 text-rose-900">
                       <AlertTriangle className="h-5 w-5 text-rose-600" />
                       FAIL: Post-Repair Safety Failure
@@ -493,6 +583,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
               )}
             </div>
 
+            {/* PAT Notes & Certificate Remarks input */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 PAT Notes & Certificate Remarks
@@ -506,6 +597,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
               />
             </div>
 
+            {/* Form cancellation and submission actions */}
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
               <button
                 type="button"
@@ -514,6 +606,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
               >
                 Cancel
               </button>
+              {/* Submit PAT 1 or PAT 2 safety record */}
               <button
                 type="submit"
                 disabled={submittingTest}
@@ -525,6 +618,12 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
           </form>
         </div>
       )}
+
+      {/* Repair Café Policies Reference Modal */}
+      <PoliciesModal
+        isOpen={showPoliciesModal}
+        onClose={() => setShowPoliciesModal(false)}
+      />
     </div>
   );
 };
