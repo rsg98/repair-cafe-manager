@@ -14,7 +14,8 @@ import {
   ClipboardList,
   Shield,
   Zap,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { Session, RepairItem, Volunteer } from '../types';
 import { useAuth } from '../hooks/useAuth';
@@ -29,7 +30,9 @@ import {
   getPrivateCustomerData,
   filterRepairs,
   isTerminalStatus,
-  canAssignCard
+  canAssignCard,
+  formatWaitTime,
+  WAIT_TIME_REFRESH_INTERVAL_MS
 } from '../services/repairService';
 import {
   listVolunteers,
@@ -101,6 +104,17 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
 
   // Finalize session confirmation state
   const [isFinalizing, setIsFinalizing] = useState(false);
+
+  // Current timestamp for queue wait-time display, refreshed on a 5-minute basis
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, WAIT_TIME_REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Persist the selected tablet preset to localStorage
   const handleTabletPresetChange = (preset: 'A' | 'B' | 'ALL') => {
@@ -540,6 +554,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                         <th className="py-3 px-4">Card #</th>
                         <th className="py-3 px-4">Customer</th>
                         <th className="py-3 px-4">Ref Token</th>
+                        <th className="py-3 px-4">Wait Time</th>
                         <th className="py-3 px-4">Item &amp; Fault</th>
                         <th className="py-3 px-4">Power Type</th>
                         <th className="py-3 px-4">Status</th>
@@ -550,14 +565,14 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                     <tbody className="divide-y divide-slate-100 font-medium">
                       {loading ? (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-500">
+                          <td colSpan={9} className="py-8 text-center text-slate-500">
                             <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-brand-600" />
                             Loading repairs...
                           </td>
                         </tr>
                       ) : filteredRepairs.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-500">
+                          <td colSpan={9} className="py-8 text-center text-slate-500">
                             No items found matching the current search.
                           </td>
                         </tr>
@@ -596,6 +611,20 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
                               {/* Reference Token Column */}
                               <td className="py-3.5 px-4 font-mono font-bold text-xs text-slate-600">
                                 {r.referenceToken}
+                              </td>
+                              {/* Queue Wait Time Column (refreshed every 5 minutes) */}
+                              <td className="py-3.5 px-4 whitespace-nowrap text-xs">
+                                <span
+                                  className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded ${
+                                    isCompleted
+                                      ? 'text-slate-500 bg-slate-200/70'
+                                      : 'text-slate-700 bg-slate-100'
+                                  }`}
+                                  title="Time elapsed since customer registration (refreshed every 5 minutes)"
+                                >
+                                  <Clock className="h-3 w-3" />
+                                  {formatWaitTime(r, currentTime)}
+                                </span>
                               </td>
                               {/* Item & Fault Description Column */}
                               <td className="py-3.5 px-4">

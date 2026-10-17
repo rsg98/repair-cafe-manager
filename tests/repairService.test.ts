@@ -7,7 +7,12 @@ import {
   filterRepairs, 
   isTerminalStatus, 
   canAssignCard,
-  getDefaultPowerTypeForCategory
+  getDefaultPowerTypeForCategory,
+  WAIT_TIME_REFRESH_INTERVAL_MS,
+  getRegistrationTimestamp,
+  sortRepairsByRegistration,
+  getWaitTimeMinutes,
+  formatWaitTime
 } from '../src/services/repairService';
 
 describe('Analytics and CSV Export Utilities', () => {
@@ -497,5 +502,147 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       expect(getDefaultPowerTypeForCategory(undefined as any)).toBe('MAINS_240V');
     });
   });
+
+  describe('Front Desk First-Come-First-Served Queue Order & Wait Time (Issue #21)', () => {
+    it('defines a 5-minute refresh interval constant (300,000 ms)', () => {
+      expect(WAIT_TIME_REFRESH_INTERVAL_MS).toBe(5 * 60 * 1000);
+      expect(WAIT_TIME_REFRESH_INTERVAL_MS).toBe(300000);
+    });
+
+    it('extracts registration timestamp from createdAt or falls back to REG-<timestamp>', () => {
+      expect(getRegistrationTimestamp({ createdAt: 1729166400000 })).toBe(1729166400000);
+      expect(
+        getRegistrationTimestamp({
+          createdAt: undefined,
+          registrationId: 'REG-1729166460000'
+        })
+      ).toBe(1729166460000);
+      expect(
+        getRegistrationTimestamp({
+          createdAt: undefined,
+          id: 'REG-1729166520000_1'
+        })
+      ).toBe(1729166520000);
+      expect(
+        getRegistrationTimestamp({
+          createdAt: undefined,
+          registrationId: 'reg-legacy',
+          id: 'rep-1'
+        })
+      ).toBeNull();
+    });
+
+    it('orders repairs strictly on a first-come, first-served basis regardless of referenceToken or cardNumber', () => {
+      const baseTime = 1729166400000; // 10:00:00
+      const unsortedQueue: RepairItem[] = [
+        {
+          id: 'REG-1729167000000_1',
+          sessionId: 'sess-1',
+          registrationId: 'REG-1729167000000',
+          referenceToken: 'REF-AAAA', // alphabetically first token, but registered 3rd (10:10)
+          cardNumber: 1, // lowest card number, but registered 3rd
+          customerName: 'Third Customer',
+          status: 'WAITING_REPAIR',
+          item: {
+            category: 'ELECTRICAL',
+            brandModel: 'Lamp',
+            faultDescription: 'Flickering',
+            powerType: 'MAINS_240V'
+          },
+          createdAt: baseTime + 10 * 60 * 1000
+        },
+        {
+          id: 'REG-1729166400000_1',
+          sessionId: 'sess-1',
+          registrationId: 'REG-1729166400000',
+          referenceToken: 'REF-ZZZZ', // alphabetically last token, unassigned card, but registered 1st (10:00)
+          cardNumber: null,
+          customerName: 'First Customer',
+          status: 'REGISTERED',
+          item: {
+            category: 'TEXTILES',
+            brandModel: 'Jacket',
+            faultDescription: 'Torn sleeve',
+            powerType: 'NOT_APPLICABLE'
+          },
+          createdAt: baseTime
+        },
+        {
+          id: 'REG-1729166700000_1',
+          sessionId: 'sess-1',
+          registrationId: 'REG-1729166700000',
+          referenceToken: 'REF-MMMM', // registered 2nd (10:05) with Tablet B card #51
+          cardNumber: 51,
+          customerName: 'Second Customer',
+          status: 'WAITING_PAT1',
+          item: {
+            category: 'ELECTRICAL',
+            brandModel: 'Toaster',
+            faultDescription: 'Trips RCD',
+            powerType: 'MAINS_240V'
+          },
+          createdAt: baseTime + 5 * 60 * 1000
+        }
+      ];
+
+      const sorted = sortRepairsByRegistration(unsortedQueue);
+      expect(sorted.map((r) => r.customerName)).toEqual([
+        'First Customer',
+        'Second Customer',
+        'Third Customer'
+      ]);
+
+      // Also verify filterRepairs preserves first-come, first-served ordering
+      const filtered = filterRepairs(unsortedQueue, '', 'ALL');
+      expect(filtered.map((r) => r.customerName)).toEqual([
+        'First Customer',
+        'Second Customer',
+        'Third Customer'
+      ]);
+    });
+
+    it('calculates and formats wait time accurately as the 5-minute refresh clock advances', () => {
+      const registeredAt = 1729166400000;
+      const item = {
+        id: 'REG-1729166400000_1',
+        registrationId: 'REG-1729166400000',
+        createdAt: registeredAt
+      };
+
+      // At registration time (0m)
+      expect(getWaitTimeMinutes(item, registeredAt)).toBe(0);
+      expect(formatWaitTime(item, registeredAt)).toBe('0m');
+
+      // After 1st 5-minute refresh (5m)
+      const after5Min = registeredAt + WAIT_TIME_REFRESH_INTERVAL_MS;
+      expect(getWaitTimeMinutes(item, after5Min)).toBe(5);
+      expect(formatWaitTime(item, after5Min)).toBe('5m');
+
+      // After 9 refreshes (45m)
+      const after45Min = registeredAt + 9 * WAIT_TIME_REFRESH_INTERVAL_MS;
+      expect(getWaitTimeMinutes(item, after45Min)).toBe(45);
+      expect(formatWaitTime(item, after45Min)).toBe('45m');
+
+      // After 12 refreshes (1h)
+      const after60Min = registeredAt + 12 * WAIT_TIME_REFRESH_INTERVAL_MS;
+      expect(getWaitTimeMinutes(item, after60Min)).toBe(60);
+      expect(formatWaitTime(item, after60Min)).toBe('1h');
+
+      // After 17 refreshes (1h 25m)
+      const after85Min = registeredAt + 17 * WAIT_TIME_REFRESH_INTERVAL_MS;
+      expect(getWaitTimeMinutes(item, after85Min)).toBe(85);
+      expect(formatWaitTime(item, after85Min)).toBe('1h 25m');
+
+      // Clamps slightly future timestamps to 0m
+      expect(getWaitTimeMinutes(item, registeredAt - 30000)).toBe(0);
+      expect(formatWaitTime(item, registeredAt - 30000)).toBe('0m');
+
+      // Returns em-dash when no registration timestamp exists
+      expect(getWaitTimeMinutes({ createdAt: undefined })).toBeNull();
+      expect(formatWaitTime({ createdAt: undefined })).toBe('—');
+      expect(formatWaitTime(null)).toBe('—');
+    });
+  });
 });
+
 

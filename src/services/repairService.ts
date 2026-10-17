@@ -210,8 +210,121 @@ export function checkCardConflict(
 }
 
 /**
+ * Interval (in milliseconds) at which the Front Desk queue wait time is refreshed (5 minutes).
+ */
+export const WAIT_TIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Extracts the registration epoch timestamp (ms) from a repair item.
+ * Uses `createdAt` when present, falling back to a numeric timestamp embedded in
+ * `registrationId` or `id` (e.g. `REG-1729166400000`), or `null` if unavailable.
+ */
+export function getRegistrationTimestamp(
+  item: Pick<RepairItem, 'createdAt'> & Partial<Pick<RepairItem, 'registrationId' | 'id'>>
+): number | null {
+  if (typeof item.createdAt === 'number' && Number.isFinite(item.createdAt) && item.createdAt > 0) {
+    return item.createdAt;
+  }
+
+  const candidates = [item.registrationId, item.id];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const match = candidate.match(/^REG-(\d{10,})/i);
+    if (match) {
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Sorts repair items in strict first-come, first-served order (earliest registration at the top).
+ * Falls back to card number and ID/reference token when registration timestamps are equal or absent.
+ */
+export function sortRepairsByRegistration<
+  T extends Pick<RepairItem, 'createdAt'> &
+    Partial<Pick<RepairItem, 'id' | 'registrationId' | 'cardNumber' | 'referenceToken'>>
+>(repairs: T[]): T[] {
+  return [...repairs].sort((a, b) => {
+    const timeA = getRegistrationTimestamp(a);
+    const timeB = getRegistrationTimestamp(b);
+
+    if (timeA !== null && timeB !== null && timeA !== timeB) {
+      return timeA - timeB;
+    }
+    if (timeA !== null && timeB === null) return -1;
+    if (timeA === null && timeB !== null) return 1;
+
+    if (typeof a.cardNumber === 'number' && typeof b.cardNumber === 'number' && a.cardNumber !== b.cardNumber) {
+      return a.cardNumber - b.cardNumber;
+    }
+    if (typeof a.cardNumber === 'number' && typeof b.cardNumber !== 'number') return -1;
+    if (typeof a.cardNumber !== 'number' && typeof b.cardNumber === 'number') return 1;
+
+    const idCompare = (a.id || '').localeCompare(b.id || '');
+    if (idCompare !== 0) return idCompare;
+
+    return (a.referenceToken || '').localeCompare(b.referenceToken || '');
+  });
+}
+
+/**
+ * Calculates the elapsed wait time in whole minutes since a customer registered an item.
+ * Returns `null` if the item has no valid registration timestamp.
+ */
+export function getWaitTimeMinutes(
+  item: Pick<RepairItem, 'createdAt'> & Partial<Pick<RepairItem, 'registrationId' | 'id'>>,
+  now: number = Date.now()
+): number | null {
+  const registeredAt = getRegistrationTimestamp(item);
+  if (registeredAt === null) {
+    return null;
+  }
+  return Math.max(0, Math.floor((now - registeredAt) / 60000));
+}
+
+/**
+ * Formats a repair item's queue wait time (or a raw duration in minutes) for display
+ * in the Front Desk queue (e.g. "0m", "15m", "1h", "1h 25m", or "—" when unavailable).
+ */
+export function formatWaitTime(
+  itemOrMinutes:
+    | (Pick<RepairItem, 'createdAt'> & Partial<Pick<RepairItem, 'registrationId' | 'id'>>)
+    | number
+    | null
+    | undefined,
+  now: number = Date.now()
+): string {
+  const minutes =
+    typeof itemOrMinutes === 'number'
+      ? Number.isFinite(itemOrMinutes)
+        ? Math.max(0, Math.floor(itemOrMinutes))
+        : null
+      : itemOrMinutes
+        ? getWaitTimeMinutes(itemOrMinutes, now)
+        : null;
+
+  if (minutes === null) {
+    return '—';
+  }
+
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+}
+
+/**
  * Filters repairs by search term (matching customer first name, token, brand/model, or card number)
- * and status filter (handling queue groupings like WAITING_PAT1, WAITING_REPAIR, WAITING_PAT2).
+ * and status filter (handling queue groupings like WAITING_PAT1, WAITING_REPAIR, WAITING_PAT2),
+ * ordered on a first-come, first-served basis by registration time.
  */
 export function filterRepairs(
   repairs: RepairItem[],
@@ -222,7 +335,7 @@ export function filterRepairs(
   const isCardNumberQuery = /^#?\d+$/.test(term);
   const cardNumberTerm = term.replace(/^#/, '');
 
-  return repairs.filter((r) => {
+  const filtered = repairs.filter((r) => {
     const customerName = (r.customerName || '').toLowerCase();
     const matchesCardNumber =
       r.cardNumber !== undefined &&
@@ -244,6 +357,8 @@ export function filterRepairs(
     if (statusFilter === 'WAITING_PAT2') return r.status === 'WAITING_PAT2' || r.status === 'IN_PAT2';
     return r.status === statusFilter;
   });
+
+  return sortRepairsByRegistration(filtered);
 }
 
 /**

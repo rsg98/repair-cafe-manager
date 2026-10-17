@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { sortRepairsByRegistration } from '../services/repairService';
 import { RepairItem } from '../types';
 
 export function useRepairs(sessionId: string | null | undefined) {
@@ -27,15 +28,8 @@ export function useRepairs(sessionId: string | null | undefined) {
           ...doc.data()
         } as RepairItem));
 
-        // Sort items: assigned cards by card number ascending, unassigned by creation
-        items.sort((a, b) => {
-          if (a.cardNumber && b.cardNumber) return a.cardNumber - b.cardNumber;
-          if (a.cardNumber) return -1;
-          if (b.cardNumber) return 1;
-          return a.referenceToken.localeCompare(b.referenceToken);
-        });
-
-        setRepairs(items);
+        // Sort items in first-come, first-served order (earliest customer registration at the top)
+        setRepairs(sortRepairsByRegistration(items));
         setLoading(false);
       },
       (err) => {
