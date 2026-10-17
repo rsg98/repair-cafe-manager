@@ -142,7 +142,7 @@ export interface RepairItem {
   sessionId: string;
   registrationId: string;
   referenceToken: string;
-  cardNumber?: number; // Physical token #1..#N assigned by front desk
+  cardNumber?: number | null; // Physical token #1..#N assigned by front desk
   customerName?: string; // Visitor first name for Front Desk display & search (scrubbed on finalize)
 
   item: {

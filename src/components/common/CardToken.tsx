@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface CardTokenProps {
-  number?: number;
+  number?: number | null;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   dimmed?: boolean;
 }
