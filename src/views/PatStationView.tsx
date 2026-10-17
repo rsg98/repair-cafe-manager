@@ -8,10 +8,12 @@ import {
   Sliders,
   Check,
   ShieldCheck,
-  BookOpen
+  BookOpen,
+  X
 } from 'lucide-react';
 import { Session, RepairItem, ApplianceClass, PatInitialOutcome, PatFinalOutcome } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';
+import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 import { getRepairByCardNumber, submitPatInitial, submitPatFinal } from '../services/repairService';
 import { getQualifiedPatTesters } from '../services/volunteerService';
 import { CardToken } from '../components/common/CardToken';
@@ -56,6 +58,16 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
   const [cautionNotes, setCautionNotes] = useState('');
   const [submittingTest, setSubmittingTest] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  // Prevent automatic PWA reload while a PAT inspection, card lookup, or routing confirmation banner is active
+  const isPatDirty =
+    currentItem !== null ||
+    searchCardNumber.trim().length > 0 ||
+    searching ||
+    submittingTest ||
+    showPoliciesModal ||
+    successBanner !== null;
+  useRegisterUnsavedWork(isPatDirty, 'pat-station-view');
 
   // Validate cached testerName against the active session's PAT-qualified roster
   useEffect(() => {
@@ -289,11 +301,22 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
           </div>
         )}
 
-        {/* Display PAT record submission confirmation banner */}
+        {/* Display PAT record submission confirmation banner with dismiss button */}
         {successBanner && (
-          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-            <span>{successBanner}</span>
+          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+              <span>{successBanner}</span>
+            </div>
+            {/* Dismiss button clears the routing banner and releases deferred PWA updates */}
+            <button
+              type="button"
+              onClick={() => setSuccessBanner(null)}
+              aria-label="Dismiss confirmation banner"
+              className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
       </div>

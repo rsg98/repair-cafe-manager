@@ -10,10 +10,12 @@ import {
   HelpCircle, 
   XCircle,
   BookOpen,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { Session, RepairItem, RepairOutcome } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';
+import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 import { getRepairByCardNumber, submitRepairRecord } from '../services/repairService';
 import { CardToken } from '../components/common/CardToken';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -54,6 +56,16 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
   const [partsUsed, setPartsUsed] = useState('');
   const [submittingRepair, setSubmittingRepair] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  // Prevent automatic PWA reload while a repair record, card lookup, or routing confirmation banner is active
+  const isFixerDirty =
+    currentItem !== null ||
+    searchCardNumber.trim().length > 0 ||
+    searching ||
+    submittingRepair ||
+    showPoliciesModal ||
+    successBanner !== null;
+  useRegisterUnsavedWork(isFixerDirty, 'fixer-station-view');
 
   // Validate cached fixerName against the active session's attending volunteer roster
   useEffect(() => {
@@ -247,11 +259,22 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
           </div>
         )}
 
-        {/* Display repair submission confirmation banner */}
+        {/* Display repair submission confirmation banner with dismiss button */}
         {successBanner && (
-          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-            <span>{successBanner}</span>
+          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+              <span>{successBanner}</span>
+            </div>
+            {/* Dismiss button clears the routing banner and releases deferred PWA updates */}
+            <button
+              type="button"
+              onClick={() => setSuccessBanner(null)}
+              aria-label="Dismiss confirmation banner"
+              className="p-1 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
       </div>

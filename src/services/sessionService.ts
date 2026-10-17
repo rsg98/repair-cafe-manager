@@ -21,27 +21,77 @@ import {
 import { cafeConfig } from '../config/cafe.config';
 import { isAuthorizedOrganizer } from '../utils/authUtils';
 import { removeUndefined } from './repairService';
+import {
+  APP_BUILD_TIMESTAMP,
+  APP_VERSION,
+  shouldPublishAppVersion,
+} from './pwaUpdateService';
+
+/**
+ * Helper that reads existing `settings/system` once and returns both merged
+ * `organizerEmails` and the raw `SystemSettings` snapshot.
+ */
+async function getSystemSettingsWithEmails(): Promise<{
+  effectiveEmails: string[];
+  settings: SystemSettings | null;
+}> {
+  try {
+    const settingsRef = doc(db, 'settings', 'system');
+    const snap = await getDoc(settingsRef);
+    if (snap.exists()) {
+      const data = snap.data() as SystemSettings;
+      const effectiveEmails = Array.isArray(data.organizerEmails)
+        ? Array.from(
+            new Set([...cafeConfig.organizerEmails, ...data.organizerEmails])
+          )
+        : [...cafeConfig.organizerEmails];
+      return { effectiveEmails, settings: data };
+    }
+  } catch (err) {
+    console.warn('Could not read existing organizerEmails from settings/system:', err);
+  }
+  return { effectiveEmails: [...cafeConfig.organizerEmails], settings: null };
+}
 
 /**
  * Helper that reads existing `settings/system.organizerEmails` and merges them with
  * static `cafeConfig.organizerEmails` so dynamic volunteer organisers are never overwritten.
  */
 async function getEffectiveOrganizerEmails(): Promise<string[]> {
+  const { effectiveEmails } = await getSystemSettingsWithEmails();
+  return effectiveEmails;
+}
+
+/**
+ * Publishes the running client's compile-time `APP_VERSION` and `APP_BUILD_TIMESTAMP`
+ * to `settings/system` when an authenticated organiser opens a newly deployed build.
+ * Consumes zero extra reads by accepting the `currentSettings` already received via `useActiveSession()`.
+ */
+export async function publishAppVersionToSystemSettings(
+  currentSettings?: SystemSettings | null
+): Promise<boolean> {
+  if (
+    !shouldPublishAppVersion(APP_VERSION, APP_BUILD_TIMESTAMP, currentSettings)
+  ) {
+    return false;
+  }
+
   try {
     const settingsRef = doc(db, 'settings', 'system');
-    const snap = await getDoc(settingsRef);
-    if (snap.exists()) {
-      const data = snap.data() as SystemSettings;
-      if (Array.isArray(data.organizerEmails)) {
-        return Array.from(
-          new Set([...cafeConfig.organizerEmails, ...data.organizerEmails])
-        );
-      }
-    }
+    await setDoc(
+      settingsRef,
+      {
+        deployedVersion: APP_VERSION,
+        deployedBuildTimestamp: APP_BUILD_TIMESTAMP,
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+    return true;
   } catch (err) {
-    console.warn('Could not read existing organizerEmails from settings/system:', err);
+    console.warn('Could not publish app version to settings/system:', err);
+    return false;
   }
-  return [...cafeConfig.organizerEmails];
 }
 
 /**
@@ -109,15 +159,30 @@ export async function createSession(params: {
   const sessionRef = doc(db, 'sessions', params.id);
   await setDoc(sessionRef, sessionData);
 
-  // 2. Set as active in settings while preserving dynamically added organiser emails
-  const effectiveEmails = await getEffectiveOrganizerEmails();
+  // 2. Set as active in settings while preserving dynamically added organiser emails and stamping build version
+  const { effectiveEmails, settings } = await getSystemSettingsWithEmails();
+  const includeVersionStamp = shouldPublishAppVersion(
+    APP_VERSION,
+    APP_BUILD_TIMESTAMP,
+    settings
+  );
   const settingsRef = doc(db, 'settings', 'system');
-  await setDoc(settingsRef, {
-    activeSessionId: params.id,
-    allowRegistration: true,
-    cafeName: cafeConfig.cafeName,
-    organizerEmails: effectiveEmails
-  }, { merge: true });
+  await setDoc(
+    settingsRef,
+    {
+      activeSessionId: params.id,
+      allowRegistration: true,
+      cafeName: cafeConfig.cafeName,
+      organizerEmails: effectiveEmails,
+      ...(includeVersionStamp
+        ? {
+            deployedVersion: APP_VERSION,
+            deployedBuildTimestamp: APP_BUILD_TIMESTAMP,
+          }
+        : {}),
+    },
+    { merge: true }
+  );
 
   return sessionData;
 }

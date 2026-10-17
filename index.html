@@ -2,12 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Primary SVG favicon and 180x180 iOS Home Screen touch icon -->
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- Lock viewport zoom on station tablets to prevent accidental pinch-zoom during keypad entry -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Brand emerald theme color for Android Chrome and PWA title bars -->
     <meta name="theme-color" content="#15803d" />
+    <!-- Enable standalone full-screen PWA display mode across Android and iOS/iPadOS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Sutton Repair Café" />
     <title>Repair Cafe Session Manager</title>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased min-h-screen">
+    <!-- React application root container and Vite ES module entry point -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

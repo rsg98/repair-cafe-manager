@@ -2,6 +2,31 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+
+// Read semantic version from package.json for compile-time version stamping
+const pkgJson = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
+) as { version?: string };
+
+// Resolve short git commit SHA so every deployment has a deterministic build identifier
+function resolveGitShortSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    // Fallback when building outside a git checkout
+    return 'local';
+  }
+}
+
+// Construct full semantic + git build version and numeric epoch timestamp
+const appVersion = `${pkgJson.version ?? '0.1.0'}+${resolveGitShortSha()}`;
+const appBuildTimestamp = Date.now();
 
 // Shared HTTP response headers allowing Firebase Auth Google OAuth popups to check window.closed
 const coopHeaders = {
@@ -9,6 +34,11 @@ const coopHeaders = {
 };
 
 export default defineConfig({
+  // Inject compile-time version and timestamp constants for cross-device version checks
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __APP_BUILD_TIMESTAMP__: JSON.stringify(appBuildTimestamp),
+  },
   // Apply COOP header in local development and preview servers to prevent browser COOP warnings
   server: {
     headers: coopHeaders,
@@ -63,8 +93,16 @@ export default defineConfig({
     react(),
     // Configure Progressive Web App service worker and manifest for offline community hall usage
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['logo.svg'],
+      // Use prompt mode so waiting Service Workers only activate when the station has no unsaved form inputs
+      registerType: 'prompt',
+      // Register explicitly via virtual:pwa-register inside usePwaUpdate hook
+      injectRegister: null,
+      includeAssets: [
+        'logo.svg',
+        'apple-touch-icon.png',
+        'pwa-192x192.png',
+        'pwa-512x512.png',
+      ],
       manifest: {
         name: 'Repair Cafe Session Manager',
         short_name: 'RepairCafe',
@@ -75,15 +113,36 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+          {
             src: 'logo.svg',
             sizes: 'any',
-            type: 'image/svg+xml'
-          }
-        ]
+            type: 'image/svg+xml',
+            purpose: 'any',
+          },
+        ],
       },
-      // Precache all split JS, CSS, HTML, SVG, and Markdown assets for full offline operation
+      // Precache all split JS, CSS, HTML, SVG, PNG, and Markdown assets for full offline operation.
+      // Note: Do NOT set clientsClaim or skipWaiting here so vite-plugin-pwa injects the SKIP_WAITING message listener.
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,md}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,md}'],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -92,16 +151,17 @@ export default defineConfig({
               cacheName: 'google-fonts-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
               },
               cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          }
-        ]
-      }
-    })
-  ]
+                statuses: [0, 200],
+              },
+            },
+          },
+        ],
+      },
+    }),
+  ],
 });
+
 

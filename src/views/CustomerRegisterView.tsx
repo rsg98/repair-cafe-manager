@@ -12,11 +12,15 @@ import { cafeConfig } from '../config/cafe.config';
 import { Session, ItemCategory, PowerType } from '../types';
 import { submitRegistration, generateReferenceToken, getDefaultPowerTypeForCategory } from '../services/repairService';
 import { TermsModal } from '../components/common/TermsModal';
+import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 
+// Props passed to Station 1 (`CustomerRegisterView`) from the top-level router
 interface CustomerRegisterViewProps {
+  // Currently active Repair Café session (or null when no session is open)
   session: Session | null;
 }
 
+// Local form state for each item being registered by the visitor
 interface ItemInputState {
   category: ItemCategory;
   brandModel: string;
@@ -24,12 +28,20 @@ interface ItemInputState {
   powerType: PowerType;
 }
 
+/**
+ * Station 1: Customer Self-Registration View (`/register`).
+ * Allows visitors scanning the entrance QR code (or using an entrance kiosk tablet)
+ * to check in their broken household item, accept House Rules, and receive a 4-character
+ * alphanumeric reference token (`REF-XXXX`) to present at the Front Desk.
+ */
 export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ session }) => {
+  // Customer contact details and T&C agreement state
   const [firstName, setFirstName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
+  // Repair item description entries (defaulting to a single Electrical item)
   const [items, setItems] = useState<ItemInputState[]>([
     {
       category: 'ELECTRICAL',
@@ -39,6 +51,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     }
   ]);
 
+  // Submission status and generated reference token state
   const [submitting, setSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<{
     referenceToken: string;
@@ -46,6 +59,22 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Protect in-progress registration forms and active REF-XXXX confirmation screens from auto-reload.
+  // Once the visitor taps "Register Another Item" (handleReset), isRegisterDirty returns to false
+  // and any waiting PWA update will automatically apply.
+  const isRegisterDirty =
+    firstName.trim().length > 0 ||
+    contactPhone.trim().length > 0 ||
+    agreedToTerms ||
+    isTermsModalOpen ||
+    submitting ||
+    submissionResult !== null ||
+    items.some(
+      (i) => i.brandModel.trim().length > 0 || i.faultDescription.trim().length > 0
+    );
+  useRegisterUnsavedWork(isRegisterDirty, 'customer-register-view');
+
+  // Render an informational placeholder when no monthly session is currently active
   if (!session) {
     return (
       <div className="max-w-2xl mx-auto my-12 p-8 bg-white rounded-2xl shadow-sm border border-slate-200 text-center">
@@ -58,6 +87,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     );
   }
 
+  // Append an additional item slot when multi-item registration is enabled in cafeConfig (capped at 4)
   const handleAddItem = () => {
     if (items.length >= 4) return;
     setItems(prev => [
@@ -71,11 +101,13 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     ]);
   };
 
+  // Remove an item slot by index while ensuring at least one item remains in the form
   const handleRemoveItem = (index: number) => {
     if (items.length <= 1) return;
     setItems(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Update a specific field on an item entry and auto-select the sensible default PowerType when category changes
   const handleItemChange = (index: number, field: keyof ItemInputState, value: string) => {
     setItems(prev => {
       const copy = [...prev];
@@ -90,17 +122,21 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     });
   };
 
+  // Validate visitor inputs, generate a collision-safe reference token, and write the registration to Firestore
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Require visitor first name so Front Desk volunteers can call them up
     if (!firstName.trim()) {
       setError("Please provide your first name.");
       return;
     }
+    // Enforce mandatory acceptance of Repair Café House Rules & disclaimer
     if (!agreedToTerms) {
       setError("Please accept the terms and house rules to proceed.");
       return;
     }
 
+    // Ensure every item has both a brand/model description and a fault description
     for (let i = 0; i < items.length; i++) {
       if (!items[i].brandModel.trim() || !items[i].faultDescription.trim()) {
         setError(`Please fill in the item details and fault for item #${i + 1}.`);
@@ -112,9 +148,11 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     setError(null);
 
     try {
+      // Generate a 4-character alphanumeric reference token (e.g. REF-A38F)
       const referenceToken = generateReferenceToken();
       const registrationId = `REG-${Date.now()}`;
 
+      // Persist public repair item doc(s) and segregated private/customer GDPR subcollection doc
       await submitRegistration({
         sessionId: session.id,
         submission: {
@@ -130,6 +168,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
         }
       });
 
+      // Transition to the confirmation screen displaying the visitor's reference token
       setSubmissionResult({
         referenceToken,
         itemCount: items.length
@@ -143,6 +182,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     }
   };
 
+  // Reset the form and clear the confirmation screen so the next visitor can check in
   const handleReset = () => {
     setSubmissionResult(null);
     setFirstName('');
@@ -158,10 +198,11 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     ]);
   };
 
-  // Confirmation Screen
+  // Confirmation Screen: displayed after successful check-in until the visitor taps "Register Another Item"
   if (submissionResult) {
     return (
       <div className="max-w-xl mx-auto my-8 p-8 bg-white rounded-3xl shadow-lg border border-slate-200 text-center animate-fade-in">
+        {/* Green checkmark badge confirming registration */}
         <div className="h-16 w-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 className="h-10 w-10" />
         </div>
@@ -171,6 +212,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
           Please show this reference token to the Front Desk volunteer to collect your physical card.
         </p>
 
+        {/* High-contrast Reference Token callout box for Front Desk lookup */}
         <div className="my-6 p-6 rounded-2xl bg-emerald-50 border-2 border-dashed border-emerald-500 inline-block w-full max-w-xs shadow-inner">
           <span className="block text-xs font-bold text-emerald-800 uppercase tracking-widest">
             Your Reference Token
@@ -180,6 +222,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
           </span>
         </div>
 
+        {/* Step-by-step arrival instructions for the visitor */}
         <div className="bg-slate-50 rounded-xl p-4 text-left text-xs text-slate-600 space-y-2 mb-6 border border-slate-200">
           <div className="font-semibold text-slate-800 flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-amber-500" />
@@ -190,6 +233,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
           <p>3. They will assign your item a numbered card and guide you to the waiting area or PAT safety station.</p>
         </div>
 
+        {/* Button to clear the confirmation screen and return the kiosk/phone to an idle registration form */}
         <button
           onClick={handleReset}
           className="w-full py-3 px-4 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-900 transition-colors"
@@ -203,6 +247,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
   return (
     <div className="max-w-2xl mx-auto my-6 px-4">
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8">
+        {/* Form Header */}
         <div className="flex items-center gap-3 pb-6 border-b border-slate-100">
           <div className="h-12 w-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
             <ClipboardList className="h-6 w-6" />
@@ -217,6 +262,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
           </div>
         </div>
 
+        {/* Validation or submission error banner */}
         {error && (
           <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-medium">
             {error}
@@ -224,13 +270,14 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
         )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-          {/* Section 1: Customer Details */}
+          {/* Section 1: Customer Contact Details (stored in segregated GDPR subcollection) */}
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
               1. Your Contact Details
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Visitor First Name input */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   First Name <span className="text-rose-500">*</span>
@@ -245,6 +292,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                 />
               </div>
 
+              {/* Optional Mobile Phone input for on-day collection notification */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Mobile Phone <span className="text-slate-400 font-normal">(Optional, on-day collection only)</span>
@@ -260,12 +308,13 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
             </div>
           </div>
 
-          {/* Section 2: Items Details */}
+          {/* Section 2: Broken Household Item Details */}
           <div className="space-y-4 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                 2. Item Details
               </h3>
+              {/* Only render "Add Another Item" when allowed by fair-queue configuration */}
               {cafeConfig.allowMultiItemRegistration && items.length < 4 && (
                 <button
                   type="button"
@@ -277,11 +326,13 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
               )}
             </div>
 
+            {/* Render input card for each item being registered */}
             {items.map((item, index) => (
               <div 
                 key={index} 
                 className="p-5 rounded-2xl bg-slate-50 border border-slate-200 relative space-y-4"
               >
+                {/* Show item number header and remove button when multiple items are present */}
                 {items.length > 1 && (
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                     <span className="text-xs font-bold text-slate-700 uppercase">Item #{index + 1}</span>
@@ -296,6 +347,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Repair Category selector */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Category <span className="text-rose-500">*</span>
@@ -314,6 +366,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                     </select>
                   </div>
 
+                  {/* Power Type selector (determines whether PAT 1 electrical safety testing is required) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Power Type <span className="text-rose-500">*</span>
@@ -332,6 +385,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                   </div>
                 </div>
 
+                {/* Brand & Model text field */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Brand & Model <span className="text-rose-500">*</span>
@@ -346,6 +400,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                   />
                 </div>
 
+                {/* Fault Description textarea */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     What is the fault / what needs fixing? <span className="text-rose-500">*</span>
@@ -387,6 +442,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
             </div>
           </div>
 
+          {/* Primary Submit Button */}
           <button
             type="submit"
             disabled={submitting}
@@ -404,6 +460,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
         </form>
       </div>
 
+      {/* Modal displaying the Repair Café's full Terms & Conditions and House Rules */}
       <TermsModal
         isOpen={isTermsModalOpen}
         onClose={() => setIsTermsModalOpen(false)}

@@ -21,6 +21,7 @@ import {
   deleteVolunteer,
   markVolunteerInducted,
 } from '../../services/volunteerService';
+import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
 
 export interface VolunteerRegisterPanelProps {
   volunteers: Volunteer[];
@@ -71,6 +72,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
   // Emergency contact quick-view modal state
   const [selectedEmergencyVolunteer, setSelectedEmergencyVolunteer] =
     useState<Volunteer | null>(null);
+
+  // Prevent automatic PWA reload while adding/editing a volunteer or viewing emergency details
+  useRegisterUnsavedWork(
+    showFormModal || saving || selectedEmergencyVolunteer !== null,
+    'volunteer-register-panel'
+  );
 
   // Open the modal to register a brand-new volunteer with blank fields
   const handleOpenAddModal = () => {

@@ -17,6 +17,7 @@ import {
   markVolunteerInducted,
   getVolunteerById,
 } from '../../services/volunteerService';
+import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
 
 export interface SessionAttendanceBarProps {
   session: Session;
@@ -49,6 +50,15 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
   const [emergencyVolunteer, setEmergencyVolunteer] =
     useState<Volunteer | null>(null);
   const [loadingEmergency, setLoadingEmergency] = useState(false);
+
+  // Prevent automatic PWA reload while attendance or emergency contact modals are open or loading
+  useRegisterUnsavedWork(
+    showAttendanceModal ||
+      savingAttendance ||
+      emergencyVolunteer !== null ||
+      loadingEmergency,
+    'session-attendance-bar'
+  );
 
   // Derive attending summaries and any uninducted or PAT-qualified attendees
   const attending = session.attendingVolunteers || [];

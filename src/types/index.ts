@@ -1,3 +1,4 @@
+// Supported household item categories for Repair Café triage and impact reporting
 export type ItemCategory =
   | 'ELECTRICAL'
   | 'MECHANICAL'
@@ -6,6 +7,7 @@ export type ItemCategory =
   | 'TOY'
   | 'OTHER';
 
+// Power source classification used to route 240V mains items through mandatory PAT safety gates
 export type PowerType =
   | 'MAINS_240V'
   | 'BATTERY_LOW_VOLTAGE'
@@ -13,6 +15,7 @@ export type PowerType =
   | 'NOT_APPLICABLE'
   | 'OTHER';
 
+// BS 1363 & IET Code of Practice electrical appliance insulation classes
 export type ApplianceClass =
   | 'CLASS_I'
   | 'CLASS_II'
@@ -20,6 +23,7 @@ export type ApplianceClass =
   | 'LEADS_ADAPTER'
   | 'NOT_APPLICABLE';
 
+// Lifecycle state machine statuses for an item progressing through the 5 physical stations
 export type ItemStatus =
   | 'REGISTERED'
   | 'WAITING_PAT1'
@@ -33,16 +37,19 @@ export type ItemStatus =
   | 'TAKEN_HOME'
   | 'UNFIXABLE';
 
+// Pre-repair (PAT 1) safety inspection outcomes determining whether an item may be energized
 export type PatInitialOutcome =
   | 'PASS'
   | 'FAIL_REPAIRABLE_CORD'
   | 'DANGER_DO_NOT_ENERGIZE'
   | 'UNTESTABLE';
 
+// Post-repair (PAT 2) electrical safety certification outcomes before customer collection
 export type PatFinalOutcome =
   | 'PASS'
   | 'FAIL';
 
+// Volunteer fixer diagnostic and repair outcomes logged at Station 4
 export type RepairOutcome =
   | 'FIXED'
   | 'PARTIAL'
@@ -50,12 +57,27 @@ export type RepairOutcome =
   | 'ADVICE_GIVEN'
   | 'TAKEN_HOME';
 
+/**
+ * Global system settings stored at `settings/system` in Cloud Firestore.
+ * Subscribed to by all connected clients via `useActiveSession`.
+ */
 export interface SystemSettings {
+  // Currently active monthly session ID (or null when no session is open)
   activeSessionId: string | null;
+  // Epoch timestamp (ms) when settings/system was last updated
   updatedAt?: number;
+  // Whether public customer self-registration is currently enabled
   allowRegistration?: boolean;
+  // Optional override for the Repair Café display name
   cafeName?: string;
+  // Dynamic list of authorised organiser Google email addresses synced from the Volunteer Register
   organizerEmails?: string[];
+  // Latest deployed application version (e.g. "0.1.0+3a5f2b1") for cross-device update signalling
+  deployedVersion?: string;
+  // Numeric epoch timestamp (ms) of the latest deployed build
+  deployedBuildTimestamp?: number;
+  // Optional minimum required semver string (e.g. "0.1.0") for mandatory upgrades
+  minSupportedVersion?: string;
 }
 
 /**
@@ -79,9 +101,11 @@ export interface Volunteer {
   name: string;
   phone?: string;
   email?: string;
+  // Emergency contact details restricted to Front Desk organiser lookup
   emergencyContactName: string;
   emergencyContactPhone: string;
   emergencyContactRelationship?: string;
+  // Role and safety qualification flags
   isOrganiser: boolean;
   isPatTrained: boolean;
   inducted: boolean;
@@ -105,6 +129,9 @@ export interface PolicyDocument {
   content: string;
 }
 
+/**
+ * Monthly Repair Café event session document stored at `sessions/{sessionId}`.
+ */
 export interface Session {
   id: string; // e.g., "2026-10-seears"
   name: string; // "October 2026 - Seears Park"
@@ -113,12 +140,16 @@ export interface Session {
   volunteerPinHash: string; // SHA-256 hash of daily 4-digit PIN
   cardRangeStart: number;
   cardRangeEnd: number;
+  // Roster of volunteer IDs and non-PII summaries attending today's session
   attendingVolunteerIds?: string[];
   attendingVolunteers?: SessionVolunteerSummary[];
   createdAt: number;
   finalizedAt?: number;
 }
 
+/**
+ * Payload submitted by Station 1 (`CustomerRegisterView`) when checking in a visitor.
+ */
 export interface CustomerRegistrationSubmission {
   registrationId: string;
   referenceToken: string; // e.g., "REF-A38F"
@@ -137,6 +168,9 @@ export interface CustomerRegistrationSubmission {
   }>;
 }
 
+/**
+ * Repair item document stored at `sessions/{sessionId}/repairs/{repairId}`.
+ */
 export interface RepairItem {
   id: string; // Firestore auto-ID
   sessionId: string;
@@ -145,6 +179,7 @@ export interface RepairItem {
   cardNumber?: number | null; // Physical token #1..#N assigned by front desk
   customerName?: string; // Visitor first name for Front Desk display & search (scrubbed on finalize)
 
+  // Core item metadata and landfill diversion weight
   item: {
     category: ItemCategory;
     brandModel: string;
@@ -198,6 +233,10 @@ export interface RepairItem {
   updatedAt?: number;
 }
 
+/**
+ * Segregated UK GDPR visitor PII stored at `sessions/{sessionId}/repairs/{repairId}/private/customer`.
+ * Readable only by authenticated organisers and scrubbed on session finalisation.
+ */
 export interface PrivateCustomerData {
   firstName: string; // Scrubbed to "[REDACTED]" on finalize
   contactPhone?: string; // Scrubbed to "[REDACTED]" on finalize
@@ -208,21 +247,27 @@ export interface PrivateCustomerData {
   redactedAt?: number;
 }
 
+/**
+ * Aggregated anonymous session impact metrics stored at `analytics/{sessionId}`.
+ */
 export interface SessionAnalytics {
   sessionId: string;
   sessionName: string;
   date: string;
   totalItems: number;
+  // Breakdown of repair outcomes across the session
   repairedCount: number;
   partialCount: number;
   unfixableCount: number;
   adviceCount: number;
   takenHomeCount: number;
+  // Volunteer time investment and waste diversion metrics
   totalRepairTimeMinutes: number;
   averageRepairTimeMinutes: number;
   successRatePercent: number;
   totalWeightDivertedKg: number;
   categoryBreakdown: Record<string, number>;
+  // Electrical PAT safety metrics
   mainsItemsCount: number;
   patTestedCount: number;
   patFailureRatePercent: number;

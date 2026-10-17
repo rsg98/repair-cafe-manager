@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -17,13 +17,20 @@ import {
   AlertTriangle,
   Clock
 } from 'lucide-react';
-import { Session, RepairItem, Volunteer } from '../types';
+import { Session, RepairItem, Volunteer, SystemSettings } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useRepairs } from '../hooks/useRepairs';
+import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 import {
   createSession,
-  finalizeSessionClient
+  finalizeSessionClient,
+  publishAppVersionToSystemSettings
 } from '../services/sessionService';
+import {
+  APP_VERSION,
+  APP_BUILD_TIMESTAMP,
+  shouldPublishAppVersion
+} from '../services/pwaUpdateService';
 import {
   assignCardToken,
   completeCollection,
@@ -48,6 +55,7 @@ import { cafeConfig } from '../config/cafe.config';
 
 interface FrontDeskViewProps {
   session: Session | null;
+  systemSettings?: SystemSettings | null;
 }
 
 /** Sub-navigation tabs available on the Front Desk organiser screen. */
@@ -58,7 +66,10 @@ type FrontDeskTab = 'QUEUE' | 'VOLUNTEERS' | 'POLICIES';
  * Provides live repair queue management, volunteer register administration,
  * policy library viewing, and session creation/finalization.
  */
-export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
+export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
+  session,
+  systemSettings = null,
+}) => {
   // Authenticate organiser via Google Sign-In and dynamic system settings
   const { user, isAdmin, signInWithGoogle, signOut } = useAuth();
   const { repairs, loading } = useRepairs(session?.id);
@@ -104,6 +115,32 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({ session }) => {
 
   // Finalize session confirmation state
   const [isFinalizing, setIsFinalizing] = useState(false);
+
+  // Protect active Front Desk modals, searches, and session lifecycle actions from mid-action auto-reload
+  const isFrontDeskDirty =
+    showNewSessionModal ||
+    selectedRepairId !== null ||
+    contactModalData !== null ||
+    showPoliciesModal ||
+    searchTerm.trim().length > 0 ||
+    isFinalizing ||
+    creatingSession;
+  useRegisterUnsavedWork(isFrontDeskDirty, 'frontdesk-view');
+
+  // Automatically publish the current build version to settings/system when an admin opens Front Desk
+  const hasPublishedVersionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    const versionKey = `${APP_VERSION}_${APP_BUILD_TIMESTAMP}`;
+    if (hasPublishedVersionRef.current === versionKey) return;
+    if (shouldPublishAppVersion(APP_VERSION, APP_BUILD_TIMESTAMP, systemSettings)) {
+      hasPublishedVersionRef.current = versionKey;
+      void publishAppVersionToSystemSettings().catch(() => {
+        // Reset ref if offline or transient error so next update can retry
+        hasPublishedVersionRef.current = null;
+      });
+    }
+  }, [isAdmin, systemSettings]);
 
   // Current timestamp for queue wait-time display, refreshed on a 5-minute basis
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());

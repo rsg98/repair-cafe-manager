@@ -11,6 +11,11 @@ import { db } from './firebase';
 import { Volunteer, SessionVolunteerSummary, Session } from '../types';
 import { cafeConfig } from '../config/cafe.config';
 import { removeUndefined } from './repairService';
+import {
+  APP_BUILD_TIMESTAMP,
+  APP_VERSION,
+  shouldPublishAppVersion,
+} from './pwaUpdateService';
 
 /**
  * Input payload for creating or validating a Volunteer Register entry.
@@ -221,13 +226,24 @@ export async function syncOrganiserEmailsToSystemSettings(
   const volunteers = providedVolunteers ?? (await listVolunteers());
   const mergedEmails = mergeOrganiserEmails(cafeConfig.organizerEmails, volunteers);
 
-  // Persist merged organiser email list to settings/system with merge: true
+  // Persist merged organiser email list (and production build version metadata) to settings/system with merge: true
   const settingsRef = doc(db, 'settings', 'system');
+  const includeVersionStamp = shouldPublishAppVersion(
+    APP_VERSION,
+    APP_BUILD_TIMESTAMP,
+    null
+  );
   await setDoc(
     settingsRef,
     {
       organizerEmails: mergedEmails,
       updatedAt: Date.now(),
+      ...(includeVersionStamp
+        ? {
+            deployedVersion: APP_VERSION,
+            deployedBuildTimestamp: APP_BUILD_TIMESTAMP,
+          }
+        : {}),
     },
     { merge: true }
   );
