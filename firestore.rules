@@ -41,6 +41,41 @@ service cloud.firestore {
           // Write restricted to admin or Cloud Functions
           allow update, delete: if isAdmin();
         }
+
+        // Compressed Item Photos Subcollection (Issue #4)
+        // Enforces strict field whitelist and 70KB dataUrl limit to protect the 1 GiB Firebase Free Tier
+        match /photos/{photoId} {
+          allow read: if true;
+          // Volunteers and admins may create/update compressed item photos within strict bounds
+          allow create, update: if isVolunteer()
+            // Enforce required and allowed schema keys
+            && request.resource.data.keys().hasAll([
+              'dataUrl', 'mimeType', 'width', 'height', 'sizeBytes', 'capturedAt', 'uploadedBy'
+            ])
+            && request.resource.data.keys().hasOnly([
+              'id', 'dataUrl', 'mimeType', 'width', 'height', 'sizeBytes', 'capturedAt', 'uploadedBy'
+            ])
+            // Enforce WebP/JPEG MIME type and <= 70,000 char base64 size ceiling
+            && request.resource.data.dataUrl is string
+            && request.resource.data.dataUrl.size() <= 70000
+            && request.resource.data.mimeType in ['image/webp', 'image/jpeg']
+            // Enforce scaled pixel dimensions between 1px and 800px
+            && request.resource.data.width is int
+            && request.resource.data.width > 0
+            && request.resource.data.width <= 800
+            && request.resource.data.height is int
+            && request.resource.data.height > 0
+            && request.resource.data.height <= 800
+            // Enforce metadata bounds on sizeBytes, timestamp, and volunteer name
+            && request.resource.data.sizeBytes is int
+            && request.resource.data.sizeBytes > 0
+            && request.resource.data.sizeBytes <= 70000
+            && request.resource.data.capturedAt is int
+            && request.resource.data.uploadedBy is string
+            && request.resource.data.uploadedBy.size() <= 200;
+          // Allow volunteers or organisers to delete photos
+          allow delete: if isVolunteer() || isAdmin();
+        }
       }
     }
 

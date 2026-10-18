@@ -1,5 +1,12 @@
+/**
+ * @file tests/repairService.test.ts
+ * @description Unit test suite for pure helper functions, state machine transitions,
+ * card token conflict detection, wait time formatting, take-home confirmation gating,
+ * and photo metadata sanitization in `src/services/repairService.ts`.
+ */
+
 import { describe, it, expect } from 'vitest';
-import { SessionAnalytics, ItemStatus, RepairItem } from '../src/types';
+import { SessionAnalytics, ItemStatus, RepairItem, RepairOutcome } from '../src/types';
 import { exportAnalyticsToCsv } from '../src/services/analyticsService';
 import { 
   removeUndefined, 
@@ -12,7 +19,9 @@ import {
   getRegistrationTimestamp,
   sortRepairsByRegistration,
   getWaitTimeMinutes,
-  formatWaitTime
+  formatWaitTime,
+  requiresTakeHomeConfirmation,
+  calculateNextStatusOnRepair
 } from '../src/services/repairService';
 
 describe('Analytics and CSV Export Utilities', () => {
@@ -643,6 +652,67 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       expect(formatWaitTime(null)).toBe('—');
     });
   });
+
+  describe('Fixer Take-Home Confirmation & Photo Metadata (Issue #4)', () => {
+    it('requires confirmation modal ONLY when outcome is TAKEN_HOME and routes both mains and non-mains items to TAKEN_HOME', () => {
+      // Enumerate all standard in-hall repair outcomes that should bypass the take-home confirmation modal.
+      const nonTakeHomeOutcomes: RepairOutcome[] = [
+        'FIXED',
+        'PARTIAL',
+        'UNFIXABLE',
+        'ADVICE_GIVEN',
+      ];
+
+      // Verify that selecting TAKEN_HOME triggers the confirmation modal gate while all other outcomes do not.
+      expect(requiresTakeHomeConfirmation('TAKEN_HOME')).toBe(true);
+      for (const outcome of nonTakeHomeOutcomes) {
+        expect(requiresTakeHomeConfirmation(outcome)).toBe(false);
+      }
+
+      // Confirm that TAKEN_HOME transitions directly to TAKEN_HOME terminal custody status regardless of mains vs battery power.
+      expect(calculateNextStatusOnRepair('TAKEN_HOME', true)).toBe('TAKEN_HOME');
+      expect(calculateNextStatusOnRepair('TAKEN_HOME', false)).toBe('TAKEN_HOME');
+    });
+
+    it('preserves photoCount: 0 and photoCount: 2 while stripping undefined photoCount', () => {
+      // Verify that an explicit zero photo count is preserved so Firestore reflects that all photos were deleted or none were attached.
+      const zeroPhotos = removeUndefined({
+        fixerName: 'Alice',
+        outcome: 'FIXED',
+        photoCount: 0,
+      });
+      expect(zeroPhotos).toEqual({
+        fixerName: 'Alice',
+        outcome: 'FIXED',
+        photoCount: 0,
+      });
+
+      // Verify that a positive photoCount (such as the 2-photo maximum) survives undefined key stripping intact.
+      const twoPhotos = removeUndefined({
+        fixerName: 'Alice',
+        outcome: 'FIXED',
+        photoCount: 2,
+      });
+      expect(twoPhotos).toEqual({
+        fixerName: 'Alice',
+        outcome: 'FIXED',
+        photoCount: 2,
+      });
+
+      // Verify that an omitted/undefined photoCount is stripped cleanly so Firestore never throws an unsupported undefined value error.
+      const undefinedPhotos = removeUndefined({
+        fixerName: 'Alice',
+        outcome: 'FIXED',
+        photoCount: undefined,
+      });
+      expect(undefinedPhotos).toEqual({
+        fixerName: 'Alice',
+        outcome: 'FIXED',
+      });
+      expect('photoCount' in undefinedPhotos).toBe(false);
+    });
+  });
 });
+
 
 

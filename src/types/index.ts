@@ -1,4 +1,17 @@
-// Supported household item categories for Repair Café triage and impact reporting
+/**
+ * @file src/types/index.ts
+ *
+ * Core TypeScript domain models, state machine enums, and Cloud Firestore document
+ * schemas for the Repair Café Session Management System.
+ *
+ * Includes single-tenant configuration types, dual-phase PAT electrical safety records,
+ * volunteer fixer diagnostics, compressed item photo subcollection records (Issue #4),
+ * segregated UK GDPR customer PII, and aggregated impact analytics.
+ */
+
+/**
+ * Supported household item categories for Repair Café triage and impact reporting.
+ */
 export type ItemCategory =
   | 'ELECTRICAL'
   | 'MECHANICAL'
@@ -7,7 +20,9 @@ export type ItemCategory =
   | 'TOY'
   | 'OTHER';
 
-// Power source classification used to route 240V mains items through mandatory PAT safety gates
+/**
+ * Power source classification used to route 240V mains items through mandatory PAT safety gates.
+ */
 export type PowerType =
   | 'MAINS_240V'
   | 'BATTERY_LOW_VOLTAGE'
@@ -15,7 +30,9 @@ export type PowerType =
   | 'NOT_APPLICABLE'
   | 'OTHER';
 
-// BS 1363 & IET Code of Practice electrical appliance insulation classes
+/**
+ * BS 1363 & IET Code of Practice electrical appliance insulation classes.
+ */
 export type ApplianceClass =
   | 'CLASS_I'
   | 'CLASS_II'
@@ -23,7 +40,9 @@ export type ApplianceClass =
   | 'LEADS_ADAPTER'
   | 'NOT_APPLICABLE';
 
-// Lifecycle state machine statuses for an item progressing through the 5 physical stations
+/**
+ * Lifecycle state machine statuses for an item progressing through the 5 physical stations.
+ */
 export type ItemStatus =
   | 'REGISTERED'
   | 'WAITING_PAT1'
@@ -37,19 +56,25 @@ export type ItemStatus =
   | 'TAKEN_HOME'
   | 'UNFIXABLE';
 
-// Pre-repair (PAT 1) safety inspection outcomes determining whether an item may be energized
+/**
+ * Pre-repair (PAT 1) safety inspection outcomes determining whether an item may be energized.
+ */
 export type PatInitialOutcome =
   | 'PASS'
   | 'FAIL_REPAIRABLE_CORD'
   | 'DANGER_DO_NOT_ENERGIZE'
   | 'UNTESTABLE';
 
-// Post-repair (PAT 2) electrical safety certification outcomes before customer collection
+/**
+ * Post-repair (PAT 2) electrical safety certification outcomes before customer collection.
+ */
 export type PatFinalOutcome =
   | 'PASS'
   | 'FAIL';
 
-// Volunteer fixer diagnostic and repair outcomes logged at Station 4
+/**
+ * Volunteer fixer diagnostic and repair outcomes logged at Station 4.
+ */
 export type RepairOutcome =
   | 'FIXED'
   | 'PARTIAL'
@@ -87,6 +112,7 @@ export interface SystemSettings {
 export interface SessionVolunteerSummary {
   id: string;
   name: string;
+  // Role and safety induction flags visible to station dropdowns
   isOrganiser: boolean;
   isPatTrained: boolean;
   inducted: boolean;
@@ -111,6 +137,7 @@ export interface Volunteer {
   inducted: boolean;
   inductedAt?: number;
   inductedBy?: string;
+  // Audit timestamps for register maintenance
   createdAt: number;
   updatedAt: number;
 }
@@ -122,6 +149,7 @@ export interface PolicyDocument {
   id: string;
   title: string;
   filePath: string;
+  // Optional frontmatter metadata parsed from public/*.md
   version?: string;
   lastUpdated?: string;
   category?: string;
@@ -137,7 +165,8 @@ export interface Session {
   name: string; // "October 2026 - Seears Park"
   date: string; // ISO 8601 YYYY-MM-DD
   status: 'ACTIVE' | 'FINALIZED';
-  volunteerPinHash: string; // SHA-256 hash of daily 4-digit PIN
+  // SHA-256 hash of daily 4-digit volunteer PIN and physical card range
+  volunteerPinHash: string;
   cardRangeStart: number;
   cardRangeEnd: number;
   // Roster of volunteer IDs and non-PII summaries attending today's session
@@ -153,12 +182,14 @@ export interface Session {
 export interface CustomerRegistrationSubmission {
   registrationId: string;
   referenceToken: string; // e.g., "REF-A38F"
+  // Visitor identity and consent fields routed to the restricted private/customer doc
   customer: {
     firstName: string;
     contactPhone?: string;
     agreedToTerms: boolean;
     termsVersion: string;
   };
+  // Broken household item(s) declared during registration
   items: Array<{
     category: ItemCategory;
     brandModel: string;
@@ -172,7 +203,7 @@ export interface CustomerRegistrationSubmission {
  * Repair item document stored at `sessions/{sessionId}/repairs/{repairId}`.
  */
 export interface RepairItem {
-  id: string; // Firestore auto-ID
+  id: string; // Firestore auto-ID or deterministic REG-<ts>_1 ID
   sessionId: string;
   registrationId: string;
   referenceToken: string;
@@ -198,6 +229,7 @@ export interface RepairItem {
     instrumentSerial: string;
     visualPass: boolean;
     fuseRatingAmps: 3 | 5 | 13 | 'OTHER';
+    // Electrical insulation and earth continuity measurements
     testVoltageVolts: 250 | 500;
     earthContinuityOhms?: number; // Required for Class I
     insulationResistanceMOhms: number; // Required for Class I & II
@@ -212,7 +244,9 @@ export interface RepairItem {
     diagnosis?: string;
     repairNotes?: string;
     partsUsed?: string;
+    // Outcome and count of compressed photos stored in repairs/{repairId}/photos
     outcome: RepairOutcome;
+    photoCount?: number;
     repairedAt?: number;
   };
 
@@ -223,6 +257,7 @@ export interface RepairItem {
     instrumentSerial: string;
     visualPass: boolean;
     fuseRatingAmps: 3 | 5 | 13 | 'OTHER';
+    // Post-repair earth continuity, insulation resistance, and certification outcome
     earthContinuityOhms?: number;
     insulationResistanceMOhms: number;
     outcome: PatFinalOutcome;
@@ -234,6 +269,33 @@ export interface RepairItem {
 }
 
 /**
+ * Maximum number of compressed item photos allowed per repair item (Issue #4).
+ */
+export const MAX_PHOTOS_PER_REPAIR = 2;
+
+/**
+ * Maximum base64 data URL character length per photo (~52 KB raw binary, ~68 KB base64 string).
+ * Enforced both client-side and in firestore.rules to protect the 1 GiB Firebase Free Tier.
+ */
+export const MAX_PHOTO_DATA_URL_LENGTH = 70_000;
+
+/**
+ * Compressed, EXIF-stripped item photo stored at
+ * `sessions/{sessionId}/repairs/{repairId}/photos/{photoId}` (Issue #4).
+ */
+export interface RepairPhoto {
+  id: string;
+  dataUrl: string; // Compressed data:image/webp;base64,... or data:image/jpeg;base64,...
+  mimeType: 'image/webp' | 'image/jpeg';
+  // Scaled dimensions and character byte budget
+  width: number; // Scaled pixel width (1..800)
+  height: number; // Scaled pixel height (1..800)
+  sizeBytes: number; // Character length of dataUrl (<= 70,000)
+  capturedAt: number; // Unix epoch ms
+  uploadedBy: string; // Volunteer fixer name at time of capture (<= 200 chars)
+}
+
+/**
  * Segregated UK GDPR visitor PII stored at `sessions/{sessionId}/repairs/{repairId}/private/customer`.
  * Readable only by authenticated organisers and scrubbed on session finalisation.
  */
@@ -242,6 +304,7 @@ export interface PrivateCustomerData {
   contactPhone?: string; // Scrubbed to "[REDACTED]" on finalize
   agreedToTerms: boolean;
   termsVersion: string;
+  // Registration and GDPR redaction audit timestamps
   submittedAt?: number;
   registeredAt?: number;
   redactedAt?: number;
