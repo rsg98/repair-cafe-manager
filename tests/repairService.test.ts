@@ -865,7 +865,7 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
           status: 'READY_FOR_COLLECTION',
           createdAt: '2026-10-18T10:03:00.000Z' as unknown as number,
           updatedAt: '2026-10-18T10:50:00.000Z' as unknown as number,
-          item: { category: 'TEXTILE', brandModel: 'Coat', faultDescription: 'Zipper', powerType: 'NOT_APPLICABLE' },
+          item: { category: 'TEXTILES', brandModel: 'Coat', faultDescription: 'Zipper', powerType: 'NOT_APPLICABLE' },
         },
         // Late taken-home item (terminal) registered at 10:30
         {
