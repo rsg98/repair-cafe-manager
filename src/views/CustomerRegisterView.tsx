@@ -10,7 +10,12 @@ import {
 } from 'lucide-react';
 import { cafeConfig } from '../config/cafe.config';
 import { Session, ItemCategory, PowerType } from '../types';
-import { submitRegistration, generateReferenceToken, getDefaultPowerTypeForCategory } from '../services/repairService';
+import {
+  submitRegistration,
+  generateReferenceToken,
+  getDefaultPowerTypeForCategory,
+  POWER_TYPE_OPTIONS
+} from '../services/repairService';
 import { TermsModal } from '../components/common/TermsModal';
 import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 
@@ -376,11 +381,12 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                       onChange={(e) => handleItemChange(index, 'powerType', e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
                     >
-                      <option value="MAINS_240V">Mains 240V Plug-in (Requires PAT Test)</option>
-                      <option value="BATTERY_LOW_VOLTAGE">Battery / USB / Low Voltage DC</option>
-                      <option value="NOT_APPLICABLE">Not Applicable (Non-powered)</option>
-                      <option value="MECHANICAL">Mechanical</option>
-                      <option value="OTHER">Other</option>
+                      {/* Render shared power type options so registration and PAT station labels stay in sync */}
+                      {POWER_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

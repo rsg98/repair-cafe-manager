@@ -18,6 +18,7 @@ import {
   setDoc, 
   updateDoc, 
   writeBatch,
+  deleteField,
   query, 
   where
 } from 'firebase/firestore';
@@ -33,6 +34,7 @@ import {
   PatFinalOutcome, 
   RepairOutcome,
   PowerType,
+  ApplianceClass,
   ItemCategory
 } from '../types';
 import { cafeConfig } from '../config/cafe.config';
@@ -116,6 +118,67 @@ export function getDefaultPowerTypeForCategory(category?: ItemCategory | string 
     default:
       return 'MAINS_240V';
   }
+}
+
+/**
+ * Canonical human-readable Power Type options shared between Customer Registration (`/register`)
+ * and the PAT Electrical Safety Station (`/pat`) (Issue #23).
+ */
+export const POWER_TYPE_OPTIONS: ReadonlyArray<{ value: PowerType; label: string }> = [
+  // Mains 240V appliances require BS 1363 pre-repair (PAT 1) and post-repair (PAT 2) testing
+  { value: 'MAINS_240V', label: 'Mains 240V Plug-in (Requires PAT Test)' },
+  // Non-mains power categories bypass 240V electrical testing
+  { value: 'BATTERY_LOW_VOLTAGE', label: 'Battery / USB / Low Voltage DC' },
+  { value: 'NOT_APPLICABLE', label: 'Not Applicable (Non-powered)' },
+  { value: 'MECHANICAL', label: 'Mechanical' },
+  { value: 'OTHER', label: 'Other' }
+];
+
+/**
+ * Returns the human-readable label for a given `PowerType` code (Issue #23).
+ */
+export function getPowerTypeLabel(powerType: PowerType): string {
+  // Match against the shared POWER_TYPE_OPTIONS table or fall back to the raw enum string
+  const found = POWER_TYPE_OPTIONS.find((opt) => opt.value === powerType);
+  return found ? found.label : powerType;
+}
+
+/**
+ * Determines whether a repair item looked up at the PAT Station (`/pat`) is in the
+ * post-repair PAT 2 certification stage (including reverse-override items that were
+ * already repaired as non-mains and are now being upgraded to `MAINS_240V`) (Issue #23).
+ */
+export function isPat2StageForItem(
+  item: Pick<RepairItem, 'status' | 'repair' | 'patFinal'> | null | undefined
+): boolean {
+  if (!item) return false;
+  // Check whether a volunteer fixer has already recorded a FIXED or PARTIAL repair outcome
+  const hasCompletedRepair =
+    item.repair?.outcome === 'FIXED' ||
+    item.repair?.outcome === 'PARTIAL';
+  // Treat WAITING_PAT2, IN_PAT2, items with patFinal, or repaired READY_FOR_COLLECTION items as PAT 2
+  return (
+    item.status === 'WAITING_PAT2' ||
+    item.status === 'IN_PAT2' ||
+    Boolean(item.patFinal) ||
+    (hasCompletedRepair && item.status === 'READY_FOR_COLLECTION')
+  );
+}
+
+/**
+ * Calculates the next item status when a PAT tester overrides an item's `PowerType`
+ * at the PAT Electrical Safety Station (Issue #23).
+ */
+export function calculateNextStatusOnPowerTypeOverride(
+  newPowerType: PowerType,
+  isPat2Stage: boolean
+): ItemStatus {
+  // Upgrading to Mains 240V places the item into the appropriate PAT stage queue
+  if (newPowerType === 'MAINS_240V') {
+    return isPat2Stage ? 'WAITING_PAT2' : 'WAITING_PAT1';
+  }
+  // Downgrading to non-mains bypasses PAT 1 -> WAITING_REPAIR or PAT 2 -> READY_FOR_COLLECTION
+  return isPat2Stage ? 'READY_FOR_COLLECTION' : 'WAITING_REPAIR';
 }
 
 /**
@@ -629,6 +692,133 @@ export async function deleteRepairPhoto(
 }
 
 /**
+ * Awaits a Firestore write Promise (`updateDoc`) while ensuring offline community venue
+ * resilience: when `navigator.onLine === false`, Firestore queues the mutation into IndexedDB
+ * (`persistentLocalCache`) immediately, so we race against a short timeout to avoid hanging `/pat`.
+ */
+async function commitPatFirestoreWrite(
+  writePromise: Promise<void>,
+  timeoutMs: number = 1500
+): Promise<void> {
+  // Online path: await server acknowledgement normally
+  const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  if (!isOffline) {
+    await writePromise;
+    return;
+  }
+
+  // Offline path: resolve once local IndexedDB queueing completes without hanging the PAT UI
+  await Promise.race([
+    writePromise,
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))
+  ]);
+}
+
+/**
+ * Pure helper that builds the Firestore update payload when a PAT tester overrides
+ * an item's `PowerType` to a non-mains category at the PAT Station (Issue #23).
+ */
+export function buildPowerTypeOverrideUpdate(params: {
+  newPowerType: Exclude<PowerType, 'MAINS_240V'>;
+  isPat2Stage: boolean;
+  now?: number;
+}): { nextStatus: ItemStatus; updatePayload: Record<string, unknown> } {
+  // Reject MAINS_240V here because mains items must complete a PAT inspection via submitPatInitial/submitPatFinal
+  if ((params.newPowerType as PowerType) === 'MAINS_240V') {
+    throw new Error('Mains 240V items must complete a PAT inspection via submitPatInitial or submitPatFinal.');
+  }
+
+  // Compute target status (WAITING_REPAIR for PAT 1, READY_FOR_COLLECTION for PAT 2)
+  const timestamp = params.now ?? Date.now();
+  const nextStatus = calculateNextStatusOnPowerTypeOverride(params.newPowerType, params.isPat2Stage);
+
+  // Assemble the sanitised update payload resetting applianceClass to NOT_APPLICABLE
+  const updatePayload: Record<string, unknown> = {
+    status: nextStatus,
+    'item.powerType': params.newPowerType,
+    'item.applianceClass': 'NOT_APPLICABLE',
+    updatedAt: timestamp
+  };
+
+  return { nextStatus, updatePayload };
+}
+
+/**
+ * Overrides a misclassified item's `PowerType` to a non-mains category at the PAT Station
+ * and routes it directly to `WAITING_REPAIR` (PAT 1) or `READY_FOR_COLLECTION` (PAT 2)
+ * without fabricating electrical PAT test records (Issue #23).
+ */
+export async function overrideItemPowerTypeFromPat(params: {
+  sessionId: string;
+  repairId: string;
+  newPowerType: Exclude<PowerType, 'MAINS_240V'>;
+  isPat2Stage: boolean;
+}): Promise<ItemStatus> {
+  // Build the base status and powerType update payload
+  const { nextStatus, updatePayload } = buildPowerTypeOverrideUpdate({
+    newPowerType: params.newPowerType,
+    isPat2Stage: params.isPat2Stage
+  });
+
+  // Remove any accidental PAT record for the current stage so PAT analytics are not polluted
+  if (params.isPat2Stage) {
+    updatePayload.patFinal = deleteField();
+  } else {
+    updatePayload.patInitial = deleteField();
+  }
+
+  // Commit the power type override and status transition with offline-safe fallback
+  const repairRef = doc(db, 'sessions', params.sessionId, 'repairs', params.repairId);
+  await commitPatFirestoreWrite(updateDoc(repairRef, updatePayload));
+  return nextStatus;
+}
+
+/**
+ * Pure helper that builds the Firestore update payload for Initial PAT Safety Inspection (PAT 1),
+ * including atomic `item.powerType` and `item.applianceClass` persistence (Issues #23 & #27).
+ */
+export function buildPatInitialUpdate(params: {
+  testerName: string;
+  instrumentSerial: string;
+  visualPass: boolean;
+  fuseRatingAmps: 3 | 5 | 13 | 'OTHER';
+  testVoltageVolts: 250 | 500;
+  earthContinuityOhms?: number;
+  insulationResistanceMOhms: number;
+  outcome: PatInitialOutcome;
+  cautionNotes?: string;
+  powerType?: PowerType;
+  applianceClass?: ApplianceClass;
+  now?: number;
+}): { nextStatus: ItemStatus; updatePayload: Record<string, unknown> } {
+  // Separate item-level fields from the patInitial sub-object fields
+  const { powerType, applianceClass, now, ...patData } = params;
+  const timestamp = now ?? Date.now();
+  const nextStatus = calculateNextStatusOnPatInitial(params.outcome);
+
+  // Assemble the atomic repair document update payload
+  const rawPayload: Record<string, unknown> = {
+    status: nextStatus,
+    'item.powerType': powerType ?? 'MAINS_240V',
+    patInitial: {
+      ...patData,
+      testedAt: timestamp
+    },
+    updatedAt: timestamp
+  };
+
+  // Persist applianceClass on the item if specified by the PAT tester
+  if (applianceClass !== undefined) {
+    rawPayload['item.applianceClass'] = applianceClass;
+  }
+
+  return {
+    nextStatus,
+    updatePayload: removeUndefined(rawPayload)
+  };
+}
+
+/**
  * Submits Initial PAT Safety Inspection (PAT 1) and transitions the item to
  * either `WAITING_REPAIR` or `UNFIXABLE` (if `DANGER_DO_NOT_ENERGIZE`).
  */
@@ -644,22 +834,16 @@ export async function submitPatInitial(params: {
   insulationResistanceMOhms: number;
   outcome: PatInitialOutcome;
   cautionNotes?: string;
+  powerType?: PowerType;
+  applianceClass?: ApplianceClass;
 }): Promise<ItemStatus> {
-  // Compute next lifecycle state from PAT 1 outcome
-  const { sessionId, repairId, ...patData } = params;
-  const now = Date.now();
-  const nextStatus = calculateNextStatusOnPatInitial(params.outcome);
+  // Extract document identifiers and build the sanitised PAT 1 update payload
+  const { sessionId, repairId, ...patParams } = params;
+  const { nextStatus, updatePayload } = buildPatInitialUpdate(patParams);
 
-  // Persist sanitised PAT 1 record and updated status on the repair document
+  // Persist sanitised PAT 1 record, powerType, applianceClass, and updated status with offline fallback
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
-  await updateDoc(repairRef, removeUndefined({
-    status: nextStatus,
-    patInitial: {
-      ...patData,
-      testedAt: now
-    },
-    updatedAt: now
-  }));
+  await commitPatFirestoreWrite(updateDoc(repairRef, updatePayload));
 
   return nextStatus;
 }
@@ -766,6 +950,52 @@ export async function submitRepairRecord(params: {
 }
 
 /**
+ * Pure helper that builds the Firestore update payload for Final Post-Repair PAT Safety
+ * Certification (PAT 2), preserving `patInitial` untouched so PAT 1 and PAT 2 can record
+ * independent operators (`testerName`) and instruments (`instrumentSerial`) (Issues #23 & #27).
+ */
+export function buildPatFinalUpdate(params: {
+  testerName: string;
+  instrumentSerial: string;
+  visualPass: boolean;
+  fuseRatingAmps: 3 | 5 | 13 | 'OTHER';
+  testVoltageVolts?: 250 | 500;
+  earthContinuityOhms?: number;
+  insulationResistanceMOhms: number;
+  outcome: PatFinalOutcome;
+  certificateNotes?: string;
+  powerType?: PowerType;
+  applianceClass?: ApplianceClass;
+  now?: number;
+}): { nextStatus: ItemStatus; updatePayload: Record<string, unknown> } {
+  // Separate item-level fields from the patFinal sub-object fields
+  const { powerType, applianceClass, now, ...patData } = params;
+  const timestamp = now ?? Date.now();
+  const nextStatus = calculateNextStatusOnPatFinal(params.outcome);
+
+  // Assemble the atomic repair document update payload without modifying patInitial
+  const rawPayload: Record<string, unknown> = {
+    status: nextStatus,
+    'item.powerType': powerType ?? 'MAINS_240V',
+    patFinal: {
+      ...patData,
+      testedAt: timestamp
+    },
+    updatedAt: timestamp
+  };
+
+  // Persist applianceClass on the item if specified by the PAT tester
+  if (applianceClass !== undefined) {
+    rawPayload['item.applianceClass'] = applianceClass;
+  }
+
+  return {
+    nextStatus,
+    updatePayload: removeUndefined(rawPayload)
+  };
+}
+
+/**
  * Submits Final Post-Repair PAT Safety Certification (PAT 2) and routes passing
  * items to `READY_FOR_COLLECTION` or failing items back to `WAITING_REPAIR`.
  */
@@ -776,26 +1006,21 @@ export async function submitPatFinal(params: {
   instrumentSerial: string;
   visualPass: boolean;
   fuseRatingAmps: 3 | 5 | 13 | 'OTHER';
+  testVoltageVolts?: 250 | 500;
   earthContinuityOhms?: number;
   insulationResistanceMOhms: number;
   outcome: PatFinalOutcome;
   certificateNotes?: string;
+  powerType?: PowerType;
+  applianceClass?: ApplianceClass;
 }): Promise<ItemStatus> {
-  // Compute next lifecycle state from PAT 2 certification outcome
-  const { sessionId, repairId, ...patData } = params;
-  const now = Date.now();
-  const nextStatus = calculateNextStatusOnPatFinal(params.outcome);
+  // Extract document identifiers and build the sanitised PAT 2 update payload
+  const { sessionId, repairId, ...patParams } = params;
+  const { nextStatus, updatePayload } = buildPatFinalUpdate(patParams);
 
-  // Persist sanitised PAT 2 certification record on the repair document
+  // Persist sanitised PAT 2 certification record on the repair document with offline fallback
   const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairId);
-  await updateDoc(repairRef, removeUndefined({
-    status: nextStatus,
-    patFinal: {
-      ...patData,
-      testedAt: now
-    },
-    updatedAt: now
-  }));
+  await commitPatFirestoreWrite(updateDoc(repairRef, updatePayload));
 
   return nextStatus;
 }

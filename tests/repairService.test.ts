@@ -15,6 +15,11 @@ import {
   isTerminalStatus, 
   canAssignCard,
   getDefaultPowerTypeForCategory,
+  POWER_TYPE_OPTIONS,
+  getPowerTypeLabel,
+  buildPowerTypeOverrideUpdate,
+  buildPatInitialUpdate,
+  buildPatFinalUpdate,
   WAIT_TIME_REFRESH_INTERVAL_MS,
   getRegistrationTimestamp,
   sortRepairsByRegistration,
@@ -808,61 +813,72 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
 
   describe('Terminal Items Moved Below Active Items (Issue #26)', () => {
     it('places terminal items (COMPLETED, UNFIXABLE, TAKEN_HOME) below active items while preserving FIFO registration order within each group', () => {
+      // Mixed queue containing both active and terminal repair items across different timestamps
       const mixedQueue: RepairItem[] = [
+        // Early completed item (terminal) registered at 10:00
         {
           id: 'reg-1700000000000-completed-early',
           sessionId: 's1',
           registrationId: 'reg-1700000000000',
           referenceToken: 'REF-CMP1',
+          // Card #1 already checked out
           cardNumber: 1,
           status: 'COMPLETED',
-          createdAt: '2026-10-18T10:00:00.000Z',
-          updatedAt: '2026-10-18T11:00:00.000Z',
+          createdAt: '2026-10-18T10:00:00.000Z' as unknown as number,
+          updatedAt: '2026-10-18T11:00:00.000Z' as unknown as number,
           item: { category: 'ELECTRICAL', brandModel: 'Toaster', faultDescription: 'Fuse', powerType: 'MAINS_240V' },
         },
+        // Second active item registered at 10:20
         {
           id: 'reg-1700000600000-active-second',
           sessionId: 's1',
           registrationId: 'reg-1700000600000',
           referenceToken: 'REF-ACT2',
+          // Card #4 waiting for repair
           cardNumber: 4,
           status: 'WAITING_REPAIR',
-          createdAt: '2026-10-18T10:20:00.000Z',
-          updatedAt: '2026-10-18T10:25:00.000Z',
-          item: { category: 'MECHANICAL', brandModel: 'Clock', faultDescription: 'Hands stuck', powerType: 'NONE' },
+          createdAt: '2026-10-18T10:20:00.000Z' as unknown as number,
+          updatedAt: '2026-10-18T10:25:00.000Z' as unknown as number,
+          item: { category: 'MECHANICAL', brandModel: 'Clock', faultDescription: 'Hands stuck', powerType: 'MECHANICAL' },
         },
+        // Mid-session unfixable item (terminal) registered at 10:05
         {
           id: 'reg-1700000300000-unfixable-mid',
           sessionId: 's1',
           registrationId: 'reg-1700000300000',
           referenceToken: 'REF-UNF1',
+          // Card #2 marked unfixable
           cardNumber: 2,
           status: 'UNFIXABLE',
-          createdAt: '2026-10-18T10:05:00.000Z',
-          updatedAt: '2026-10-18T10:40:00.000Z',
+          createdAt: '2026-10-18T10:05:00.000Z' as unknown as number,
+          updatedAt: '2026-10-18T10:40:00.000Z' as unknown as number,
           item: { category: 'ELECTRICAL', brandModel: 'Microwave', faultDescription: 'Dead', powerType: 'MAINS_240V' },
         },
+        // First active item registered at 10:03
         {
           id: 'reg-1700000180000-active-first',
           sessionId: 's1',
           registrationId: 'reg-1700000180000',
           referenceToken: 'REF-ACT1',
+          // Card #3 ready for customer collection (still active on board)
           cardNumber: 3,
           status: 'READY_FOR_COLLECTION',
-          createdAt: '2026-10-18T10:03:00.000Z',
-          updatedAt: '2026-10-18T10:50:00.000Z',
-          item: { category: 'TEXTILE', brandModel: 'Coat', faultDescription: 'Zipper', powerType: 'NONE' },
+          createdAt: '2026-10-18T10:03:00.000Z' as unknown as number,
+          updatedAt: '2026-10-18T10:50:00.000Z' as unknown as number,
+          item: { category: 'TEXTILE', brandModel: 'Coat', faultDescription: 'Zipper', powerType: 'NOT_APPLICABLE' },
         },
+        // Late taken-home item (terminal) registered at 10:30
         {
           id: 'reg-1700000900000-taken-home-late',
           sessionId: 's1',
           registrationId: 'reg-1700000900000',
           referenceToken: 'REF-THM1',
+          // Card #5 taken home by volunteer under private informal contract
           cardNumber: 5,
           status: 'TAKEN_HOME',
-          createdAt: '2026-10-18T10:30:00.000Z',
-          updatedAt: '2026-10-18T11:15:00.000Z',
-          item: { category: 'ELECTRICAL', brandModel: 'Radio', faultDescription: 'Tuner cord', powerType: 'BATTERY' },
+          createdAt: '2026-10-18T10:30:00.000Z' as unknown as number,
+          updatedAt: '2026-10-18T11:15:00.000Z' as unknown as number,
+          item: { category: 'ELECTRICAL', brandModel: 'Radio', faultDescription: 'Tuner cord', powerType: 'BATTERY_LOW_VOLTAGE' },
         },
       ];
 
@@ -888,9 +904,112 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       ]);
     });
   });
+
+  // Verify PAT Power Type options, override payloads, and independent PAT 1 / PAT 2 instrument serials
+  describe('PAT Power Type Overrides & Independent PAT 1 / PAT 2 Payloads (Issues #23 & #27)', () => {
+    it('exports all 5 canonical POWER_TYPE_OPTIONS and resolves human-readable labels', () => {
+      // Ensure every PowerType option has a distinct value and label
+      expect(POWER_TYPE_OPTIONS).toHaveLength(5);
+      expect(getPowerTypeLabel('MAINS_240V')).toContain('Mains 240V');
+      expect(getPowerTypeLabel('BATTERY_LOW_VOLTAGE')).toContain('Battery / USB / Low Voltage DC');
+    });
+
+    it('builds forward non-mains override payload at PAT 1 and PAT 2 and rejects MAINS_240V', () => {
+      // Forward override at PAT 1 routes to WAITING_REPAIR and resets applianceClass to NOT_APPLICABLE
+      const pat1Override = buildPowerTypeOverrideUpdate({
+        newPowerType: 'BATTERY_LOW_VOLTAGE',
+        isPat2Stage: false,
+        now: 1760783400000,
+      });
+      expect(pat1Override).toEqual({
+        nextStatus: 'WAITING_REPAIR',
+        updatePayload: {
+          status: 'WAITING_REPAIR',
+          'item.powerType': 'BATTERY_LOW_VOLTAGE',
+          'item.applianceClass': 'NOT_APPLICABLE',
+          updatedAt: 1760783400000,
+        },
+      });
+
+      // Forward override at PAT 2 routes directly to READY_FOR_COLLECTION
+      const pat2Override = buildPowerTypeOverrideUpdate({
+        newPowerType: 'MECHANICAL',
+        isPat2Stage: true,
+        now: 1760787000000,
+      });
+      expect(pat2Override).toEqual({
+        nextStatus: 'READY_FOR_COLLECTION',
+        updatePayload: {
+          status: 'READY_FOR_COLLECTION',
+          'item.powerType': 'MECHANICAL',
+          'item.applianceClass': 'NOT_APPLICABLE',
+          updatedAt: 1760787000000,
+        },
+      });
+
+      // Passing MAINS_240V to buildPowerTypeOverrideUpdate throws because mains items require PAT submission
+      expect(() =>
+        buildPowerTypeOverrideUpdate({
+          newPowerType: 'MAINS_240V' as Exclude< RepairItem['item']['powerType'], 'MAINS_240V'>,
+          isPat2Stage: false,
+        })
+      ).toThrow('Mains 240V items must complete a PAT inspection');
+    });
+
+    it('preserves independent testerName and instrumentSerial across PAT 1 and PAT 2 and persists reverse override', () => {
+      // Step 1: Volunteer Alice runs PAT 1 with instrument SW-100001 and reverse-overrides to MAINS_240V
+      const pat1Result = buildPatInitialUpdate({
+        testerName: 'Alice',
+        instrumentSerial: 'SW-100001',
+        visualPass: true,
+        fuseRatingAmps: 13,
+        // Standard 500V DC test with Class I earth continuity and insulation resistance
+        testVoltageVolts: 500,
+        earthContinuityOhms: 0.08,
+        insulationResistanceMOhms: 199.9,
+        outcome: 'PASS',
+        cautionNotes: 'Reverse override from battery to mains',
+        // Atomically persist upgraded powerType and applianceClass
+        powerType: 'MAINS_240V',
+        applianceClass: 'CLASS_I',
+        now: 1760782500000,
+      });
+
+      // Verify PAT 1 payload updates patInitial, status, item.applianceClass, and item.powerType
+      expect(pat1Result.nextStatus).toBe('WAITING_REPAIR');
+      expect(pat1Result.updatePayload['item.applianceClass']).toBe('CLASS_I');
+      expect(pat1Result.updatePayload['item.powerType']).toBe('MAINS_240V');
+      const patInitialPayload = pat1Result.updatePayload.patInitial as Record<string, unknown>;
+      expect(patInitialPayload.testerName).toBe('Alice');
+      expect(patInitialPayload.instrumentSerial).toBe('SW-100001');
+
+      // Step 2: Volunteer Bob runs PAT 2 with a different instrument (KT-200002) and 250V Surge-Protected voltage
+      const pat2Result = buildPatFinalUpdate({
+        testerName: 'Bob',
+        instrumentSerial: 'KT-200002',
+        visualPass: true,
+        fuseRatingAmps: 13,
+        // Post-repair PAT 2 at 250V DC with independent tester and instrument serial
+        testVoltageVolts: 250,
+        earthContinuityOhms: 0.09,
+        insulationResistanceMOhms: 150.0,
+        outcome: 'PASS',
+        certificateNotes: 'Post-repair certification with Bob tester',
+        // Persist powerType and applianceClass on PAT 2 without touching patInitial
+        powerType: 'MAINS_240V',
+        applianceClass: 'CLASS_I',
+        now: 1760786400000,
+      });
+
+      // Verify PAT 2 writes strictly to patFinal without touching patInitial
+      expect('patInitial' in pat2Result.updatePayload).toBe(false);
+      expect(pat2Result.nextStatus).toBe('READY_FOR_COLLECTION');
+      const patFinalPayload = pat2Result.updatePayload.patFinal as Record<string, unknown>;
+      expect(patFinalPayload.testerName).toBe('Bob');
+      expect(patFinalPayload.instrumentSerial).toBe('KT-200002');
+      expect(patFinalPayload.testVoltageVolts).toBe(250);
+    });
+  });
 });
-
-
-
 
 

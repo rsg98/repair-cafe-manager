@@ -89,5 +89,69 @@ service cloud.firestore {
     match /volunteers/{volunteerId} {
       allow read, write: if isAdmin();
     }
+
+    // PAT Testing Instruments Registry (Issue #27)
+    // Public read (like sessions/repairs) supports offline-unlocked station tablets; writes restricted to isVolunteer()
+    match /patInstruments/{instrumentId} {
+      allow read: if true;
+      allow create: if isVolunteer()
+        // Require all mandatory PAT instrument metadata and audit timestamp fields
+        && request.resource.data.keys().hasAll([
+          'displayName', 'manufacturer', 'serialNumber', 'lastCalibratedDate', 'createdAt', 'updatedAt'
+        ])
+        // Reject unexpected fields outside the PatInstrument schema
+        && request.resource.data.keys().hasOnly([
+          'id', 'displayName', 'manufacturer', 'model', 'serialNumber', 'lastCalibratedDate', 'notes', 'createdAt', 'updatedAt'
+        ])
+        // Validate optional document ID consistency and non-empty displayName (1..100 chars)
+        && (!('id' in request.resource.data) || (request.resource.data.id is string && request.resource.data.id == instrumentId))
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 100
+        // Validate non-empty manufacturer and constant hardware serialNumber (1..100 chars)
+        && request.resource.data.manufacturer is string
+        && request.resource.data.manufacturer.size() > 0
+        && request.resource.data.manufacturer.size() <= 100
+        && request.resource.data.serialNumber is string
+        && request.resource.data.serialNumber.size() > 0
+        && request.resource.data.serialNumber.size() <= 100
+        // Validate ISO 8601 YYYY-MM-DD calibration date, optional model/notes bounds, and integer timestamps
+        && request.resource.data.lastCalibratedDate is string
+        && request.resource.data.lastCalibratedDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && (!('model' in request.resource.data) || (request.resource.data.model is string && request.resource.data.model.size() <= 100))
+        && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 500))
+        && request.resource.data.createdAt is int
+        && request.resource.data.updatedAt is int;
+      allow update: if isVolunteer()
+        // Require all mandatory PAT instrument metadata and audit timestamp fields on update
+        && request.resource.data.keys().hasAll([
+          'displayName', 'manufacturer', 'serialNumber', 'lastCalibratedDate', 'createdAt', 'updatedAt'
+        ])
+        // Reject unexpected fields outside the PatInstrument schema
+        && request.resource.data.keys().hasOnly([
+          'id', 'displayName', 'manufacturer', 'model', 'serialNumber', 'lastCalibratedDate', 'notes', 'createdAt', 'updatedAt'
+        ])
+        // Validate optional document ID consistency and non-empty displayName (1..100 chars)
+        && (!('id' in request.resource.data) || (request.resource.data.id is string && request.resource.data.id == instrumentId))
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 100
+        // Validate non-empty manufacturer and constant hardware serialNumber (1..100 chars)
+        && request.resource.data.manufacturer is string
+        && request.resource.data.manufacturer.size() > 0
+        && request.resource.data.manufacturer.size() <= 100
+        && request.resource.data.serialNumber is string
+        && request.resource.data.serialNumber.size() > 0
+        && request.resource.data.serialNumber.size() <= 100
+        // Validate ISO 8601 YYYY-MM-DD calibration date, optional model/notes bounds, and immutable createdAt
+        && request.resource.data.lastCalibratedDate is string
+        && request.resource.data.lastCalibratedDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && (!('model' in request.resource.data) || (request.resource.data.model is string && request.resource.data.model.size() <= 100))
+        && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 500))
+        && request.resource.data.createdAt is int
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt is int;
+      allow delete: if isVolunteer();
+    }
   }
 }

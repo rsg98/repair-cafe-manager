@@ -257,7 +257,8 @@ export interface RepairItem {
     instrumentSerial: string;
     visualPass: boolean;
     fuseRatingAmps: 3 | 5 | 13 | 'OTHER';
-    // Post-repair earth continuity, insulation resistance, and certification outcome
+    // Post-repair DC test voltage, earth continuity, insulation resistance, and certification outcome
+    testVoltageVolts?: 250 | 500;
     earthContinuityOhms?: number;
     insulationResistanceMOhms: number;
     outcome: PatFinalOutcome;
@@ -266,6 +267,39 @@ export interface RepairItem {
 
   createdAt?: number;
   updatedAt?: number;
+}
+
+/**
+ * Registered PAT testing instrument stored at `patInstruments/{instrumentId}` (Issue #27).
+ * Note: `RepairItem.patInitial.instrumentSerial` and `RepairItem.patFinal.instrumentSerial`
+ * store `serialNumber` (constant hardware identifier) rather than `displayName` (mutable).
+ */
+export interface PatInstrument {
+  id: string;
+  // Friendly mutable owner/display label (e.g. "Richard's Tester")
+  displayName: string;
+  manufacturer: string; // e.g., "Seaward", "Kewtech", "Martindale"
+  model?: string; // Optional model name, e.g., "PrimeTest 100"
+  // Constant unique manufacturer serial number stored on RepairItem PAT records
+  serialNumber: string;
+  lastCalibratedDate: string; // ISO 8601 calendar date "YYYY-MM-DD"
+  notes?: string; // Optional service/adapter notes
+  // Audit timestamps (Unix epoch ms)
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Form input payload for creating or updating a PAT testing instrument (Issue #27).
+ */
+export interface PatInstrumentInput {
+  displayName: string;
+  manufacturer: string;
+  model?: string;
+  // Constant hardware serial number and ISO calibration date
+  serialNumber: string;
+  lastCalibratedDate: string; // "YYYY-MM-DD"
+  notes?: string;
 }
 
 /**

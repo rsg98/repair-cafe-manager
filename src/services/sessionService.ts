@@ -267,12 +267,14 @@ export function calculateSessionAnalytics(
       unfixableCount++;
     }
 
-    // Tally initial PAT tests and cord/safety failures
-    if (item.patInitial) {
+    // Tally PAT electrical safety tests (PAT 1 and/or PAT 2) and safety failures
+    if (item.patInitial || item.patFinal) {
       patTestedCount++;
+      // Count items that failed PAT 1 cord/safety screening or PAT 2 post-repair certification
       if (
-        item.patInitial.outcome === 'FAIL_REPAIRABLE_CORD' ||
-        item.patInitial.outcome === 'DANGER_DO_NOT_ENERGIZE'
+        item.patInitial?.outcome === 'FAIL_REPAIRABLE_CORD' ||
+        item.patInitial?.outcome === 'DANGER_DO_NOT_ENERGIZE' ||
+        item.patFinal?.outcome === 'FAIL'
       ) {
         patFailedCount++;
       }

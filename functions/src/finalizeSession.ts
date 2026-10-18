@@ -160,12 +160,14 @@ export const finalizeSession = onCall(async (request) => {
       unfixableCount++;
     }
 
-    // Tally PAT electrical safety tests and initial failures
-    if (data.patInitial) {
+    // Tally PAT electrical safety tests (PAT 1 and/or PAT 2) and safety failures
+    if (data.patInitial || data.patFinal) {
       patTestedCount++;
+      // Count items that failed PAT 1 cord/safety screening or PAT 2 post-repair certification
       if (
-        data.patInitial.outcome === "FAIL_REPAIRABLE_CORD" || 
-        data.patInitial.outcome === "DANGER_DO_NOT_ENERGIZE"
+        data.patInitial?.outcome === "FAIL_REPAIRABLE_CORD" ||
+        data.patInitial?.outcome === "DANGER_DO_NOT_ENERGIZE" ||
+        data.patFinal?.outcome === "FAIL"
       ) {
         patFailedCount++;
       }
