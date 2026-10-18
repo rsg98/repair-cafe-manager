@@ -28,7 +28,7 @@ At the **PAT Electrical Safety Station** (`/pat`, Station 3), PAT-qualified volu
      - **Serial Number** (required, constant hardware identifier)
      - **Last Service / Calibration Date** (required ISO date `YYYY-MM-DD`)
      - **Notes** (optional)
-   - If an instrument's `lastCalibratedDate` is older than `PAT_TESTER_SERVICE_INTERVAL` (configured in [`src/config/cafe.config.ts`](file:///Users/richardgrime/Documents/Projects/repair-cafe-manager/src/config/cafe.config.ts) with a default of **12 months**), the UI must display a non-blocking amber warning (`⚠️` prefix in the dropdown option and an `<AlertTriangle>` warning banner beside the selector).
+   - If an instrument's `lastCalibratedDate` is older than `cafeConfig.patTesterServiceIntervalMonths` (configured in [`src/config/cafe.config.ts`](file:///Users/richardgrime/Documents/Projects/repair-cafe-manager/src/config/cafe.config.ts) with a default of **12 months**), the UI must display a non-blocking amber warning (`⚠️` prefix in the dropdown option and an `<AlertTriangle>` warning banner beside the selector).
    - **Audit Traceability & Multi-Operator Support:** When a PAT 1 or PAT 2 record is submitted, the constant **`serialNumber`** of the selected instrument must be persisted on `RepairItem` (`patInitial.instrumentSerial` or `patFinal.instrumentSerial`), because `displayName` is mutable whereas `serialNumber` is immutable. Furthermore, the system must cleanly support cases where **different volunteers (`testerName`) and/or different PAT instruments (`instrumentSerial`)** perform PAT 1 and PAT 2 on the same `RepairItem` without PAT 2 overwriting PAT 1's recorded operator or instrument, while displaying PAT 1's historical summary when the item returns for PAT 2.
 
 ### 0.2 Financial, Offline, and Security Constraints
@@ -48,7 +48,7 @@ All changes must adhere strictly to the architectural guardrails in [`AGENTS.md`
    - In **PAT 2**: `"Update Power Type & Route to Ready for Collection"` updates `item.powerType`, sets `item.applianceClass: 'NOT_APPLICABLE'`, removes any stale `patFinal`, and transitions `status` to `'READY_FOR_COLLECTION'` while preserving any existing `patInitial` record intact.
 2. **Reverse Power Type Override (Non-Mains $\rightarrow$ Mains):** When a non-mains item is looked up on `/pat`, it initially shows an informational prompt explaining that it is currently classified as non-mains and inviting the volunteer to switch Power Type to `MAINS_240V` if it requires a PAT test. When switched to `MAINS_240V`, the full BS 1363 PAT 1 (if pre-repair) or PAT 2 (if post-repair, detected via `isPat2StageForItem`) measurement form is displayed, and submitting the PAT record atomically persists `item.powerType: 'MAINS_240V'` and `item.applianceClass` alongside the `patInitial` / `patFinal` record and next lifecycle status.
 3. **PAT Instrument Dropdown & Modal:** `/pat` replaces the free-text serial number input with a `<select>` dropdown of registered `PatInstrument` records (plus `"+ Add New PAT Instrument..."`) and an `"Edit"` button enabled whenever a registered instrument is selected. Selecting `"+ Add New PAT Instrument..."` opens `PatInstrumentModal` in Add mode (and reverts the dropdown cleanly if cancelled). Clicking `"Edit"` opens `PatInstrumentModal` pre-populated with the selected instrument, supporting Save and Delete/Retire.
-4. **Calibration Warning (`PAT_TESTER_SERVICE_INTERVAL = 12` months):** Any instrument whose `lastCalibratedDate` is strictly older than `PAT_TESTER_SERVICE_INTERVAL` calendar months displays a `⚠️` prefix in the dropdown `<option>` and renders a non-blocking amber warning banner with the last service date when selected.
+4. **Calibration Warning (`patTesterServiceIntervalMonths: 12`):** Any instrument whose `lastCalibratedDate` is strictly older than `cafeConfig.patTesterServiceIntervalMonths` calendar months displays a `⚠️` prefix in the dropdown `<option>` and renders a non-blocking amber warning banner with the last service date when selected.
 5. **Constant Serial Number Traceability & Independent PAT 1 / PAT 2 Records:** Selecting an instrument stores its immutable `serialNumber` in `instrumentSerial` (`localStorage` key `'pat_instrument_serial'`), which is saved to `patInitial.instrumentSerial` on PAT 1 and `patFinal.instrumentSerial` on PAT 2. When an item is looked up for PAT 2, a read-only summary of its PAT 1 inspection (including PAT 1's `testerName`, `instrumentSerial`, `outcome`, and measurements) is shown for reference, PAT 1's `fuseRatingAmps` and `testVoltageVolts` pre-populate the PAT 2 defaults, and the PAT 2 form records the currently active PAT 2 volunteer's `testerName` and `instrumentSerial` without mutating `patInitial`.
 
 ---
@@ -84,8 +84,8 @@ flowchart TD
 
 ### 1.2 Configuration & Domain Data Models (`src/config/cafe.config.ts` & `src/types/index.ts`)
 
-1. **Service Interval Constant (`src/config/cafe.config.ts`):**
-   - Export `export const PAT_TESTER_SERVICE_INTERVAL = 12;` (in calendar months) and add `patTesterServiceIntervalMonths: number;` to `CafeConfig` (initialized to `PAT_TESTER_SERVICE_INTERVAL` in `cafeConfig`).
+1. **Service Interval Setting (`src/config/cafe.config.ts`):**
+   - Add `patTesterServiceIntervalMonths: number;` to `CafeConfig` and initialize `patTesterServiceIntervalMonths: 12` directly in `cafeConfig`.
 
 2. **PAT Instrument Interfaces & `patFinal.testVoltageVolts` (`src/types/index.ts`):**
    - Add `testVoltageVolts?: 250 | 500;` to `RepairItem['patFinal']` so post-repair DC test voltage is persisted alongside `patInitial.testVoltageVolts`.
@@ -153,7 +153,7 @@ To keep business logic pure and 100% unit-testable in Vitest without Firestore m
    - Normalises `serialNumber.trim().toLowerCase()`.
    - Returns `true` if any instrument in `existingInstruments` with `inst.id !== excludeId` has the same normalised `serialNumber`.
 
-3. **Pure Calibration Expiry Check `isPatInstrumentCalibrationOverdue(lastCalibratedDate: string, serviceIntervalMonths: number = PAT_TESTER_SERVICE_INTERVAL, referenceDate: Date = new Date()): boolean`:**
+3. **Pure Calibration Expiry Check `isPatInstrumentCalibrationOverdue(lastCalibratedDate: string, serviceIntervalMonths: number = cafeConfig.patTesterServiceIntervalMonths, referenceDate: Date = new Date()): boolean`:**
    - Parses `lastCalibratedDate` (`YYYY-MM-DD`) into `[year, month, day]` and verifies exact calendar round-trip (`d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month && d.getUTCDate() === day`). If invalid, returns `true`.
    - Computes target month and clamps `day` to the last day of the target month so leap-day (`2024-02-29` + 12 months $\rightarrow$ `2025-02-28`) and 31-day month additions never overflow into the next month:
      ```typescript
@@ -169,7 +169,7 @@ To keep business logic pure and 100% unit-testable in Vitest without Firestore m
      return refUtcMs > dueUtcMs;
      ```
 
-4. **Pure Dropdown Option Formatter `formatPatInstrumentOptionLabel(instrument: Pick<PatInstrument, 'displayName' | 'manufacturer' | 'model' | 'serialNumber' | 'lastCalibratedDate'>, serviceIntervalMonths: number = PAT_TESTER_SERVICE_INTERVAL, referenceDate: Date = new Date()): string`:**
+4. **Pure Dropdown Option Formatter `formatPatInstrumentOptionLabel(instrument: Pick<PatInstrument, 'displayName' | 'manufacturer' | 'model' | 'serialNumber' | 'lastCalibratedDate'>, serviceIntervalMonths: number = cafeConfig.patTesterServiceIntervalMonths, referenceDate: Date = new Date()): string`:**
    - Computes `overdue = isPatInstrumentCalibrationOverdue(instrument.lastCalibratedDate, serviceIntervalMonths, referenceDate)`.
    - Formats base label: `${instrument.displayName} — ${instrument.manufacturer}${instrument.model ? ` ${instrument.model}` : ''} (S/N: ${instrument.serialNumber})`.
    - If `overdue` is `true`, prefixes with `'⚠️ '` and suffixes with `' [Service Overdue]'`.
@@ -318,8 +318,8 @@ A clean, accessible modal component following the design language of `VolunteerR
        - `onSaved(saved)`: Inserts or replaces `saved` in `instruments` (sorted by `displayName`), sets `setInstrumentSerial(saved.serialNumber)`, and closes the modal.
        - `onDeleted(deletedId)`: Removes `deletedId` from `instruments`, sets `setInstrumentSerial(remaining.length === 1 ? remaining[0].serialNumber : '')`, and closes the modal.
    - **Overdue Calibration Warning Banner:**
-     - When `selectedInstrument && isPatInstrumentCalibrationOverdue(selectedInstrument.lastCalibratedDate)` is `true`, renders a non-blocking amber warning banner in the Station Header with `<AlertTriangle>`:
-       > **Calibration / Service Overdue:** **{selectedInstrument.displayName}** (S/N: `{selectedInstrument.serialNumber}`) was last serviced on **{selectedInstrument.lastCalibratedDate}** (more than {PAT_TESTER_SERVICE_INTERVAL} months ago). You may continue testing, but please arrange recalibration or select another instrument.
+     - When `selectedInstrument && isPatInstrumentCalibrationOverdue(selectedInstrument.lastCalibratedDate, cafeConfig.patTesterServiceIntervalMonths)` is `true`, renders a non-blocking amber warning banner in the Station Header with `<AlertTriangle>`:
+       > **Calibration / Service Overdue:** **{selectedInstrument.displayName}** (S/N: `{selectedInstrument.serialNumber}`) was last serviced on **{selectedInstrument.lastCalibratedDate}** (more than {cafeConfig.patTesterServiceIntervalMonths} months ago). You may continue testing, but please arrange recalibration or select another instrument.
    - **Validation Alert on Submit:**
      - If `!testerName.trim() || !instrumentSerial.trim()`, alerts `"Please select your PAT tester name and PAT testing instrument."`.
 
@@ -432,7 +432,7 @@ match /patInstruments/{instrumentId} {
 | File Path | Action | Responsibility & Planned Changes |
 |---|---|---|
 | `docs/design/pat_station_enhancements.md` | **Create** | This Elephant-Goldfish engineering design specification for Issues #23 and #27. |
-| `src/config/cafe.config.ts` | **Modify** | Export `PAT_TESTER_SERVICE_INTERVAL = 12` (months) and add `patTesterServiceIntervalMonths: number` to `CafeConfig` and `cafeConfig`. |
+| `src/config/cafe.config.ts` | **Modify** | Add `patTesterServiceIntervalMonths: number` to `CafeConfig` and initialize `patTesterServiceIntervalMonths: 12` in `cafeConfig`. |
 | `src/types/index.ts` | **Modify** | Add `PatInstrument` and `PatInstrumentInput` interfaces for the `patInstruments/{instrumentId}` Firestore collection (Issue #27), and add optional `testVoltageVolts?: 250 | 500` to `RepairItem['patFinal']`. |
 | `src/services/patInstrumentService.ts` | **Create** | Implement pure testable helpers (`validatePatInstrumentInput`, `hasDuplicatePatInstrumentSerial`, `isPatInstrumentCalibrationOverdue`, `formatPatInstrumentOptionLabel`) and offline-resilient Firestore CRUD functions (`listPatInstruments`, `createPatInstrument`, `updatePatInstrument`, `deletePatInstrument`). |
 | `src/services/repairService.ts` | **Modify** | Export `POWER_TYPE_OPTIONS`, `getPowerTypeLabel`, `isPat2StageForItem`, `calculateNextStatusOnPowerTypeOverride`, pure payload builders (`buildPowerTypeOverrideUpdate`, `buildPatInitialUpdate`, `buildPatFinalUpdate`), and Firestore action `overrideItemPowerTypeFromPat`. Extend `submitPatInitial` and `submitPatFinal` to accept optional `powerType` and `applianceClass` and persist `'item.powerType'` and `'item.applianceClass'` atomically alongside `patInitial` / `patFinal` (preserving independent PAT 1 and PAT 2 tester/instrument records). |

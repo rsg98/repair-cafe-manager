@@ -21,7 +21,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { PatInstrument, PatInstrumentInput } from '../types';
-import { PAT_TESTER_SERVICE_INTERVAL } from '../config/cafe.config';
+import { cafeConfig } from '../config/cafe.config';
 import { removeUndefined } from './repairService';
 
 /**
@@ -170,7 +170,7 @@ export function hasDuplicatePatInstrumentSerial(
  */
 export function isPatInstrumentCalibrationOverdue(
   lastCalibratedDate: string,
-  serviceIntervalMonths: number = PAT_TESTER_SERVICE_INTERVAL,
+  serviceIntervalMonths: number = cafeConfig.patTesterServiceIntervalMonths,
   referenceDate: Date = new Date()
 ): boolean {
   // Treat missing or malformed calibration dates as overdue so the volunteer is alerted
@@ -206,7 +206,7 @@ export function formatPatInstrumentOptionLabel(
     PatInstrument,
     'displayName' | 'manufacturer' | 'model' | 'serialNumber' | 'lastCalibratedDate'
   >,
-  serviceIntervalMonths: number = PAT_TESTER_SERVICE_INTERVAL,
+  serviceIntervalMonths: number = cafeConfig.patTesterServiceIntervalMonths,
   referenceDate: Date = new Date()
 ): string {
   // Build the human-readable instrument description with manufacturer, optional model, and S/N

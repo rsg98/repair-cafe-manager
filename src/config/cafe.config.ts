@@ -1,11 +1,5 @@
 export type StationViewId = 'register' | 'frontdesk' | 'pat' | 'fixer' | 'reports';
 
-/**
- * Default maximum interval (in calendar months) before a PAT testing instrument
- * is flagged as overdue for recalibration/servicing at the PAT Station (Issue #27).
- */
-export const PAT_TESTER_SERVICE_INTERVAL = 12;
-
 export interface CafeConfig {
   // Core single-tenant Repair Café branding and venue metadata
   cafeName: string;
@@ -63,7 +57,7 @@ export const cafeConfig: CafeConfig = {
   // Other repair cafes deploying this software can set this to true if multi-item check-in is permitted.
   allowMultiItemRegistration: false,
   // Flag PAT testing instruments whose calibration date is older than 12 months (Issue #27)
-  patTesterServiceIntervalMonths: PAT_TESTER_SERVICE_INTERVAL,
+  patTesterServiceIntervalMonths: 12,
   termsVersion: "2026.1",
   termsAndConditions: "/terms.md",
   // Authorised Google accounts and Google Workspace domain groups for Front Desk admin

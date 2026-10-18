@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { PAT_TESTER_SERVICE_INTERVAL } from '../src/config/cafe.config';
+import { cafeConfig } from '../src/config/cafe.config';
 import { PatInstrument } from '../src/types';
 import {
   validatePatInstrumentInput,
@@ -14,10 +14,10 @@ import {
   formatPatInstrumentOptionLabel,
 } from '../src/services/patInstrumentService';
 
-// Verify the configured PAT instrument service interval constant matches the 12-month baseline
+// Verify the configured PAT instrument service interval in cafeConfig matches the 12-month default
 describe('PAT Instrument Service Helpers', () => {
-  it('defines PAT_TESTER_SERVICE_INTERVAL as 12 months', () => {
-    expect(PAT_TESTER_SERVICE_INTERVAL).toBe(12);
+  it('defines cafeConfig.patTesterServiceIntervalMonths as 12 months by default', () => {
+    expect(cafeConfig.patTesterServiceIntervalMonths).toBe(12);
   });
 
   // Test input validation for PAT instrument display name, manufacturer, serial number, and calibration date
