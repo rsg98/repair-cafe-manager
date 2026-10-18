@@ -25,6 +25,7 @@ import {
   REPAIR_ITEM_LOOKUP_INPUT_PROPS,
   isSafeFromCreditCardAutofill
 } from '../src/services/repairService';
+import { resolvePinKeyInput } from '../src/components/common/PinModal';
 
 describe('Analytics and CSV Export Utilities', () => {
   const sampleAnalytics: SessionAnalytics[] = [
@@ -778,7 +779,117 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       ).toBe(false);
     });
   });
+
+  describe('Keyboard PIN Entry Resolution (Issue #20)', () => {
+    it('appends numeric digits 0-9 up to 4 characters', () => {
+      expect(resolvePinKeyInput('', '4')).toEqual({ type: 'DIGIT', nextPin: '4' });
+      expect(resolvePinKeyInput('48', '2')).toEqual({ type: 'DIGIT', nextPin: '482' });
+      expect(resolvePinKeyInput('482', '9')).toEqual({ type: 'DIGIT', nextPin: '4829' });
+      // Does not exceed 4 digits
+      expect(resolvePinKeyInput('4829', '0')).toEqual({ type: 'DIGIT', nextPin: '4829' });
+    });
+
+    it('handles Backspace, Delete, Enter, and Escape keys', () => {
+      expect(resolvePinKeyInput('482', 'Backspace')).toEqual({ type: 'BACKSPACE', nextPin: '48' });
+      expect(resolvePinKeyInput('', 'Backspace')).toEqual({ type: 'BACKSPACE', nextPin: '' });
+      expect(resolvePinKeyInput('4829', 'Delete')).toEqual({ type: 'CLEAR', nextPin: '' });
+      expect(resolvePinKeyInput('4829', 'Enter')).toEqual({ type: 'SUBMIT', nextPin: '4829' });
+      expect(resolvePinKeyInput('48', 'Escape')).toEqual({ type: 'CLOSE', nextPin: '48' });
+    });
+
+    it('ignores non-numeric keys and keyboard shortcuts with modifiers', () => {
+      expect(resolvePinKeyInput('48', 'a')).toEqual({ type: 'IGNORE', nextPin: '48' });
+      expect(resolvePinKeyInput('48', 'Tab')).toEqual({ type: 'IGNORE', nextPin: '48' });
+      expect(resolvePinKeyInput('48', '1', { ctrlKey: true })).toEqual({ type: 'IGNORE', nextPin: '48' });
+      expect(resolvePinKeyInput('48', '9', { metaKey: true })).toEqual({ type: 'IGNORE', nextPin: '48' });
+      expect(resolvePinKeyInput('48', '5', { altKey: true })).toEqual({ type: 'IGNORE', nextPin: '48' });
+    });
+  });
+
+  describe('Terminal Items Moved Below Active Items (Issue #26)', () => {
+    it('places terminal items (COMPLETED, UNFIXABLE, TAKEN_HOME) below active items while preserving FIFO registration order within each group', () => {
+      const mixedQueue: RepairItem[] = [
+        {
+          id: 'reg-1700000000000-completed-early',
+          sessionId: 's1',
+          registrationId: 'reg-1700000000000',
+          referenceToken: 'REF-CMP1',
+          cardNumber: 1,
+          status: 'COMPLETED',
+          createdAt: '2026-10-18T10:00:00.000Z',
+          updatedAt: '2026-10-18T11:00:00.000Z',
+          item: { category: 'ELECTRICAL', brandModel: 'Toaster', faultDescription: 'Fuse', powerType: 'MAINS_240V' },
+        },
+        {
+          id: 'reg-1700000600000-active-second',
+          sessionId: 's1',
+          registrationId: 'reg-1700000600000',
+          referenceToken: 'REF-ACT2',
+          cardNumber: 4,
+          status: 'WAITING_REPAIR',
+          createdAt: '2026-10-18T10:20:00.000Z',
+          updatedAt: '2026-10-18T10:25:00.000Z',
+          item: { category: 'MECHANICAL', brandModel: 'Clock', faultDescription: 'Hands stuck', powerType: 'NONE' },
+        },
+        {
+          id: 'reg-1700000300000-unfixable-mid',
+          sessionId: 's1',
+          registrationId: 'reg-1700000300000',
+          referenceToken: 'REF-UNF1',
+          cardNumber: 2,
+          status: 'UNFIXABLE',
+          createdAt: '2026-10-18T10:05:00.000Z',
+          updatedAt: '2026-10-18T10:40:00.000Z',
+          item: { category: 'ELECTRICAL', brandModel: 'Microwave', faultDescription: 'Dead', powerType: 'MAINS_240V' },
+        },
+        {
+          id: 'reg-1700000180000-active-first',
+          sessionId: 's1',
+          registrationId: 'reg-1700000180000',
+          referenceToken: 'REF-ACT1',
+          cardNumber: 3,
+          status: 'READY_FOR_COLLECTION',
+          createdAt: '2026-10-18T10:03:00.000Z',
+          updatedAt: '2026-10-18T10:50:00.000Z',
+          item: { category: 'TEXTILE', brandModel: 'Coat', faultDescription: 'Zipper', powerType: 'NONE' },
+        },
+        {
+          id: 'reg-1700000900000-taken-home-late',
+          sessionId: 's1',
+          registrationId: 'reg-1700000900000',
+          referenceToken: 'REF-THM1',
+          cardNumber: 5,
+          status: 'TAKEN_HOME',
+          createdAt: '2026-10-18T10:30:00.000Z',
+          updatedAt: '2026-10-18T11:15:00.000Z',
+          item: { category: 'ELECTRICAL', brandModel: 'Radio', faultDescription: 'Tuner cord', powerType: 'BATTERY' },
+        },
+      ];
+
+      const sorted = sortRepairsByRegistration(mixedQueue);
+      // Active items come first in strict registration order (ACT1 at 10:03, ACT2 at 10:20),
+      // followed by terminal items in strict registration order (CMP1 at 10:00, UNF1 at 10:05, THM1 at 10:30)
+      expect(sorted.map(r => r.referenceToken)).toEqual([
+        'REF-ACT1',
+        'REF-ACT2',
+        'REF-CMP1',
+        'REF-UNF1',
+        'REF-THM1',
+      ]);
+
+      // Verify filterRepairs preserves this active-first ordering as well
+      const filteredAll = filterRepairs(mixedQueue, '', 'ALL');
+      expect(filteredAll.map(r => r.referenceToken)).toEqual([
+        'REF-ACT1',
+        'REF-ACT2',
+        'REF-CMP1',
+        'REF-UNF1',
+        'REF-THM1',
+      ]);
+    });
+  });
 });
+
 
 
 

@@ -160,7 +160,14 @@ const AppShell: React.FC = () => {
               {cafeConfig.cafeName} • {cafeConfig.venueName}
             </span>
             <span className="inline-flex items-center gap-2">
-              <span>Powered by Open Source Repair Café Session Manager</span>
+              <a
+                href="https://github.com/rsg98/repair-cafe-manager/blob/main/README.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-slate-600 underline underline-offset-2 transition-colors"
+              >
+                RCM
+              </a>
               <span className="font-mono text-[11px] text-slate-400">
                 v{appVersion}
               </span>

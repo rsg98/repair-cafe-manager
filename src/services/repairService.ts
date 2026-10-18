@@ -309,13 +309,22 @@ export function getRegistrationTimestamp(
 
 /**
  * Sorts repair items in strict first-come, first-served order (earliest registration at the top).
+ * Items in a terminal state (`COMPLETED`, `UNFIXABLE`, `TAKEN_HOME`) are moved below active items
+ * while preserving registration timestamp order within each group.
  * Falls back to card number and ID/reference token when registration timestamps are equal or absent.
  */
 export function sortRepairsByRegistration<
   T extends Pick<RepairItem, 'createdAt'> &
-    Partial<Pick<RepairItem, 'id' | 'registrationId' | 'cardNumber' | 'referenceToken'>>
+    Partial<Pick<RepairItem, 'id' | 'registrationId' | 'cardNumber' | 'referenceToken' | 'status'>>
 >(repairs: T[]): T[] {
   return [...repairs].sort((a, b) => {
+    // Move terminal items below active items so the Front Desk focuses on items needing action
+    const terminalA = a.status ? isTerminalStatus(a.status) : false;
+    const terminalB = b.status ? isTerminalStatus(b.status) : false;
+    if (terminalA !== terminalB) {
+      return terminalA ? 1 : -1;
+    }
+
     // Compare registration timestamps first (earliest customer first)
     const timeA = getRegistrationTimestamp(a);
     const timeB = getRegistrationTimestamp(b);

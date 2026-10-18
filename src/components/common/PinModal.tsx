@@ -1,6 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { KeyRound, X } from 'lucide-react';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
+
+export interface PinKeyAction {
+  type: 'DIGIT' | 'BACKSPACE' | 'CLEAR' | 'SUBMIT' | 'CLOSE' | 'IGNORE';
+  nextPin: string;
+}
+
+/**
+ * Pure helper that resolves a keyboard `keydown` event against the current 4-digit PIN state.
+ * Enables physical keyboard entry (`0`-`9`, `Backspace`, `Delete`, `Enter`, `Escape`)
+ * alongside the on-screen touch keypad.
+ */
+export function resolvePinKeyInput(
+  currentPin: string,
+  key: string,
+  modifiers?: { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }
+): PinKeyAction {
+  // Ignore keyboard shortcuts involving modifier keys (e.g. Cmd+R, Ctrl+C)
+  if (modifiers?.ctrlKey || modifiers?.metaKey || modifiers?.altKey) {
+    return { type: 'IGNORE', nextPin: currentPin };
+  }
+
+  // Numeric digits 0-9 (including Numpad 0-9)
+  if (/^[0-9]$/.test(key)) {
+    const nextPin = currentPin.length < 4 ? currentPin + key : currentPin;
+    return { type: 'DIGIT', nextPin };
+  }
+
+  if (key === 'Backspace') {
+    return { type: 'BACKSPACE', nextPin: currentPin.slice(0, -1) };
+  }
+
+  if (key === 'Delete') {
+    return { type: 'CLEAR', nextPin: '' };
+  }
+
+  if (key === 'Enter') {
+    return { type: 'SUBMIT', nextPin: currentPin };
+  }
+
+  if (key === 'Escape') {
+    return { type: 'CLOSE', nextPin: currentPin };
+  }
+
+  return { type: 'IGNORE', nextPin: currentPin };
+}
 
 // Props for the touch-friendly 4-digit daily session PIN unlock dialog
 interface PinModalProps {
@@ -35,13 +80,9 @@ export const PinModal: React.FC<PinModalProps> = ({
   // Prevent automatic PWA reload while a volunteer is actively typing or verifying their PIN
   useRegisterUnsavedWork(isOpen && (pin.length > 0 || submitting), 'pin-modal');
 
-  // Do not render modal DOM when already unlocked or closed
-  if (!isOpen) return null;
-
   // Validate 4-digit length and invoke the parent PIN verification handler
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pin.length !== 4) {
+  const verifyPin = useCallback(async (pinToVerify: string) => {
+    if (pinToVerify.length !== 4) {
       setLocalError("Please enter the 4-digit session PIN.");
       return;
     }
@@ -49,23 +90,72 @@ export const PinModal: React.FC<PinModalProps> = ({
     // Lock keypad while verifying PIN hash and minting volunteer custom token
     setSubmitting(true);
     setLocalError(null);
-    const success = await onVerify(pin);
+    const success = await onVerify(pinToVerify);
     setSubmitting(false);
     // Clear typed digits if the PIN was rejected so the volunteer can retry cleanly
     if (!success) {
       setPin('');
     }
+  }, [onVerify]);
+
+  // Listen for physical keyboard input (digits 0-9, Backspace, Delete, Enter, Escape) while the modal is open
+  useEffect(() => {
+    if (!isOpen || submitting) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const action = resolvePinKeyInput(pin, e.key, {
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+      });
+
+      if (action.type === 'IGNORE') return;
+
+      e.preventDefault();
+
+      switch (action.type) {
+        case 'DIGIT':
+        case 'BACKSPACE':
+        case 'CLEAR':
+          setLocalError(null);
+          setPin(action.nextPin);
+          break;
+        case 'SUBMIT':
+          void verifyPin(pin);
+          break;
+        case 'CLOSE':
+          if (onClose) {
+            onClose();
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, submitting, pin, verifyPin, onClose]);
+
+  // Do not render modal DOM when already unlocked or closed
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await verifyPin(pin);
   };
 
   // Append a single numeric digit (up to 4 digits maximum)
   const handleDigit = (digit: string) => {
     if (pin.length < 4) {
+      setLocalError(null);
       setPin(prev => prev + digit);
     }
   };
 
   // Remove the last entered digit when the volunteer taps 'Del'
   const handleBackspace = () => {
+    setLocalError(null);
     setPin(prev => prev.slice(0, -1));
   };
 
