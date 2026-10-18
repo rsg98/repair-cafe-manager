@@ -54,7 +54,8 @@ import {
   isTerminalStatus,
   canAssignCard,
   formatWaitTime,
-  WAIT_TIME_REFRESH_INTERVAL_MS
+  WAIT_TIME_REFRESH_INTERVAL_MS,
+  REPAIR_ITEM_LOOKUP_INPUT_PROPS
 } from '../services/repairService';
 import {
   listVolunteers,
@@ -620,12 +621,22 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
               {/* Search and Status Filter Controls */}
               <div className="flex flex-col sm:flex-row gap-3 my-4">
-                {/* Text search input matching name, reference token, card #, or item */}
+                {/* Text search input matching name, reference token, item #, or item */}
                 <div className="relative flex-1">
                   <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Search customer name, token (e.g. REF-A38F), card #, or item..."
+                    id="frontdesk-queue-search"
+                    name="frontdesk-queue-search"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-1p-ignore={true}
+                    data-lpignore="true"
+                    data-bwignore="true"
+                    data-form-type="other"
+                    placeholder="Search customer name, token (e.g. REF-A38F), item #, or item..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
@@ -874,10 +885,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
             {/* Numeric input for physical card token (#1..#200) */}
             <input
-              type="number"
+              {...REPAIR_ITEM_LOOKUP_INPUT_PROPS}
+              id="frontdesk-assign-item-token"
+              name="assign-repair-item-token"
+              aria-label="Assign repair item token"
               autoFocus
-              min={1}
-              max={200}
               placeholder="e.g. 14"
               value={cardNumberInput}
               onChange={(e) => setCardNumberInput(e.target.value)}

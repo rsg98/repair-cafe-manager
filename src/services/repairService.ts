@@ -822,3 +822,69 @@ export async function getPrivateCustomerData(
     return null;
   }
 }
+
+/**
+ * Standard HTML input attributes applied to repair item lookup and token inputs
+ * on the PAT Station, Volunteer Fixer Station, and Front Desk views (Issue #28).
+ *
+ * Prevents iOS Safari (WebKit CreditCardAutoFill), Chrome Autofill, and third-party
+ * password managers from misclassifying numeric repair item lookup inputs as
+ * payment credit card number (`cc-number`) fields.
+ */
+export const REPAIR_ITEM_LOOKUP_INPUT_PROPS = {
+  type: 'number' as const,
+  inputMode: 'numeric' as const,
+  pattern: '[0-9]*',
+  min: 1,
+  max: 200,
+  name: 'repair-item-lookup',
+  autoComplete: 'off',
+  autoCorrect: 'off',
+  autoCapitalize: 'off',
+  spellCheck: false,
+  'aria-label': 'Repair item lookup',
+  placeholder: 'Enter Repair Item # (1–100)...',
+  'data-1p-ignore': true,
+  'data-lpignore': 'true',
+  'data-bwignore': 'true',
+  'data-form-type': 'other',
+} as const;
+
+/**
+ * Regular expression matching credit-card autofill heuristic trigger terms
+ * in input attributes (`placeholder`, `name`, `id`, `aria-label`).
+ * Used by unit tests to guard against regressions of Issue #28 on iOS Safari.
+ */
+export const CREDIT_CARD_AUTOFILL_TRIGGER_REGEX =
+  /\b(?:credit\s*card|card\s*(?:number|no|num|#)|cc[-_\s]?(?:number|num|no)|pan)\b|\bcard\b/i;
+
+/**
+ * Validates that a set of input attributes for repair item lookup is safe from
+ * iOS Safari / WebKit credit-card autofill heuristics (Issue #28).
+ */
+export function isSafeFromCreditCardAutofill(attrs: {
+  name?: string;
+  id?: string;
+  placeholder?: string;
+  'aria-label'?: string;
+  autoComplete?: string;
+  'data-form-type'?: string;
+}): boolean {
+  // Require explicit autofill suppression attributes
+  if (attrs.autoComplete !== 'off') return false;
+  if (attrs['data-form-type'] !== 'other') return false;
+  if (!attrs.name || !attrs.placeholder) return false;
+
+  // Inspect all attributes scanned by WebKit / Chromium credit-card heuristics
+  const inspectableFields = [
+    attrs.name,
+    attrs.id ?? '',
+    attrs.placeholder,
+    attrs['aria-label'] ?? '',
+  ];
+
+  return inspectableFields.every(
+    (value) => !CREDIT_CARD_AUTOFILL_TRIGGER_REGEX.test(value)
+  );
+}
+

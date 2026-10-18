@@ -21,7 +21,9 @@ import {
   getWaitTimeMinutes,
   formatWaitTime,
   requiresTakeHomeConfirmation,
-  calculateNextStatusOnRepair
+  calculateNextStatusOnRepair,
+  REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+  isSafeFromCreditCardAutofill
 } from '../src/services/repairService';
 
 describe('Analytics and CSV Export Utilities', () => {
@@ -712,7 +714,72 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       expect('photoCount' in undefinedPhotos).toBe(false);
     });
   });
+
+  describe('iOS Credit Card Autofill Suppression (Issue #28)', () => {
+    it('configures REPAIR_ITEM_LOOKUP_INPUT_PROPS to suppress iOS Safari credit card autofill while retaining numeric keypad', () => {
+      // Verify numeric keypad & range constraints remain intact on PAT and Fixer stations
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS.type).toBe('number');
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS.inputMode).toBe('numeric');
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS.pattern).toBe('[0-9]*');
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS.min).toBe(1);
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS.max).toBe(200);
+
+      // Verify browser & password-manager autofill suppression attributes
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS.autoComplete).toBe('off');
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS['data-form-type']).toBe('other');
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS['data-1p-ignore']).toBe(true);
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS['data-lpignore']).toBe('true');
+      expect(REPAIR_ITEM_LOOKUP_INPUT_PROPS['data-bwignore']).toBe('true');
+
+      // Verify PAT and Fixer station input attributes pass the WebKit credit-card heuristic safety check
+      expect(
+        isSafeFromCreditCardAutofill({
+          ...REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+          id: 'pat-repair-item-lookup',
+        })
+      ).toBe(true);
+      expect(
+        isSafeFromCreditCardAutofill({
+          ...REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+          id: 'fixer-repair-item-lookup',
+        })
+      ).toBe(true);
+    });
+
+    it('rejects legacy placeholders and field names that trigger iOS Safari CreditCardAutoFill heuristics', () => {
+      // The legacy PAT/Fixer placeholder ("Enter Physical Card Number (#1..#100)...") triggered iOS credit card autofill
+      expect(
+        isSafeFromCreditCardAutofill({
+          ...REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+          placeholder: 'Enter Physical Card Number (#1..#100)...',
+        })
+      ).toBe(false);
+
+      // Field names or IDs containing "card" or "cc-number" must be rejected
+      expect(
+        isSafeFromCreditCardAutofill({
+          ...REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+          name: 'cardNumber',
+        })
+      ).toBe(false);
+      expect(
+        isSafeFromCreditCardAutofill({
+          ...REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+          id: 'credit-card-input',
+        })
+      ).toBe(false);
+
+      // Missing autoComplete="off" or data-form-type="other" must be rejected
+      expect(
+        isSafeFromCreditCardAutofill({
+          ...REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+          autoComplete: 'on',
+        })
+      ).toBe(false);
+    });
+  });
 });
+
 
 
 

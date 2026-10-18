@@ -14,7 +14,12 @@ import {
 import { Session, RepairItem, ApplianceClass, PatInitialOutcome, PatFinalOutcome } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';
 import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
-import { getRepairByCardNumber, submitPatInitial, submitPatFinal } from '../services/repairService';
+import {
+  getRepairByCardNumber,
+  submitPatInitial,
+  submitPatFinal,
+  REPAIR_ITEM_LOOKUP_INPUT_PROPS
+} from '../services/repairService';
 import { getQualifiedPatTesters } from '../services/volunteerService';
 import { CardToken } from '../components/common/CardToken';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -245,6 +250,15 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
             {/* Instrument serial number input */}
             <input
               type="text"
+              id="pat-instrument-serial"
+              name="pat-instrument-serial"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-1p-ignore={true}
+              data-lpignore="true"
+              data-bwignore="true"
+              data-form-type="other"
               placeholder="PAT Instrument S/N"
               value={instrumentSerial}
               onChange={(e) => setInstrumentSerial(e.target.value)}
@@ -271,14 +285,14 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
           </div>
         )}
 
-        {/* Card Number Point-Lookup Form */}
-        <form onSubmit={handleSearchCard} className="mt-6 flex gap-3">
+        {/* Repair Item Point-Lookup Form (autofill-safe for iOS Safari — Issue #28) */}
+        <form onSubmit={handleSearchCard} autoComplete="off" role="search" className="mt-6 flex gap-3">
           <div className="relative flex-1">
             <Search className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
-            {/* Numeric card number input */}
+            {/* Numeric repair item lookup input */}
             <input
-              type="number"
-              placeholder="Enter Physical Card Number (#1..#100)..."
+              {...REPAIR_ITEM_LOOKUP_INPUT_PROPS}
+              id="pat-repair-item-lookup"
               value={searchCardNumber}
               onChange={(e) => setSearchCardNumber(e.target.value)}
               className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-300 text-base font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"

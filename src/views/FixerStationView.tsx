@@ -45,7 +45,8 @@ import {
   submitRepairRecord,
   fetchRepairPhotos,
   deleteRepairPhoto,
-  requiresTakeHomeConfirmation
+  requiresTakeHomeConfirmation,
+  REPAIR_ITEM_LOOKUP_INPUT_PROPS
 } from '../services/repairService';
 import {
   compressRepairPhoto,
@@ -460,14 +461,14 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
           </div>
         )}
 
-        {/* Card Number Lookup */}
-        <form onSubmit={handleSearchCard} className="mt-6 flex gap-3">
+        {/* Repair Item Lookup Form (autofill-safe for iOS Safari — Issue #28) */}
+        <form onSubmit={handleSearchCard} autoComplete="off" role="search" className="mt-6 flex gap-3">
           <div className="relative flex-1">
             <Search className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
-            {/* Numeric card number input */}
+            {/* Numeric repair item lookup input */}
             <input
-              type="number"
-              placeholder="Enter Physical Card Number (#1..#100)..."
+              {...REPAIR_ITEM_LOOKUP_INPUT_PROPS}
+              id="fixer-repair-item-lookup"
               value={searchCardNumber}
               onChange={(e) => setSearchCardNumber(e.target.value)}
               className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-300 text-base font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
