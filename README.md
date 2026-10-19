@@ -37,6 +37,7 @@ Originally engineered for **Sutton Repair Café** ([www.suttonrepaircafe.org.uk]
 5. [Local Development & Testing](#5-local-development--testing)
    - [Testing Subdomain Filtering Locally](#testing-subdomain-filtering-locally)
    - [Managing & Purging Test Sessions (`manage-sessions` CLI)](#managing--purging-test-sessions-manage-sessions-cli)
+   - [Ingesting Historical CSVs & Merging Volunteers (`ingest-history` & `merge-volunteers` CLI)](#ingesting-historical-csvs--merging-volunteers-ingest-history--merge-volunteers-cli)
 
 ---
 
@@ -748,3 +749,33 @@ npm run manage-sessions -- --purge <sessionId> --confirm
 ```
 
 For full details on authentication prerequisites, project resolution, safety guardrails, and operational recipes, see **[`docs/MANAGE_SESSIONS_CLI.md`](docs/MANAGE_SESSIONS_CLI.md)**.
+
+### Ingesting Historical CSVs & Merging Volunteers (`ingest-history` & `merge-volunteers` CLI)
+
+To migrate legacy Google Forms CSV exports (`Registration Responses`, `Repair Outcomes`, and `PAT Tests`) into finalized, GDPR-redacted Firestore sessions (`YYYYMMDD-yourspace`) and consolidate any duplicate or auto-enrolled volunteer records:
+
+```bash
+# Preview historical CSV ingestion (dry-run)
+npm run ingest-history -- \
+  --registrations ./registrations.csv \
+  --outcomes ./outcomes.csv \
+  --pat ./pat.csv \
+  --dry-run
+
+# Execute historical CSV ingestion
+npm run ingest-history -- \
+  --registrations ./registrations.csv \
+  --outcomes ./outcomes.csv \
+  --pat ./pat.csv \
+  --force \
+  --confirm
+
+# List all volunteers (highlighting auto-enrolled historical records)
+npm run merge-volunteers -- --list
+
+# Preview and merge a duplicate volunteer record across all collections
+npm run merge-volunteers -- --from <sourceIdOrName> --into <targetIdOrName> --dry-run
+npm run merge-volunteers -- --from <sourceIdOrName> --into <targetIdOrName> --confirm
+```
+
+For full documentation on date snapping, brand/volunteer canonicalization, orphan handling, and merge rules, see **[`docs/HISTORICAL_INGEST_CLI.md`](docs/HISTORICAL_INGEST_CLI.md)**.

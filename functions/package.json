@@ -10,7 +10,9 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "manage-sessions": "npm run build && node lib/scripts/manageSessions.js"
+    "manage-sessions": "npm run build && node lib/scripts/manageSessions.js",
+    "ingest-history": "npm run build && node lib/scripts/ingestHistoricalData.js",
+    "merge-volunteers": "npm run build && node lib/scripts/mergeVolunteers.js"
   },
   "engines": {
     "node": "24"

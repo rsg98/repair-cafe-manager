@@ -11,7 +11,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "manage-sessions": "npm --prefix functions run build && node functions/lib/scripts/manageSessions.js"
+    "manage-sessions": "npm --prefix functions run build && node functions/lib/scripts/manageSessions.js",
+    "ingest-history": "npm --prefix functions run build && node functions/lib/scripts/ingestHistoricalData.js",
+    "merge-volunteers": "npm --prefix functions run build && node functions/lib/scripts/mergeVolunteers.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.6",

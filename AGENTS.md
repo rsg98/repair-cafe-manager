@@ -341,11 +341,13 @@ Because repair cafes operate with zero budget, the application is strictly desig
 ├── docs/
 │   ├── BUDGET_ALERTS.md               # Guide to setting up GCP £1 budget safeguards
 │   ├── MANAGE_SESSIONS_CLI.md         # CLI documentation for session inspection, tagging & purge
+│   ├── HISTORICAL_INGEST_CLI.md       # CLI documentation for historical CSV ingestion & volunteer merge
 │   ├── guides/                        # Station-by-station operational guides
 │   └── design/
 │       ├── repair_cafe_management_system.md # Full architectural design doc
 │       ├── pat_station_enhancements.md      # PAT station instrument & outcome enhancements spec
-│       └── test_sessions_and_purge.md       # Test session lifecycle & CLI purge utility spec
+│       ├── test_sessions_and_purge.md       # Test session lifecycle & CLI purge utility spec
+│       └── historical_data_ingestion.md     # Legacy CSV ingestion & volunteer merge CLI spec
 │
 ├── functions/                         # Cloud Functions (Node 24 / TypeScript)
 │   ├── package.json
@@ -356,7 +358,11 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │       ├── finalizeSession.ts         # Session analytics aggregator & GDPR scrubber
 │       └── scripts/
 │           ├── manageSessions.ts      # Admin CLI utility to list, tag & purge sessions
-│           └── manageSessionsArgs.ts  # CLI flag parser re-export for Cloud Functions build
+│           ├── manageSessionsArgs.ts  # CLI flag parser re-export for Cloud Functions build
+│           ├── ingestHistoricalData.ts # Admin CLI utility to ingest historical CSVs
+│           ├── historicalIngestParser.ts # CSV parser & normalizer for Cloud Functions build
+│           ├── mergeVolunteers.ts     # Admin CLI utility to list & merge duplicate volunteers
+│           └── mergeVolunteersArgs.ts # Volunteer merge parser & planner for Cloud Functions build
 │
 ├── src/
 │   ├── App.tsx                        # Router layout, session loading, offline indicator
@@ -372,7 +378,9 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   ├── utils/
 │   │   ├── hostnameViews.ts           # Subdomain view filtering logic
 │   │   ├── organizerAuth.ts           # Organizer email/domain authorization helper
-│   │   └── manageSessionsArgs.ts      # Pure CLI argument parser for manage-sessions
+│   │   ├── manageSessionsArgs.ts      # Pure CLI argument parser for manage-sessions
+│   │   ├── historicalIngestParser.ts  # Pure CSV parser, normalizer & session builder
+│   │   └── mergeVolunteersArgs.ts     # Pure CLI parser & planner for merge-volunteers
 │   │
 │   ├── services/
 │   │   ├── firebase.ts                # Firebase app, auth, firestore (persistent cache), functions
@@ -410,7 +418,9 @@ Because repair cafes operate with zero budget, the application is strictly desig
 └── tests/                             # Vitest unit test suites
     ├── stateMachine.test.ts           # Full item lifecycle state transition tests
     ├── repairService.test.ts          # Analytics calculation & CSV formatting tests
-    └── sessionService.test.ts         # Reference token, PIN hash, test filtering & CLI parser tests
+    ├── sessionService.test.ts         # Reference token, PIN hash, test filtering & CLI parser tests
+    ├── historicalIngest.test.ts       # Historical CSV ingestion, normalizer & redaction tests
+    └── mergeVolunteers.test.ts        # Volunteer lookup, credit rewrite & merge plan tests
 ```
 
 ---
