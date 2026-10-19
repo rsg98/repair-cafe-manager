@@ -379,7 +379,7 @@ export function buildFinalizeSessionPrompt(
       : '';
 
   // Return the structured finalization and GDPR redaction confirmation message
-  return `Are you sure you want to CLOSE and FINALIZE "${sessionName}"?\n\nThis will:\n1. Compute final impact metrics (weight diverted, success rates).\n2. Automatically REDACT all visitor customer names and phone numbers (GDPR).\n3. Archive the session for reporting.${photoReminder}`;
+  return `Are you sure you want to CLOSE and FINALISE "${sessionName}"?\n\nThis will:\n1. Compute final impact metrics (weight diverted, success rates).\n2. Automatically REDACT all visitor customer names and phone numbers (GDPR).\n3. Archive the session for reporting.${photoReminder}`;
 }
 
 
@@ -435,7 +435,7 @@ export async function finalizeSessionDirectly(sessionId: string): Promise<void> 
   const effectiveEmails = await getEffectiveOrganizerEmails();
   const currentUser = auth.currentUser;
   if (!currentUser?.email || !isAuthorizedOrganizer(currentUser.email, effectiveEmails)) {
-    throw new Error('Only authenticated organizers may finalize a Repair Café session.');
+    throw new Error('Only authenticated organisers may finalise a Repair Café session.');
   }
 
   // Load the target session document and verify its existence
@@ -546,7 +546,7 @@ export async function setSessionTestStatus(
   const effectiveEmails = await getEffectiveOrganizerEmails();
   const currentUser = auth.currentUser;
   if (!currentUser?.email || !isAuthorizedOrganizer(currentUser.email, effectiveEmails)) {
-    throw new Error('Only authenticated organizers may update session test classification.');
+    throw new Error('Only authenticated organisers may update session test classification.');
   }
 
   // Read both sessions/{sessionId} and analytics/{sessionId} to avoid creating stub documents
@@ -664,7 +664,7 @@ export async function purgeSessionCascading(
   const { effectiveEmails, settings } = await getSystemSettingsWithEmails();
   const currentUser = auth.currentUser;
   if (!currentUser?.email || !isAuthorizedOrganizer(currentUser.email, effectiveEmails)) {
-    throw new Error('Only authenticated organizers may purge a Repair Café session.');
+    throw new Error('Only authenticated organisers may purge a Repair Café session.');
   }
 
   // Load both session and analytics documents to verify existence and test classification

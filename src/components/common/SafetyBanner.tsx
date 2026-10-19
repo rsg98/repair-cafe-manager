@@ -17,7 +17,7 @@ export const SafetyBanner: React.FC<SafetyBannerProps> = ({ outcome, cautionNote
           <ShieldAlert className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
           <div>
             <h4 className="font-bold text-base text-red-900 tracking-wide uppercase">
-              DANGER: DO NOT ENERGIZE (LETHAL HAZARD)
+              DANGER: DO NOT ENERGISE (LETHAL HAZARD)
             </h4>
             <p className="mt-1 text-sm font-medium text-red-800">
               This item failed initial PAT testing with catastrophic safety or insulation failure. 

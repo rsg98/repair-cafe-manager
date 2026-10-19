@@ -49,7 +49,7 @@ async function verifyOrganizerCaller(request: CallableRequest): Promise<void> {
   if (!request.auth || !request.auth.token) {
     throw new HttpsError(
       "unauthenticated",
-      "Only authenticated organizers may finalize a Repair Café session."
+      "Only authenticated organisers may finalise a Repair Café session."
     );
   }
 
@@ -88,7 +88,7 @@ async function verifyOrganizerCaller(request: CallableRequest): Promise<void> {
   if (!isAuthorized) {
     throw new HttpsError(
       "permission-denied",
-      "Only authenticated organizers may finalize a Repair Café session."
+      "Only authenticated organisers may finalise a Repair Café session."
     );
   }
 }

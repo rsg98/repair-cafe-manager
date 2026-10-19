@@ -88,13 +88,13 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
             ) : (
-              /* Organizer Google login button */
+              /* Organiser Google login button */
               <button
                 onClick={signInWithGoogle}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white text-emerald-900 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-50 active:bg-emerald-100 transition-colors"
               >
                 <LogIn className="h-3.5 w-3.5" />
-                <span>Organizer Login</span>
+                <span>Organiser Login</span>
               </button>
             )}
           </div>

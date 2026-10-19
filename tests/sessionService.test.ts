@@ -401,7 +401,7 @@ describe('Finalize Session Prompt Builder (buildFinalizeSessionPrompt — Issue 
     const prompt = buildFinalizeSessionPrompt('October 2026 - Seears Park', 0);
 
     // Verify core finalization steps are present and photo note is absent
-    expect(prompt).toContain('CLOSE and FINALIZE "October 2026 - Seears Park"');
+    expect(prompt).toContain('CLOSE and FINALISE "October 2026 - Seears Park"');
     expect(prompt).toContain('REDACT all visitor customer names and phone numbers');
     expect(prompt).not.toContain('item photo');
   });

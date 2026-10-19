@@ -97,7 +97,7 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
 - **Confirmation:** Issues a 4-character alphanumeric reference token (e.g., `REF-A38F`, omitting confusing `0, O, 1, I`) via a read-optimized single read (`getDoc`).
 
 ### Station 2: Front Desk Operations (`/frontdesk`)
-- **Access:** Restricted to organizers via **Google Sign-In** (`request.auth.token.email != null`).
+- **Access:** Restricted to organisers via **Google Sign-In** (`request.auth.token.email != null`).
 - **Session Lifecycle:** Starts the monthly session, sets the 4-digit daily volunteer PIN, optionally marks the session as a **Test / Training Session** (`isTest: true`), and points `settings/system.activeSessionId`.
 - **Card Token Assignment:** Maps customer reference tokens to physical numbered cards (#1..#N) that are reused every session.
   - Automatically routes `MAINS_240V` items to `WAITING_PAT1`.
@@ -105,8 +105,8 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
   - Enforces duplicate card checks to prevent assigning a card already assigned to an item in the session.
 - **Queue Search & Filtering:** Table displays customer first name alongside card tokens and reference tokens. Search box matches customer name, card number, reference token, or item description. Status filter dropdown reflects live item counts across all queues including Waiting PAT 1, Waiting Repair, and Waiting PAT 2.
 - **Checkout & Card Recovery:** Confirms customer collection, marks item `COMPLETED`, preserves original `cardNumber` intact for session auditability (cards are not reused in the same session), and greys out the row in the Front Desk queue to prevent accidental card reassignment.
-- **Session Finalization & Test Session Purge:**
-  - **Finalize & Redact Session:** Triggers the backend Cloud Function `finalizeSession` (with automatic client-side fallback) to scrub PII (`customerName` on repair doc and `firstName`/`contactPhone` in `private/customer`) and compile `analytics/{sessionId}` (propagating `isTest: Boolean(sessionData.isTest)`).
+- **Session Finalisation & Test Session Purge:**
+  - **Finalise & Redact Session:** Triggers the backend Cloud Function `finalizeSession` (with automatic client-side fallback) to scrub PII (`customerName` on repair doc and `firstName`/`contactPhone` in `private/customer`) and compile `analytics/{sessionId}` (propagating `isTest: Boolean(sessionData.isTest)`).
   - **Discard & Purge Test Session (`purgeTestSession`):** Shown when `session.isTest === true`; permanently deletes `private/customer`, `repairs/*`, `analytics/{sessionId}`, and `sessions/{sessionId}` in 200-pair batch chunks and resets `settings/system` if active.
 
 ### Station 3: PAT Electrical Safety Station (`/pat`)
@@ -118,7 +118,7 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
   - Measures earth continuity ($\le 0.1\,\Omega + \text{cord}$) for Class I.
 - **Pre-Repair (PAT 1) Outcomes:**
   - `PASS` $\rightarrow$ `WAITING_PAT1` / `WAITING_REPAIR`
-  - `FAIL_REPAIRABLE_CORD` $\rightarrow$ `WAITING_REPAIR` (displays Amber Safety Caution Banner to fixer; de-energized repair only).
+  - `FAIL_REPAIRABLE_CORD` $\rightarrow$ `WAITING_REPAIR` (displays Amber Safety Caution Banner to fixer; de-energised repair only).
   - `DANGER_DO_NOT_ENERGIZE` $\rightarrow$ `UNFIXABLE` (immediate quarantine; cannot be plugged into mains).
   - `UNTESTABLE` $\rightarrow$ `WAITING_REPAIR` (e.g. missing power adapter; flagged for visual inspection).
 - **Post-Repair (PAT 2) Safety Certification:**
@@ -144,9 +144,9 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
   - `TAKEN_HOME` $\rightarrow$ `TAKEN_HOME` (logs volunteer name and releases cafe custody under private informal contract).
 
 ### Station 5: Community Impact Reports (`/reports`)
-- **Access:** Organizers and public/volunteer viewing.
+- **Access:** Organisers and public/volunteer viewing.
 - **Metrics Tracked:** Total items, repair success rate (%), landfill waste diverted (kg), volunteer hours invested, category distributions.
-- **Test Session Isolation & Reclassification:** Sessions marked with `isTest: true` are automatically excluded from cumulative KPI cards, category breakdowns, the default archive table, and grant CSV exports. Authorized organizers (`isAdmin`) can toggle `Show Test Sessions (N)` and reclassify finalized sessions between Test and Official (`setSessionTestFlag`).
+- **Test Session Isolation & Reclassification:** Sessions marked with `isTest: true` are automatically excluded from cumulative KPI cards, category breakdowns, the default archive table, and grant CSV exports. Authorised organisers (`isAdmin`) can toggle `Show Test Sessions (N)` and reclassify finalised sessions between Test and Official (`setSessionTestFlag`).
 - **Export:** Single-click CSV export formatted for local council and grant funder submissions.
 
 ---
@@ -268,15 +268,15 @@ analytics/{sessionId}
    - Batches updates in chunks of 200 (strictly under Firestore's 500 operation transaction limit with 2 updates per repair item).
    - Updates `customerName` on the repair doc to `"[REDACTED]"`, updates `firstName` to `"[REDACTED]"` in `private/customer`, deletes `contactPhone`, and sets `redactedAt`.
 3. **Client-Side Cache Purge:**
-   - On session finalization, the front-desk app calls `terminate(db)` and `clearIndexedDbPersistence(db)` to ensure zero lingering local snapshots.
+   - On session finalisation, the front-desk app calls `terminate(db)` and `clearIndexedDbPersistence(db)` to ensure zero lingering local snapshots.
 
 ---
 
 ## 7. Security Rules & Authentication Architecture
 
 ### 7.1 Security Rule Roles (`firestore.rules`)
-- `isAdmin()`: `request.auth != null && (request.auth.token.admin == true || request.auth.token.email != null)` (Google Authenticated organizer or admin custom claim).
-  - Can create/edit sessions, modify `settings/system`, read customer PII in `private/customer`, and finalize sessions.
+- `isAdmin()`: `request.auth != null && (request.auth.token.admin == true || request.auth.token.email != null)` (Google Authenticated organiser or admin custom claim).
+  - Can create/edit sessions, modify `settings/system`, read customer PII in `private/customer`, and finalise sessions.
 - `isVolunteer()`: `request.auth != null && (request.auth.token.role == 'volunteer' || isAdmin())`.
   - Can read repair docs and update repair status, PAT results, and fixer records.
   - CANNOT read or write `private/customer`.
@@ -285,23 +285,23 @@ analytics/{sessionId}
   - Can create new registrations and create `private/customer` records at registration time.
 
 ### 7.2 Volunteer PIN Authentication Flow
-1. Organizer creates session with a 4-digit PIN (e.g. `4829`). The SHA-256 hash is saved to `sessions/{sessionId}.volunteerPinHash`.
+1. Organiser creates session with a 4-digit PIN (e.g. `4829`). The SHA-256 hash is saved to `sessions/{sessionId}.volunteerPinHash`.
 2. Volunteer station enters the 4-digit PIN in `PinModal.tsx`.
 3. Calls Cloud Function `verifyVolunteerPin({ sessionId, pin })`.
 4. Function checks hash and calls `admin.auth().createCustomToken(...)` with claim `{ role: 'volunteer', sessionId }`.
 5. Frontend signs in using `signInWithCustomToken(auth, token)`.
 6. Station stays authenticated for the duration of the event with zero account-creation friction.
 
-### 7.3 Organizer Google Account & Group Authorization Flow
+### 7.3 Organiser Google Account & Group Authorisation Flow
 - **Configuration (`src/config/cafe.config.ts` & `functions/src/config.ts`):**
   - `organizerEmails`: Array of named Google accounts (e.g. `coordinator@example.com`, `info@suttonrepaircafe.org.uk`) and domain groups (e.g. `@suttonrepaircafe.org.uk`).
   - Supports environment variable `ORGANIZER_EMAILS` (comma-separated) in Cloud Functions.
   - Dynamically supports `organizerEmails` in `settings/system` Firestore doc.
-- **Frontend Authorization (`useAuth.ts` & `FrontDeskView.tsx`):**
+- **Frontend Authorisation (`useAuth.ts` & `FrontDeskView.tsx`):**
   - `isAdmin`: evaluates `isAuthorizedOrganizer(user.email, cafeConfig.organizerEmails)`.
-  - Non-authorized Google accounts are presented with a clear unauthorized screen showing their signed-in address and a switch-account button.
-- **Backend Cloud Function Authorization (`finalizeSession.ts`):**
-  - Verifies caller has either `token.admin === true` or verified `token.email` matching authorized accounts or domain groups. Ensures closing and finalizing sessions is strictly protected without rejecting named Google accounts.
+  - Non-authorised Google accounts are presented with a clear unauthorised screen showing their signed-in address and a switch-account button.
+- **Backend Cloud Function Authorisation (`finalizeSession.ts`):**
+  - Verifies caller has either `token.admin === true` or verified `token.email` matching authorised accounts or domain groups. Ensures closing and finalising sessions is strictly protected without rejecting named Google accounts.
 
 ---
 
@@ -377,7 +377,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   │
 │   ├── utils/
 │   │   ├── hostnameViews.ts           # Subdomain view filtering logic
-│   │   ├── organizerAuth.ts           # Organizer email/domain authorization helper
+│   │   ├── organizerAuth.ts           # Organiser email/domain authorisation helper
 │   │   ├── manageSessionsArgs.ts      # Pure CLI argument parser for manage-sessions
 │   │   ├── historicalIngestParser.ts  # Pure CSV parser, normalizer & session builder
 │   │   └── mergeVolunteersArgs.ts     # Pure CLI parser & planner for merge-volunteers
@@ -410,7 +410,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   │
 │   └── views/
 │       ├── CustomerRegisterView.tsx   # Station 1: Customer check-in wizard
-│       ├── FrontDeskView.tsx          # Station 2: Organizers board & card assignment
+│       ├── FrontDeskView.tsx          # Station 2: Organisers board & card assignment
 │       ├── PatStationView.tsx         # Station 3: PAT 1 & PAT 2 electrical safety tester
 │       ├── FixerStationView.tsx       # Station 4: Volunteer fixer log & time tracker
 │       └── ReportsView.tsx            # Station 5: Visual analytics & CSV report download
@@ -443,10 +443,13 @@ Because repair cafes operate with zero budget, the application is strictly desig
 5. **UI & Accessibility:**
    - Stations are operated on mobile phones and budget 10" Android/iPad tablets.
    - Use large touch targets (minimum `min-h-[44px]` or `p-3`).
-   - Use high-contrast color coding for safety-critical states:
+   - Use high-contrast colour coding for safety-critical states:
      - `DANGER_DO_NOT_ENERGIZE`: Deep red pulsing alert banner (`border-red-600 bg-red-50 text-red-950`).
      - `FAIL_REPAIRABLE_CORD`: Amber warning banner (`border-amber-500 bg-amber-50 text-amber-950`).
      - `PASS`: Fresh emerald green badge (`border-emerald-300 bg-emerald-50 text-emerald-950`).
+6. **UK English Spelling Throughout UI & Documentation:**
+   - All user-facing UI strings, prompts, error messages, labels, and documentation must strictly use **UK English** spellings rather than US English (e.g., *organiser*, *authorised*, *finalise*, *energise*, *specialised*, *colour*, *recognised*, *licence* [noun]).
+   - Do **not** rename existing Firestore document fields (`finalizedAt`, `organizerEmails`), persisted enum values (`'FINALIZED'`, `'DANGER_DO_NOT_ENERGIZE'`, `'ORGANIZER'`), or Cloud Function entrypoints (`finalizeSession`) where doing so would break schema backwards compatibility.
 
 ---
 
@@ -477,12 +480,12 @@ When modifying domain logic, always ensure tests in `tests/stateMachine.test.ts`
 
 ## 12. Common Maintenance & Extension Recipes
 
-### Recipe A: Customizing for a New Repair Café
+### Recipe A: Customising for a New Repair Café
 Edit `src/config/cafe.config.ts`:
 - Change `cafeName`, `tagline`, `venueName`, `contactEmail`, `websiteUrl`.
 - Replace `/public/logo.svg`.
 - Adjust `defaultCardRange` to match the café's physical token inventory.
-- Update `termsAndConditions` path (default `"/terms.md"`) and edit `public/terms.md` with the local organization's legal notice, house rules, and safety disclaimers.
+- Update `termsAndConditions` path (default `"/terms.md"`) and edit `public/terms.md` with the local organisation's legal notice, house rules, and safety disclaimers.
 
 ### Recipe B: Adding a New Item Category or Power Type
 1. Update types in `src/types/index.ts`:
@@ -498,7 +501,7 @@ Edit `src/config/cafe.config.ts`:
 3. Update `submitPatInitial` and `submitPatFinal` in `src/services/repairService.ts`.
 4. Update `tests/stateMachine.test.ts` to verify the state transitions.
 
-### Recipe D: Modifying Session Metrics & Finalization
+### Recipe D: Modifying Session Metrics & Finalisation
 1. Update `SessionAnalytics` interface in `src/types/index.ts`.
 2. Update the aggregation loop in `functions/src/finalizeSession.ts`.
 3. Update `exportAnalyticsToCsv` in `src/services/analyticsService.ts`.

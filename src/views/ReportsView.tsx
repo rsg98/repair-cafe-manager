@@ -407,8 +407,8 @@ export const ReportsView: React.FC = () => {
             {/* Empty state icon and helper text */}
             <Layers className="h-10 w-10 text-slate-300 mx-auto mb-3" />
             {analyticsList.length === 0
-              ? 'No finalized sessions found yet. Once a session is closed and finalized at the Front Desk, its aggregated metrics and environmental savings will appear here.'
-              : `No official finalized sessions found yet (${testSessionCount} test session${testSessionCount === 1 ? ' is' : 's are'} hidden from official impact metrics).`}
+              ? 'No finalised sessions found yet. Once a session is closed and finalised at the Front Desk, its aggregated metrics and environmental savings will appear here.'
+              : `No official finalised sessions found yet (${testSessionCount} test session${testSessionCount === 1 ? ' is' : 's are'} hidden from official impact metrics).`}
           </div>
         ) : (
           <div className="overflow-x-auto">

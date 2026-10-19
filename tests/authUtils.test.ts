@@ -200,7 +200,7 @@ describe('Header Banner Authentication Role & Label (Issue #14)', () => {
       })
     ).toEqual({
       role: 'NON_ORGANIZER',
-      label: 'Visitor (Non-Organizer)',
+      label: 'Visitor (Non-Organiser)',
     });
   });
 

@@ -86,7 +86,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
         <Info className="h-12 w-12 text-amber-500 mx-auto mb-4" />
         <h2 className="text-2xl font-bold text-slate-800">No Active Session Today</h2>
         <p className="mt-2 text-slate-600">
-          The front desk has not opened today&apos;s repair café session yet. Please check back shortly or speak with an organizer.
+          The front desk has not opened today&apos;s repair café session yet. Please check back shortly or speak with an organiser.
         </p>
       </div>
     );

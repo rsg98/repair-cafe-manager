@@ -14,12 +14,12 @@ let cachedTermsText: string | null = null;
 
 const FALLBACK_TERMS_SUMMARY = `### ${cafeConfig.cafeName} Terms & House Rules (Summary)
 
-1. **Volunteer Best-Effort Basis:** All repair activities are carried out by volunteer repairers ("fixers") on a best-effort basis without warranty or guarantee.
-2. **Safety Testing (PAT):** All mains-powered (240V) electrical appliances must undergo safety inspection before and after repair. Devices deemed unsafe will not be energized.
-3. **Limitation of Liability:** Visitors bring items entirely at their own risk. Organizers and volunteers accept no liability for damage or loss.
-4. **Spare Parts & Materials:** Visitors are responsible for providing or purchasing necessary replacement parts.
-5. **Custody & Collection:** All items must be collected before the close of the event session. Informal home repairs released under TAKEN_HOME are private agreements between visitor and volunteer.
-6. **Data Protection:** Personal contact details are collected solely for on-day queue management and will be redacted following the session.`;
+1. **Free & Voluntary Basis:** Work carried out in the Repair Café is performed free of charge on a voluntary basis by repair experts. New materials or parts may be charged separately (at cost), and voluntary donations are appreciated.
+2. **Safety Testing (PAT):** All mains-powered (240V) electrical appliances must undergo safety inspection before and after repair. Devices deemed unsafe will not be energised.
+3. **Liability:** Visitors offer broken items for repair at their own risk. Organisers and repair experts offer no guarantee and are not liable for any loss or if repaired objects subsequently fail to work properly.
+4. **Repairing & Unrepairable Items:** ONE broken item per person will be examined at a time during busy periods. Repair experts are not obliged to reassemble disassembled appliances that cannot be repaired, and visitors are responsible for the tidy removal of items that could not be repaired.
+5. **Home Repairs & Collection:** If a repairer offers to complete a repair at home, the repairer and customer must exchange contact details and neither the Repair Café nor the repairer assume responsibility for safe-keeping.
+6. **Photos, Video & Data Protection:** By attending, you consent to photos or videos taken being used in social media and publicity. Personal contact details are collected solely for on-day queue management and will be redacted following the session.`;
 
 export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose, onAccept }) => {
   const [content, setContent] = useState<string>(cachedTermsText || '');

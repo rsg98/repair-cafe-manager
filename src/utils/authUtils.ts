@@ -174,7 +174,7 @@ export function getAuthBannerState(params: {
   if (isAdmin && user) {
     return {
       role: 'ORGANIZER',
-      label: user.displayName || user.email || 'Organizer',
+      label: user.displayName || user.email || 'Organiser',
     };
   }
 
@@ -190,7 +190,7 @@ export function getAuthBannerState(params: {
   if (user && user.email) {
     return {
       role: 'NON_ORGANIZER',
-      label: `${user.displayName || user.email} (Non-Organizer)`,
+      label: `${user.displayName || user.email} (Non-Organiser)`,
     };
   }
 

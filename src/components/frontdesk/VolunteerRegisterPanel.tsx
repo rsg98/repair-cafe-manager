@@ -688,7 +688,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                       PAT Electrical Safety Trained
                     </span>
                     <span className="text-slate-500">
-                      Authorizes this volunteer to appear in the Tester Name
+                      Authorises this volunteer to appear in the Tester Name
                       dropdown at the PAT Station.
                     </span>
                   </div>

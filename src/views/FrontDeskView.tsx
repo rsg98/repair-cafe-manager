@@ -4,12 +4,12 @@
  * Station 2: Front Desk Organiser View.
  * Provides live session queue management, physical card token assignment,
  * on-demand item photo viewing/downloading, customer PII lookup, volunteer
- * register administration, and session creation/finalization.
+ * register administration, and session creation/finalisation.
  *
  * Architectural Note: The FrontDeskView component exceeds 50 lines because it
  * coordinates the complete single-screen Front Desk board (live repair queue
- * table, tablet partition selector, attendance bar, card assignment modal,
- * customer PII modal, new session wizard, and photo viewer modal).
+ * table, attendance bar, card assignment modal, customer PII modal, new session
+ * wizard, and photo viewer modal).
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -22,7 +22,6 @@ import {
   Calendar,
   Archive,
   RefreshCw,
-  Tablet,
   Users,
   BookOpen,
   ClipboardList,
@@ -118,11 +117,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   const [newSessionVolunteerSearch, setNewSessionVolunteerSearch] = useState('');
   const [creatingSession, setCreatingSession] = useState(false);
 
-  // Tablet Partitioning preset for offline card allocation
-  const [tabletPreset, setTabletPreset] = useState<'A' | 'B' | 'ALL'>(() => {
-    return (localStorage.getItem('frontdesk_tablet_preset') as 'A' | 'B' | 'ALL') || 'ALL';
-  });
-
   // Assign card inline modal state
   const [selectedRepairId, setSelectedRepairId] = useState<string | null>(null);
   const [cardNumberInput, setCardNumberInput] = useState<string>('');
@@ -188,12 +182,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     return () => clearInterval(intervalId);
   }, []);
 
-  // Persist the selected tablet preset to localStorage
-  const handleTabletPresetChange = (preset: 'A' | 'B' | 'ALL') => {
-    setTabletPreset(preset);
-    localStorage.setItem('frontdesk_tablet_preset', preset);
-  };
-
   // Load the volunteer register and sync dynamic organiser emails to settings/system
   const loadVolunteers = useCallback(async () => {
     if (!isAdmin || !user) return;
@@ -227,7 +215,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     );
   };
 
-  // Render unauthorized message if signed in with a non-organiser Google account
+  // Render unauthorised message if signed in with a non-organiser Google account
   if (!isAdmin) {
     if (user && user.email) {
       return (
@@ -236,13 +224,13 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           <div className="h-14 w-14 bg-amber-100 text-amber-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Lock className="h-7 w-7 text-amber-700" />
           </div>
-          <h2 className="text-xl font-bold text-slate-800">Unauthorized Organizer Account</h2>
+          <h2 className="text-xl font-bold text-slate-800">Unauthorised Organiser Account</h2>
           <p className="mt-2 text-sm text-slate-600 mb-2">
             You are signed in as <span className="font-semibold text-slate-800">{user.email}</span>.
           </p>
           {/* Instructions for granting organiser access */}
           <p className="text-xs text-slate-500 mb-6 leading-relaxed">
-            This account is not in the list of authorized organizers for {cafeConfig.cafeName}. Please switch to an authorized Google account or ask an organiser to mark your profile as an Organiser in the Volunteer Register.
+            This account is not in the list of authorised organisers for {cafeConfig.cafeName}. Please switch to an authorised Google account or ask an organiser to mark your profile as an Organiser in the Volunteer Register.
           </p>
           <button
             onClick={signOut}
@@ -262,10 +250,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         <div className="h-14 w-14 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Lock className="h-7 w-7" />
         </div>
-        <h2 className="text-xl font-bold text-slate-800">Front Desk Organizer Login</h2>
+        <h2 className="text-xl font-bold text-slate-800">Front Desk Organiser Login</h2>
         {/* Explanation of organiser permissions required for Front Desk */}
         <p className="mt-2 text-sm text-slate-600 mb-6">
-          Access to the Front Desk queue, volunteer register, and session administration requires signing in with an authorized Google account.
+          Access to the Front Desk queue, volunteer register, and session administration requires signing in with an authorised Google account.
         </p>
         {/* Google Sign-In action button */}
         <button
@@ -332,17 +320,6 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     if (isNaN(num) || num <= 0) {
       setAssignError('Please enter a valid card number.');
       return;
-    }
-
-    // Warn organiser if card number falls outside the active tablet partition preset
-    if (tabletPreset === 'A' && (num < 1 || num > 50)) {
-      if (!confirm(`Warning: Tablet A is configured for cards 1-50. Card #${num} is outside this range. Proceed anyway?`)) {
-        return;
-      }
-    } else if (tabletPreset === 'B' && (num < 51 || num > 100)) {
-      if (!confirm(`Warning: Tablet B is configured for cards 51-100. Card #${num} is outside this range. Proceed anyway?`)) {
-        return;
-      }
     }
 
     // Perform card assignment and route item to PAT 1 or Repair queue
@@ -414,11 +391,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       try {
         // Run Cloud Function finalization (with automatic client-side fallback)
         await finalizeSessionClient(session.id);
-        alert('Session successfully finalized and customer data redacted.');
+        alert('Session successfully finalised and customer data redacted.');
         // Redirect cleanly to community impact reports
         window.location.href = '/reports';
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to finalize session';
+        const message = err instanceof Error ? err.message : 'Failed to finalise session';
         alert(message);
         setIsFinalizing(false);
       }
@@ -491,40 +468,9 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           </p>
         </div>
 
-        {/* Tablet Partition Selector and Session Lifecycle Buttons */}
+        {/* Session Lifecycle Action Buttons */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Offline card range partition buttons (Tablet A 1-50, Tablet B 51-100, All) */}
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
-            <Tablet className="h-4 w-4 text-slate-500 ml-1" />
-            <button
-              onClick={() => handleTabletPresetChange('A')}
-              className={`px-2 py-1 rounded-lg transition-all ${
-                tabletPreset === 'A' ? 'bg-white shadow text-emerald-800 font-bold' : 'text-slate-600'
-              }`}
-            >
-              Tablet A (1–50)
-            </button>
-            {/* Tablet B partition selector button */}
-            <button
-              onClick={() => handleTabletPresetChange('B')}
-              className={`px-2 py-1 rounded-lg transition-all ${
-                tabletPreset === 'B' ? 'bg-white shadow text-emerald-800 font-bold' : 'text-slate-600'
-              }`}
-            >
-              Tablet B (51–100)
-            </button>
-            {/* Unpartitioned full card range button */}
-            <button
-              onClick={() => handleTabletPresetChange('ALL')}
-              className={`px-2 py-1 rounded-lg transition-all ${
-                tabletPreset === 'ALL' ? 'bg-white shadow text-emerald-800 font-bold' : 'text-slate-600'
-              }`}
-            >
-              All
-            </button>
-          </div>
-
-          {/* Start, Discard & Purge, or Finalize Session Action Buttons */}
+          {/* Start, Discard & Purge, or Finalise Session Action Buttons */}
           {!session ? (
             /* Button to open the Start Today's Repair Café modal */
             <button
@@ -551,14 +497,14 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   {isDiscardingSession ? 'Purging Session...' : 'Discard & Purge Test Session'}
                 </button>
               )}
-              {/* Standard Finalize & Redact session button */}
+              {/* Standard Finalise & Redact session button */}
               <button
                 onClick={handleFinalizeSession}
                 disabled={isFinalizing || isDiscardingSession}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-900 shadow-sm transition-colors disabled:opacity-50"
               >
                 <Archive className="h-4 w-4" />
-                {isFinalizing ? 'Closing Session...' : 'Finalize & Redact Session'}
+                {isFinalizing ? 'Closing Session...' : 'Finalise & Redact Session'}
               </button>
             </div>
           )}
@@ -935,14 +881,9 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           {/* Card assignment dialog box */}
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
             <h3 className="text-lg font-bold text-slate-900 mb-1">Assign Physical Card</h3>
-            {/* Instructions and active tablet partition indicator */}
+            {/* Instructions */}
             <p className="text-xs text-slate-500 mb-3">
               Enter the number on the reusable physical card handed to the customer.
-              {tabletPreset !== 'ALL' && (
-                <span className="block mt-1 font-semibold text-emerald-700">
-                  Active Preset: Tablet {tabletPreset} ({tabletPreset === 'A' ? '1–50' : '51–100'})
-                </span>
-              )}
             </p>
 
             {/* Card conflict or validation error message */}

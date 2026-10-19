@@ -611,7 +611,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                     Advice Given
                   </div>
                   <p className="text-xs mt-1 text-slate-600">
-                    Recommended replacement part or specialized repair guidance.
+                    Recommended replacement part or specialised repair guidance.
                   </p>
                 </button>
 
