@@ -35,6 +35,8 @@ Originally engineered for **Sutton Repair Café** ([www.suttonrepaircafe.org.uk]
    - [Organizer Authorization (`organizerEmails`)](#organizer-authorization-organizeremails)
    - [Hostname Matching & View Filtering (`hostnameViews`)](#hostname-matching--view-filtering-hostnameviews)
 5. [Local Development & Testing](#5-local-development--testing)
+   - [Testing Subdomain Filtering Locally](#testing-subdomain-filtering-locally)
+   - [Managing & Purging Test Sessions (`manage-sessions` CLI)](#managing--purging-test-sessions-manage-sessions-cli)
 
 ---
 
@@ -183,6 +185,7 @@ The application provides five specialized views designed around the physical sta
 1. **Starting a Session:** When no session is active, organisers can create a new monthly session by specifying:
    * Session Name (e.g. `Sutton Repair Café — October 2026`) and Date.
    * A **4-Digit Volunteer PIN** (hashed with SHA-256 and stored on the session document so volunteers can unlock `/pat` and `/fixer` stations).
+   * **Test / Training Session (`isTest`):** Optional checkbox for volunteer training nights, rehearsals, or equipment checks. Displays an amber **`TEST`** badge in the header across all stations and automatically excludes the session from official `/reports` KPIs and CSV grant exports.
    * Initial **Volunteer Attendance Check-In** selected from the registered volunteer roster.
 2. **Live Session Attendance Bar:** Allows the Front Desk to check in late-arriving volunteers with a single click throughout the session so their names immediately appear on the Fixer and PAT station dropdowns.
 3. **Live Queue Metrics:** Displays real-time counters across the top of the board:
@@ -200,9 +203,9 @@ The application provides five specialized views designed around the physical sta
 7. **Checkout & Card Recovery (`Done`):**
    * When an item is in `READY_FOR_COLLECTION`, `UNFIXABLE`, or `TAKEN_HOME`, clicking **Done** marks the item `COMPLETED`.
    * The row is greyed out and moved to the bottom of the list while **preserving the original `cardNumber`** for auditability and preventing that card number from being reused during the same session.
-8. **Finalize & Redact Session:**
-   * At the end of the event, clicking **Finalize & Redact Session** invokes the `finalizeSession` Cloud Function (with an automatic client-side fallback).
-   * Computes final session impact metrics into `analytics/{sessionId}`, redacts `customerName` and `firstName` to `"[REDACTED]"`, deletes `contactPhone` across all repair records, closes the active session, and purges the local browser IndexedDB cache.
+8. **Finalize & Redact Session (or Discard & Purge Test Session):**
+   * At the end of an official event, clicking **Finalize & Redact Session** invokes the `finalizeSession` Cloud Function (with an automatic client-side fallback), computing final session impact metrics into `analytics/{sessionId}`, redacting `customerName` and `firstName` to `"[REDACTED]"`, deleting `contactPhone` across all repair records, closing the active session, and purging the local browser IndexedDB cache.
+   * When running a **Test / Training Session** (`isTest: true`), an amber banner on `/frontdesk` also provides a **Discard & Purge Test Session** button that permanently deletes the test session and all nested `repairs` and `private/customer` documents in a bottom-up cascade without writing to `/reports`.
 
 #### Tab 2: Volunteer Register (`VOLUNTEERS`)
 * A persistent directory of Repair Café volunteers managed by organisers.
@@ -282,14 +285,16 @@ The application provides five specialized views designed around the physical sta
 * **Who uses it:** Organisers, volunteers, grant funders, local council partners, and community members.
 * **Authentication:** Publicly readable (queries only aggregated, anonymous `analytics/{sessionId}` documents containing zero personal data).
 * **Key Features:**
-  1. **Cumulative Impact KPI Cards:**
-     * **Landfill Diverted:** Total weight in `kg` of successfully repaired items across all finalized sessions.
+  1. **Cumulative Impact KPI Cards (Official Sessions Only):**
+     * **Landfill Diverted:** Total weight in `kg` of successfully repaired items across all finalized official sessions.
      * **Repair Success Rate:** Percentage of items repaired (`Fixed` + `Partially Fixed`) alongside total items seen.
      * **Volunteer Effort:** Total direct workbench repair hours (`repairTimeMinutes / 60`).
      * **PAT Screenings:** Total electrical safety inspections (`PAT 1` + `PAT 2`) completed.
   2. **Repairs by Item Category Chart:** Proportional visual breakdown of items across `ELECTRICAL`, `MECHANICAL`, `TEXTILES`, `WOODWORK`, `TOY`, and `OTHER`.
-  3. **Monthly Session Archive Table:** Chronological breakdown of every finalized session showing items seen, fixed, partial, unfixable, weight diverted (`kg`), and volunteer hours.
-  4. **Single-Click CSV Export (`Export CSV for Grants`):** Downloads a formatted `.csv` file ready for local council environmental reporting, Repair Café International monitoring, and charity grant applications.
+  3. **Monthly Session Archive Table & Test Session Controls:**
+     * Chronological breakdown of finalized official sessions showing items seen, fixed, partial, unfixable, weight diverted (`kg`), volunteer hours, and volunteers attended.
+     * **Test Session Isolation:** Sessions flagged with `isTest: true` are automatically excluded from all public KPIs, charts, default archive rows, and CSV exports. Signed-in organisers can tick **Show Test Sessions** to inspect test runs or click **Mark as Test** / **Mark as Official** to reclassify any historical session.
+  4. **Single-Click CSV Export (`Export for Grant Report (CSV)`):** Downloads a formatted `.csv` file of official sessions ready for local council environmental reporting, Repair Café International monitoring, and charity grant applications.
 
 ---
 
@@ -721,3 +726,25 @@ Most modern browsers resolve `*.localhost` directly to `127.0.0.1` without editi
 * **Workbench Tablet (`['fixer', 'pat']`):** `http://fixer.localhost:5173`
 * **Organiser Full View (`['frontdesk', 'register', 'pat', 'fixer', 'reports']`):** `http://manager.localhost:5173`
 * **Unconfigured Hostname Notice:** `http://unconfigured.localhost:5173`
+
+### Managing & Purging Test Sessions (`manage-sessions` CLI)
+
+To inspect sessions, reclassify accidental test sessions, or permanently purge test/training sessions (including orphaned `repairs` and `private/customer` subcollections) from Firestore without opening the Firebase Console, use the built-in CLI utility:
+
+```bash
+# List all sessions in Firestore (read-only)
+npm run manage-sessions -- --list
+
+# Reclassify an existing session as a Test session (or back to Official)
+npm run manage-sessions -- --mark-test <sessionId>
+npm run manage-sessions -- --unmark-test <sessionId>
+
+# Preview and permanently purge all test sessions (isTest === true)
+npm run manage-sessions -- --purge-all-test
+npm run manage-sessions -- --purge-all-test --confirm
+
+# Purge a specific session by ID (requires --force if the session is Official)
+npm run manage-sessions -- --purge <sessionId> --confirm
+```
+
+For full details on authentication prerequisites, project resolution, safety guardrails, and operational recipes, see **[`docs/MANAGE_SESSIONS_CLI.md`](docs/MANAGE_SESSIONS_CLI.md)**.

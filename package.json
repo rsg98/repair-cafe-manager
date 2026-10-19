@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "manage-sessions": "npm --prefix functions run build && node functions/lib/scripts/manageSessions.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.6",

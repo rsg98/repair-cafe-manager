@@ -98,14 +98,16 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
 
 ### Station 2: Front Desk Operations (`/frontdesk`)
 - **Access:** Restricted to organizers via **Google Sign-In** (`request.auth.token.email != null`).
-- **Session Lifecycle:** Starts the monthly session, sets the 4-digit daily volunteer PIN, and points `settings/system.activeSessionId`.
+- **Session Lifecycle:** Starts the monthly session, sets the 4-digit daily volunteer PIN, optionally marks the session as a **Test / Training Session** (`isTest: true`), and points `settings/system.activeSessionId`.
 - **Card Token Assignment:** Maps customer reference tokens to physical numbered cards (#1..#N) that are reused every session.
   - Automatically routes `MAINS_240V` items to `WAITING_PAT1`.
   - Automatically routes other power types to `WAITING_REPAIR`.
   - Enforces duplicate card checks to prevent assigning a card already assigned to an item in the session.
 - **Queue Search & Filtering:** Table displays customer first name alongside card tokens and reference tokens. Search box matches customer name, card number, reference token, or item description. Status filter dropdown reflects live item counts across all queues including Waiting PAT 1, Waiting Repair, and Waiting PAT 2.
 - **Checkout & Card Recovery:** Confirms customer collection, marks item `COMPLETED`, preserves original `cardNumber` intact for session auditability (cards are not reused in the same session), and greys out the row in the Front Desk queue to prevent accidental card reassignment.
-- **Session Finalization:** Triggers the backend Cloud Function `finalizeSession` (with automatic client-side fallback) to scrub PII (`customerName` on repair doc and `firstName`/`contactPhone` in `private/customer`) and compile analytics.
+- **Session Finalization & Test Session Purge:**
+  - **Finalize & Redact Session:** Triggers the backend Cloud Function `finalizeSession` (with automatic client-side fallback) to scrub PII (`customerName` on repair doc and `firstName`/`contactPhone` in `private/customer`) and compile `analytics/{sessionId}` (propagating `isTest: Boolean(sessionData.isTest)`).
+  - **Discard & Purge Test Session (`purgeTestSession`):** Shown when `session.isTest === true`; permanently deletes `private/customer`, `repairs/*`, `analytics/{sessionId}`, and `sessions/{sessionId}` in 200-pair batch chunks and resets `settings/system` if active.
 
 ### Station 3: PAT Electrical Safety Station (`/pat`)
 - **Access:** Authenticated via the 4-digit daily session PIN (mints custom token with `{ role: 'volunteer' }`).
@@ -115,7 +117,7 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
   - Selects test voltage (250V vs 500V DC) and measures insulation resistance ($\ge 1.0\,\text{M}\Omega$ Class I, $\ge 2.0\,\text{M}\Omega$ Class II).
   - Measures earth continuity ($\le 0.1\,\Omega + \text{cord}$) for Class I.
 - **Pre-Repair (PAT 1) Outcomes:**
-  - `PASS` $\rightarrow$ `WAITING_REPAIR`
+  - `PASS` $\rightarrow$ `WAITING_PAT1` / `WAITING_REPAIR`
   - `FAIL_REPAIRABLE_CORD` $\rightarrow$ `WAITING_REPAIR` (displays Amber Safety Caution Banner to fixer; de-energized repair only).
   - `DANGER_DO_NOT_ENERGIZE` $\rightarrow$ `UNFIXABLE` (immediate quarantine; cannot be plugged into mains).
   - `UNTESTABLE` $\rightarrow$ `WAITING_REPAIR` (e.g. missing power adapter; flagged for visual inspection).
@@ -144,6 +146,7 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
 ### Station 5: Community Impact Reports (`/reports`)
 - **Access:** Organizers and public/volunteer viewing.
 - **Metrics Tracked:** Total items, repair success rate (%), landfill waste diverted (kg), volunteer hours invested, category distributions.
+- **Test Session Isolation & Reclassification:** Sessions marked with `isTest: true` are automatically excluded from cumulative KPI cards, category breakdowns, the default archive table, and grant CSV exports. Authorized organizers (`isAdmin`) can toggle `Show Test Sessions (N)` and reclassify finalized sessions between Test and Official (`setSessionTestFlag`).
 - **Export:** Single-click CSV export formatted for local council and grant funder submissions.
 
 ---
@@ -223,6 +226,7 @@ sessions/{sessionId}
   ├── name: string
   ├── date: string (YYYY-MM-DD)
   ├── status: 'ACTIVE' | 'FINALIZED'
+  ├── isTest?: boolean
   ├── volunteerPinHash: string (SHA-256)
   ├── cardRangeStart: number
   ├── cardRangeEnd: number
@@ -252,7 +256,7 @@ settings/system
   └── allowRegistration: boolean
 
 analytics/{sessionId}
-  └── (Aggregated anonymous impact metrics: diversion kg, success %, time min)
+  └── (Aggregated anonymous impact metrics: diversion kg, success %, time min, isTest?: boolean)
 ```
 
 ### 6.2 Key Security & Privacy Rules
@@ -336,8 +340,12 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │
 ├── docs/
 │   ├── BUDGET_ALERTS.md               # Guide to setting up GCP £1 budget safeguards
+│   ├── MANAGE_SESSIONS_CLI.md         # CLI documentation for session inspection, tagging & purge
+│   ├── guides/                        # Station-by-station operational guides
 │   └── design/
-│       └── repair_cafe_management_system.md # Full architectural design doc
+│       ├── repair_cafe_management_system.md # Full architectural design doc
+│       ├── pat_station_enhancements.md      # PAT station instrument & outcome enhancements spec
+│       └── test_sessions_and_purge.md       # Test session lifecycle & CLI purge utility spec
 │
 ├── functions/                         # Cloud Functions (Node 24 / TypeScript)
 │   ├── package.json
@@ -345,7 +353,10 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   └── src/
 │       ├── index.ts                   # Exported functions index
 │       ├── verifyVolunteerPin.ts      # PIN hash verification & custom token minting
-│       └── finalizeSession.ts         # Session analytics aggregator & GDPR scrubber
+│       ├── finalizeSession.ts         # Session analytics aggregator & GDPR scrubber
+│       └── scripts/
+│           ├── manageSessions.ts      # Admin CLI utility to list, tag & purge sessions
+│           └── manageSessionsArgs.ts  # CLI flag parser re-export for Cloud Functions build
 │
 ├── src/
 │   ├── App.tsx                        # Router layout, session loading, offline indicator
@@ -358,11 +369,17 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   ├── types/
 │   │   └── index.ts                   # TypeScript interfaces and domain types
 │   │
+│   ├── utils/
+│   │   ├── hostnameViews.ts           # Subdomain view filtering logic
+│   │   ├── organizerAuth.ts           # Organizer email/domain authorization helper
+│   │   └── manageSessionsArgs.ts      # Pure CLI argument parser for manage-sessions
+│   │
 │   ├── services/
 │   │   ├── firebase.ts                # Firebase app, auth, firestore (persistent cache), functions
 │   │   ├── repairService.ts           # State machine helpers, registrations, card assign, PAT, repair
-│   │   ├── sessionService.ts          # Session creation, PIN hashing, active session resolver
-│   │   └── analyticsService.ts        # Historical queries, metrics aggregation, CSV export
+│   │   ├── sessionService.ts          # Session creation, PIN hashing, test session tagging & purge
+│   │   ├── patInstrumentService.ts    # PAT tester calibration & service warning helpers
+│   │   └── analyticsService.ts        # Historical queries, test filtering, metrics & CSV export
 │   │
 │   ├── hooks/
 │   │   ├── useActiveSession.ts        # Subscribes to settings/system & active session
@@ -393,7 +410,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
 └── tests/                             # Vitest unit test suites
     ├── stateMachine.test.ts           # Full item lifecycle state transition tests
     ├── repairService.test.ts          # Analytics calculation & CSV formatting tests
-    └── sessionService.test.ts         # Reference token formatting & SHA-256 PIN hash tests
+    └── sessionService.test.ts         # Reference token, PIN hash, test filtering & CLI parser tests
 ```
 
 ---
@@ -439,6 +456,9 @@ cd functions && npm run build && cd ..
 
 # 4. Run Vite development server
 npm run dev
+
+# 5. Inspect or purge test sessions via the Admin CLI (see docs/MANAGE_SESSIONS_CLI.md)
+npm run manage-sessions -- --list
 ```
 
 When modifying domain logic, always ensure tests in `tests/stateMachine.test.ts`, `tests/repairService.test.ts`, and `tests/sessionService.test.ts` remain aligned and pass.

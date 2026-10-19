@@ -161,10 +161,12 @@ export interface PolicyDocument {
  * Monthly Repair Café event session document stored at `sessions/{sessionId}`.
  */
 export interface Session {
-  id: string; // e.g., "2026-10-seears"
+  id: string; // e.g., "2026-10-seears" or "2026-10-seears-test"
   name: string; // "October 2026 - Seears Park"
   date: string; // ISO 8601 YYYY-MM-DD
   status: 'ACTIVE' | 'FINALIZED';
+  // Optional flag indicating a rehearsal/training session excluded from public impact reports (Issue #24)
+  isTest?: boolean;
   // SHA-256 hash of daily 4-digit volunteer PIN and physical card range
   volunteerPinHash: string;
   cardRangeStart: number;
@@ -351,6 +353,8 @@ export interface SessionAnalytics {
   sessionId: string;
   sessionName: string;
   date: string;
+  // Optional flag indicating a rehearsal/training session excluded from public impact reports (Issue #24)
+  isTest?: boolean;
   totalItems: number;
   // Breakdown of repair outcomes across the session
   repairedCount: number;

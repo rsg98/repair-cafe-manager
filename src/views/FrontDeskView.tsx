@@ -30,7 +30,9 @@ import {
   Zap,
   AlertTriangle,
   Clock,
-  Camera
+  Camera,
+  Trash2,
+  FlaskConical
 } from 'lucide-react';
 import { Session, RepairItem, Volunteer, SystemSettings } from '../types';
 import { useAuth } from '../hooks/useAuth';
@@ -39,6 +41,7 @@ import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 import {
   createSession,
   finalizeSessionClient,
+  purgeSessionCascading,
   publishAppVersionToSystemSettings
 } from '../services/sessionService';
 import {
@@ -109,6 +112,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   const [sessionName, setSessionName] = useState('');
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [volunteerPin, setVolunteerPin] = useState('');
+  const [isTestSession, setIsTestSession] = useState(false);
   const [selectedNewSessionVolunteerIds, setSelectedNewSessionVolunteerIds] = useState<string[]>([]);
   const [newSessionVolunteerSearch, setNewSessionVolunteerSearch] = useState('');
   const [creatingSession, setCreatingSession] = useState(false);
@@ -139,8 +143,9 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  // Finalize session confirmation state
+  // Finalize and discard/purge session confirmation state
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isDiscardingSession, setIsDiscardingSession] = useState(false);
 
   // Protect active Front Desk modals, searches, and session lifecycle actions from mid-action auto-reload
   const isFrontDeskDirty =
@@ -149,8 +154,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     contactModalData !== null ||
     photoModalRepairId !== null ||
     showPoliciesModal ||
+    // Also treat active search queries or in-progress lifecycle mutations as unsaved work
     searchTerm.trim().length > 0 ||
     isFinalizing ||
+    isDiscardingSession ||
     creatingSession;
   useRegisterUnsavedWork(isFrontDeskDirty, 'frontdesk-view');
 
@@ -280,8 +287,12 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
     setCreatingSession(true);
     try {
-      // Build deterministic session ID and non-PII attending volunteer summaries
-      const sessionId = `${sessionDate.replace(/-/g, '')}-${sessionName.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+      // Build deterministic session ID and append -test suffix when flagged as a test session
+      const baseSessionId = `${sessionDate.replace(/-/g, '')}-${sessionName.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+      const sessionId = isTestSession && !baseSessionId.endsWith('-test')
+        ? `${baseSessionId}-test`
+        : baseSessionId;
+      // Map selected attending volunteer records to non-PII summaries
       const selectedObjects = volunteers.filter((v) =>
         selectedNewSessionVolunteerIds.includes(v.id)
       );
@@ -295,13 +306,15 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         volunteerPin: volunteerPin.trim(),
         cardRangeStart: cafeConfig.defaultCardRange.start,
         cardRangeEnd: cafeConfig.defaultCardRange.end,
-        attendingVolunteers: attendingSummaries
+        attendingVolunteers: attendingSummaries,
+        isTest: isTestSession
       });
 
       // Reset modal form state after successful launch
       setShowNewSessionModal(false);
       setSessionName('');
       setVolunteerPin('');
+      setIsTestSession(false);
       setSelectedNewSessionVolunteerIds([]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create session';
@@ -419,6 +432,30 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     }
   };
 
+  // Permanently discard and cascade-delete an active test or rehearsal session
+  const handleDiscardTestSession = async () => {
+    if (!session) return;
+    const confirmed = confirm(
+      `Are you sure you want to DISCARD and PERMANENTLY PURGE "${session.name}"?\n\nThis will:\n1. Permanently delete all ${repairs.length} repair items, customer PII records, and attached photos.\n2. Delete the session and any analytics snapshot without archiving.\n3. Close the active session so the Front Desk returns to idle.`
+    );
+    if (!confirmed) return;
+
+    // Execute bottom-up cascading purge and reload Front Desk
+    setIsDiscardingSession(true);
+    try {
+      const { deletedRepairs } = await purgeSessionCascading(session.id);
+      alert(
+        `Test session "${session.name}" discarded and permanently purged (${deletedRepairs} repair item${deletedRepairs === 1 ? '' : 's'} deleted).`
+      );
+      window.location.href = '/frontdesk';
+    } catch (err: unknown) {
+      // Display purge error and re-enable buttons
+      const message = err instanceof Error ? err.message : 'Failed to purge session';
+      alert(message);
+      setIsDiscardingSession(false);
+    }
+  };
+
   // Filter repairs based on search term and status dropdown
   const filteredRepairs = filterRepairs(repairs, searchTerm, statusFilter);
 
@@ -428,6 +465,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     registered: repairs.filter((r) => r.status === 'REGISTERED').length,
     waitingPat1: repairs.filter((r) => r.status === 'WAITING_PAT1' || r.status === 'IN_PAT1').length,
     waitingRepair: repairs.filter((r) => r.status === 'WAITING_REPAIR' || r.status === 'IN_REPAIR').length,
+    // Count post-repair PAT 2, pickup-ready, and completed items
     waitingPat2: repairs.filter((r) => r.status === 'WAITING_PAT2' || r.status === 'IN_PAT2').length,
     ready: repairs.filter((r) => r.status === 'READY_FOR_COLLECTION').length,
     completed: repairs.filter((r) => r.status === 'COMPLETED').length
@@ -444,7 +482,16 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           </h2>
           <p className="text-xs sm:text-sm text-slate-500">
             {session ? (
-              <span>Active Session: <strong>{session.name}</strong> ({session.date})</span>
+              <span>
+                Active Session: <strong>{session.name}</strong> ({session.date})
+                {/* Amber indicator when the active session is flagged as a test/rehearsal session */}
+                {session.isTest && (
+                  <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-[10px] uppercase tracking-wider">
+                    <FlaskConical className="h-3 w-3 text-amber-700" />
+                    TEST SESSION
+                  </span>
+                )}
+              </span>
             ) : (
               <span className="text-amber-600 font-semibold">No active session running today.</span>
             )}
@@ -484,11 +531,13 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             </button>
           </div>
 
-          {/* Start or Finalize Session Action Button */}
+          {/* Start, Discard & Purge, or Finalize Session Action Buttons */}
           {!session ? (
+            /* Button to open the Start Today's Repair Café modal */
             <button
               onClick={() => {
                 setSelectedNewSessionVolunteerIds([]);
+                setIsTestSession(false);
                 setShowNewSessionModal(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-sm hover:bg-brand-700 shadow-sm transition-colors"
@@ -496,14 +545,29 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               <Plus className="h-4 w-4" /> Start Today&apos;s Session
             </button>
           ) : (
-            <button
-              onClick={handleFinalizeSession}
-              disabled={isFinalizing}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-900 shadow-sm transition-colors disabled:opacity-50"
-            >
-              <Archive className="h-4 w-4" />
-              {isFinalizing ? 'Closing Session...' : 'Finalize & Redact Session'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Discard & Purge action rendered strictly when session.isTest is true */}
+              {session.isTest && (
+                <button
+                  type="button"
+                  onClick={handleDiscardTestSession}
+                  disabled={isDiscardingSession || isFinalizing}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold text-sm shadow-sm transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isDiscardingSession ? 'Purging Session...' : 'Discard & Purge Test Session'}
+                </button>
+              )}
+              {/* Standard Finalize & Redact session button */}
+              <button
+                onClick={handleFinalizeSession}
+                disabled={isFinalizing || isDiscardingSession}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-900 shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Archive className="h-4 w-4" />
+                {isFinalizing ? 'Closing Session...' : 'Finalize & Redact Session'}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -567,6 +631,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                 type="button"
                 onClick={() => {
                   setSelectedNewSessionVolunteerIds([]);
+                  setIsTestSession(false);
                   setShowNewSessionModal(true);
                 }}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-sm hover:bg-brand-700 shadow-sm"
@@ -630,12 +695,14 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     name="frontdesk-queue-search"
                     autoComplete="off"
                     autoCorrect="off"
+                    // Disable browser autofill and password manager overlays on queue search
                     autoCapitalize="off"
                     spellCheck={false}
                     data-1p-ignore={true}
                     data-lpignore="true"
                     data-bwignore="true"
                     data-form-type="other"
+                    // Controlled search value and styling
                     placeholder="Search customer name, token (e.g. REF-A38F), item #, or item..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -648,9 +715,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
                 >
+                  {/* Primary intake and PAT 1 filter options */}
                   <option value="ALL">All Statuses ({repairs.length})</option>
                   <option value="REGISTERED">Needs Card (#) ({counts.registered})</option>
                   <option value="WAITING_PAT1">Waiting PAT 1 ({counts.waitingPat1})</option>
+                  {/* Repair, PAT 2, pickup, and completed filter options */}
                   <option value="WAITING_REPAIR">Waiting Repair ({counts.waitingRepair})</option>
                   <option value="WAITING_PAT2">Waiting PAT 2 ({counts.waitingPat2})</option>
                   <option value="READY_FOR_COLLECTION">Ready for Pickup ({counts.ready})</option>
@@ -665,10 +734,12 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     {/* Queue table column headers */}
                     <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
                       <tr>
+                        {/* Identity and wait-time columns */}
                         <th className="py-3 px-4">Card #</th>
                         <th className="py-3 px-4">Customer</th>
                         <th className="py-3 px-4">Ref Token</th>
                         <th className="py-3 px-4">Wait Time</th>
+                        {/* Item details, status, attribution, and row actions columns */}
                         <th className="py-3 px-4">Item &amp; Fault</th>
                         <th className="py-3 px-4">Power Type</th>
                         <th className="py-3 px-4">Status</th>
@@ -711,6 +782,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                 {r.cardNumber ? (
                                   <CardToken number={r.cardNumber} size="sm" dimmed={isCompleted} />
                                 ) : isCompleted ? (
+                                  /* Terminal item without assigned card */
                                   <span className="text-xs text-slate-400 font-mono">—</span>
                                 ) : (
                                   <span className="text-xs italic text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-bold">
@@ -738,6 +810,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                   }`}
                                   title="Time elapsed since customer registration (refreshed every 5 minutes)"
                                 >
+                                  {/* Clock icon and formatted wait duration */}
                                   <Clock className="h-3 w-3" />
                                   {formatWaitTime(r, currentTime)}
                                 </span>
@@ -760,6 +833,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                     Mains 240V
                                   </span>
                                 ) : (
+                                  /* Non-mains power type badge */
                                   <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                                     {r.item.powerType.replace(/_/g, ' ')}
                                   </span>
@@ -782,6 +856,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                               {/* Row Action Buttons */}
                               <td className="py-3.5 px-4 text-right space-x-2 whitespace-nowrap">
                                 {canAssignCard(r) && (
+                                  /* Open Assign Physical Card modal for unassigned items */
                                   <button
                                     onClick={() => {
                                       setSelectedRepairId(r.id);
@@ -802,6 +877,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                     title={`View or download ${r.repair?.photoCount} item photo${r.repair?.photoCount === 1 ? '' : 's'}`}
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
                                   >
+                                    {/* Camera icon and attached photo count */}
                                     <Camera className="h-3.5 w-3.5 text-blue-600" />
                                     <span>{r.repair?.photoCount}</span>
                                   </button>
@@ -890,6 +966,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               name="assign-repair-item-token"
               aria-label="Assign repair item token"
               autoFocus
+              // Controlled numeric card token value and large monospace styling
               placeholder="e.g. 14"
               value={cardNumberInput}
               onChange={(e) => setCardNumberInput(e.target.value)}
@@ -940,6 +1017,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               <div>
                 <span className="text-xs text-slate-500 block">Phone Number</span>
                 {contactModalData.contactPhone ? (
+                  /* Clickable telephone link for collection notification */
                   <a
                     href={`tel:${contactModalData.contactPhone}`}
                     className="font-bold text-emerald-700 underline flex items-center gap-1 mt-0.5"
@@ -1017,6 +1095,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Daily Volunteer 4-Digit PIN
                   </label>
+                  {/* 4-character PIN input field */}
                   <input
                     type="text"
                     required
@@ -1028,6 +1107,26 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Test / Training Session Classification Toggle */}
+              <label className="flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/70 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isTestSession}
+                  onChange={(e) => setIsTestSession(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-600"
+                />
+                {/* Label and helper explanation for test/rehearsal sessions */}
+                <div className="text-xs">
+                  <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                    <FlaskConical className="h-3.5 w-3.5 text-amber-700" />
+                    Test / Training Session
+                  </span>
+                  <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                    Exclude this session from official community impact reports and allow discarding/purging all test data when finished.
+                  </p>
+                </div>
+              </label>
 
               {/* Attending Volunteers Multi-Select Checklist */}
               <div>
@@ -1066,6 +1165,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                         <span>No volunteers selected yet. You can still launch the session and check in volunteers as they arrive.</span>
                       </div>
                     ) : !volunteers.some((v) => selectedNewSessionVolunteerIds.includes(v.id) && v.isPatTrained) ? (
+                      /* Amber warning when volunteers are selected but none are PAT-trained */
                       <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-center gap-2 font-medium">
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
                         <span>No PAT-trained volunteer selected yet — PAT Station dropdown will remain empty until a PAT tester is checked in.</span>
@@ -1133,7 +1233,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               <div className="pt-2 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowNewSessionModal(false)}
+                  onClick={() => {
+                    setIsTestSession(false);
+                    setShowNewSessionModal(false);
+                  }}
                   className="flex-1 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Cancel

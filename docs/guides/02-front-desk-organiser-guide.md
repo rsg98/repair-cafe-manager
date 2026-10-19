@@ -50,6 +50,10 @@ The **Front Desk** is the operational control centre of the Repair Café. From t
    * **Session Name:** Defaults to e.g. `Sutton Repair Café - October 2026` (customise if needed).
    * **Session Date:** Defaults to today's date (`YYYY-MM-DD`).
    * **4-Digit Volunteer PIN:** Enter a 4-digit number for today's event (for example, `4829`). **Write this PIN on the volunteer whiteboard**—fixers and PAT testers will enter it once to unlock `/fixer` and `/pat` on their tablets.
+   * **Test / Training Session Checkbox:**
+     * **Leave unchecked** for a real monthly Repair Café event.
+     * **Tick this box** whenever you are running a volunteer training night, rehearsal, or equipment check.
+     * *What happens when ticked:* An amber **`TEST`** badge appears in the top header across all connected devices, an amber **Test / Training Session Active** banner appears at the top of `/frontdesk` with a **Discard & Purge Test Session** button, and any data from the session is automatically excluded from public **Impact Reports (`/reports`)** and grant CSV exports.
    * **Attending Volunteers Today:** Tick all volunteers who have arrived for today's session (use the search box or **Select All** to speed this up).
      * *Why this matters:* Only volunteers ticked as attending today will appear in the name dropdowns on the Fixer Station (`/fixer`) and PAT Station (`/pat`).
 3. Click **Launch Session**.
@@ -110,7 +114,9 @@ When a visitor collects their item from the Front Desk (`Ready for Pickup`, `Unf
 
 ## Part 4: Closing Down — Finalizing & Redacting the Session (End of Day)
 
-At the end of the Repair Café event, once all visitors have collected their items and all fixers/PAT testers have logged their results:
+### Closing an Official Repair Café Session
+
+At the end of an official Repair Café event, once all visitors have collected their items and all fixers/PAT testers have logged their results:
 
 1. Check the live summary cards at the top of `/frontdesk` to make sure no items are still stuck in `Needs Card #`, `PAT 1 Queue`, `Repair Queue`, or `PAT 2 Queue`.
 2. In the top-right session header, click the dark **Finalize & Redact Session** button.
@@ -119,3 +125,19 @@ At the end of the Repair Café event, once all visitors have collected their ite
    * All repair outcomes, weights diverted (`kg`), volunteer repair minutes, and PAT test counts are aggregated and saved to the public **Impact Reports (`/reports`)** archive.
    * Every visitor's **First Name** and **Mobile Phone Number** across all items in the session are permanently overwritten with `"[REDACTED]"` in Firestore to comply with UK GDPR Article 5(1)(e).
    * The active session is closed (`FINALIZED`) and the local browser IndexedDB cache is purged so no personal data lingers on the reception computer.
+
+---
+
+### Closing or Discarding a Test / Training Session
+
+When running a **Test / Training Session** (`isTest: true`), an amber **Test / Training Session Active** banner is displayed at the top of `/frontdesk`. You have two ways to end the test session:
+
+1. **Discard & Purge Test Session (Recommended for Rehearsals & Equipment Checks):**
+   * Click the red **Discard & Purge Test Session** button inside the amber banner and confirm the prompt.
+   * **What happens automatically:** The system permanently deletes every test repair item, all associated `private/customer` records, any analytics snapshot, and the session document itself in a bottom-up cascade, then resets the Front Desk back to the **Start New Repair Café Session** screen. Nothing is saved to `/reports`.
+2. **Finalize & Redact Session (To Test the Finalization Workflow):**
+   * If you want to rehearse the end-of-day finalization step, click **Finalize & Redact Session**.
+   * The session is finalized and redacted with `isTest: true` preserved on its analytics record. It will **not** appear in public `/reports` KPIs or grant CSV exports, and will only be visible if a signed-in organiser ticks **Show Test Sessions** on `/reports`.
+
+> **Forgot to tick "Test / Training Session" before launching?**  
+> If a rehearsal session was accidentally created as an official session and finalized, open **Impact Reports (`/reports`)** while signed in with your Organiser Google account and click **Mark as Test** next to that session in the Monthly Session Archive table (see the [Impact Reports Guide](05-impact-reports-guide.md)). For permanent command-line deletion of historical test sessions, see [`docs/MANAGE_SESSIONS_CLI.md`](../MANAGE_SESSIONS_CLI.md).
