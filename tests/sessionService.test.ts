@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { generateReferenceToken } from '../src/services/repairService';
-import { calculateSessionAnalytics } from '../src/services/sessionService';
+import {
+  calculateSessionAnalytics,
+  buildFinalizeSessionPrompt,
+} from '../src/services/sessionService';
 import { filterAnalyticsForReporting, exportAnalyticsToCsv } from '../src/services/analyticsService';
 import { parseManageSessionsArgs } from '../src/utils/manageSessionsArgs';
 import { RepairItem, SessionAnalytics } from '../src/types';
@@ -391,4 +394,32 @@ describe('CLI Argument Parser (parseManageSessionsArgs)', () => {
     );
   });
 });
+
+describe('Finalize Session Prompt Builder (buildFinalizeSessionPrompt — Issue #29)', () => {
+  it('omits the photo note when the session has 0 attached item photos', () => {
+    // Generate prompt for a session with zero repair photos
+    const prompt = buildFinalizeSessionPrompt('October 2026 - Seears Park', 0);
+
+    // Verify core finalization steps are present and photo note is absent
+    expect(prompt).toContain('CLOSE and FINALIZE "October 2026 - Seears Park"');
+    expect(prompt).toContain('REDACT all visitor customer names and phone numbers');
+    expect(prompt).not.toContain('item photo');
+  });
+
+  it('clarifies that item photos remain stored in Firebase (not lost) while noting UI access ends on close', () => {
+    // Verify singular phrasing for 1 attached photo
+    const singlePhotoPrompt = buildFinalizeSessionPrompt('October 2026 - Seears Park', 1);
+    expect(singlePhotoPrompt).toContain('1 item photo is attached to this session.');
+    expect(singlePhotoPrompt).toContain('remain safely stored in Firebase after closing');
+    expect(singlePhotoPrompt).toContain('not currently accessible via the UI once the session is closed');
+    // Ensure misleading "photos you wish to keep" wording is no longer present
+    expect(singlePhotoPrompt).not.toContain('photos you wish to keep');
+
+    // Verify plural phrasing for multiple attached photos
+    const multiPhotoPrompt = buildFinalizeSessionPrompt('October 2026 - Seears Park', 4);
+    expect(multiPhotoPrompt).toContain('4 item photos are attached to this session.');
+    expect(multiPhotoPrompt).toContain('remain safely stored in Firebase after closing');
+  });
+});
+
 

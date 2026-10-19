@@ -119,11 +119,12 @@ When a visitor collects their item from the Front Desk (`Ready for Pickup`, `Unf
 At the end of an official Repair Café event, once all visitors have collected their items and all fixers/PAT testers have logged their results:
 
 1. Check the live summary cards at the top of `/frontdesk` to make sure no items are still stuck in `Needs Card #`, `PAT 1 Queue`, `Repair Queue`, or `PAT 2 Queue`.
-2. In the top-right session header, click the dark **Finalize & Redact Session** button.
-3. Read the confirmation prompt and click **OK**.
-4. **What happens automatically:**
+2. *(Optional)* If fixers have attached item photos (indicated by a blue **Camera badge** on the item row) and you want an immediate local copy for social media or publicity, click the Camera badge to download them now. *(Note: Item photos remain safely stored in Firebase after closing, though closed sessions are not currently browsable in the UI.)*
+3. In the top-right session header, click the dark **Finalize & Redact Session** button.
+4. Read the confirmation prompt and click **OK**.
+5. **What happens automatically:**
    * All repair outcomes, weights diverted (`kg`), volunteer repair minutes, and PAT test counts are aggregated and saved to the public **Impact Reports (`/reports`)** archive.
-   * Every visitor's **First Name** and **Mobile Phone Number** across all items in the session are permanently overwritten with `"[REDACTED]"` in Firestore to comply with UK GDPR Article 5(1)(e).
+   * Every visitor's **First Name** and **Mobile Phone Number** across all items in the session are permanently overwritten with `"[REDACTED]"` in Firestore to comply with UK GDPR Article 5(1)(e). *(Compressed item photos in the `photos` subcollection are preserved in Firestore.)*
    * The active session is closed (`FINALIZED`) and the local browser IndexedDB cache is purged so no personal data lingers on the reception computer.
 
 ---

@@ -265,7 +265,7 @@ match /photos/{photoId} {
    - Stores `const [photoModalRepairId, setPhotoModalRepairId] = useState<string | null>(null);` and resolves the live `RepairItem` from `repairs.find((r) => r.id === photoModalRepairId)` so live `photoCount` updates reflect immediately.
    - Includes `photoModalRepairId !== null` in `isFrontDeskDirty`.
    - Renders a `Camera` badge button in the queue table Actions column whenever `(r.repair?.photoCount ?? 0) > 0`.
-   - Updates `handleFinalizeSession` confirmation prompt (`FrontDeskView.tsx`) so if any items in the session have photos (`repairs.some(r => (r.repair?.photoCount ?? 0) > 0)`), the confirmation dialog reminds the organiser to download any desired item photos from the queue before closing the active session.
+   - Updates `handleFinalizeSession` confirmation prompt (`FrontDeskView.tsx` via `buildFinalizeSessionPrompt`) so if any items in the session have photos (`repairs.some(r => (r.repair?.photoCount ?? 0) > 0)`), the confirmation dialog clarifies that item photos remain stored in Firebase after closing, while noting they are not currently accessible via the UI once the active session is closed.
 
 ---
 

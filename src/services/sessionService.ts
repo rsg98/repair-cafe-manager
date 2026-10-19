@@ -361,6 +361,29 @@ export function calculateSessionAnalytics(
 }
 
 /**
+ * Builds the confirmation dialog message shown to an organiser before finalizing
+ * an active Repair Café session (Issue #29).
+ *
+ * Explicitly clarifies that attached item photos remain persisted in Firebase
+ * (Firestore), while noting that they are not currently accessible via the UI
+ * once the active session is closed.
+ */
+export function buildFinalizeSessionPrompt(
+  sessionName: string,
+  totalSessionPhotos: number
+): string {
+  // Include a non-alarming photo persistence note when one or more repair photos exist
+  const photoReminder =
+    totalSessionPhotos > 0
+      ? `\n\nNote: ${totalSessionPhotos} item photo${totalSessionPhotos === 1 ? ' is' : 's are'} attached to this session. Item photos remain safely stored in Firebase after closing, but are not currently accessible via the UI once the session is closed—download any photos you need now from the queue if you want a local copy.`
+      : '';
+
+  // Return the structured finalization and GDPR redaction confirmation message
+  return `Are you sure you want to CLOSE and FINALIZE "${sessionName}"?\n\nThis will:\n1. Compute final impact metrics (weight diverted, success rates).\n2. Automatically REDACT all visitor customer names and phone numbers (GDPR).\n3. Archive the session for reporting.${photoReminder}`;
+}
+
+
+/**
  * Redacts customer PII (`customerName`, `firstName`, `contactPhone`) across all repair
  * documents in chunks of 200 items (400 operations per batch).
  */

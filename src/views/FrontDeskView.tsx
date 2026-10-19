@@ -41,6 +41,7 @@ import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 import {
   createSession,
   finalizeSessionClient,
+  buildFinalizeSessionPrompt,
   purgeSessionCascading,
   publishAppVersionToSystemSettings
 } from '../services/sessionService';
@@ -401,22 +402,14 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   // Close the active session, redact customer PII, and archive impact metrics
   const handleFinalizeSession = async () => {
     if (!session) return;
-    // Count attached session photos to remind the organiser to download any photos before closing
+    // Count attached session photos to inform the organiser about post-close UI access
     const totalSessionPhotos = repairs.reduce(
       (sum, r) => sum + (r.repair?.photoCount ?? 0),
       0
     );
-    const photoReminder =
-      totalSessionPhotos > 0
-        ? `\n\nNote: ${totalSessionPhotos} item photo${totalSessionPhotos === 1 ? ' is' : 's are'} attached to this session. Please download any photos you wish to keep from the queue before closing.`
-        : '';
 
     // Confirm destructive GDPR redaction and session archival with the organiser
-    if (
-      confirm(
-        `Are you sure you want to CLOSE and FINALIZE "${session.name}"?\n\nThis will:\n1. Compute final impact metrics (weight diverted, success rates).\n2. Automatically REDACT all visitor customer phone numbers (GDPR).\n3. Archive the session for reporting.${photoReminder}`
-      )
-    ) {
+    if (confirm(buildFinalizeSessionPrompt(session.name, totalSessionPhotos))) {
       setIsFinalizing(true);
       try {
         // Run Cloud Function finalization (with automatic client-side fallback)
