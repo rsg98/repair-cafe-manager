@@ -739,7 +739,6 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                   {/* Power Type dropdown bound to shared POWER_TYPE_OPTIONS */}
                   <select
                     id="pat-power-type-select"
-                    aria-label="Power Type"
                     value={selectedPowerType}
                     onChange={(e) => setSelectedPowerType(e.target.value as PowerType)}
                     className="sm:w-80 px-3.5 py-2.5 rounded-xl border border-amber-300 bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"

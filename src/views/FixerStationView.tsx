@@ -120,7 +120,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
   const [showTakeHomeModal, setShowTakeHomeModal] = useState(false);
 
   // Dialog focus trap refs for Take Home confirmation and Staged Photo preview modals
-  const takeHomeModalRef = useDialogFocusTrap<HTMLDivElement>({
+  const takeHomeModalRef = useDialogFocusTrap({
     isOpen: Boolean(showTakeHomeModal && currentItem),
     onClose: () => {
       if (!submittingRepair) {
@@ -128,7 +128,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
       }
     }
   });
-  const stagedPhotoModalRef = useDialogFocusTrap<HTMLDivElement>({
+  const stagedPhotoModalRef = useDialogFocusTrap({
     isOpen: Boolean(previewStagedPhoto),
     onClose: () => setPreviewStagedPhoto(null)
   });

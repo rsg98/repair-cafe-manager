@@ -16,6 +16,9 @@ jobs:
   build-and-test:
     name: Build & Test (Node 24)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout repository
