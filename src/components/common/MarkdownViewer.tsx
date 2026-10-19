@@ -87,6 +87,27 @@ export function stripYamlFrontmatter(content: string): string {
   return content.replace(frontmatterRegex, '');
 }
 
+const TABLE_DELIMITER_REGEX = /^\s*\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/;
+
+/**
+ * Detects whether `lines[idx]` and `lines[idx + 1]` form the header and delimiter rows
+ * of a GitHub Flavored Markdown (GFM) pipe table.
+ */
+function isTableStart(lines: string[], idx: number): boolean {
+  if (idx + 1 >= lines.length) {
+    return false;
+  }
+  return lines[idx].includes('|') && TABLE_DELIMITER_REGEX.test(lines[idx + 1]);
+}
+
+/**
+ * Splits a single GFM pipe table row into trimmed cell strings while respecting escaped `\|`.
+ */
+function parseTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, '|').trim());
+}
+
 /**
  * Lightweight, safe React Markdown Renderer for document viewing without external libraries
  */
@@ -227,7 +248,57 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content, classNa
       continue;
     }
 
-    // 7. Regular Paragraphs
+    // 7. GFM Pipe Tables
+    if (isTableStart(lines, i)) {
+      const headerCells = parseTableRow(lines[i]);
+      i += 2; // Advance past header row and delimiter row
+      const bodyRows: string[][] = [];
+      while (i < lines.length && lines[i].trim().includes('|')) {
+        if (!TABLE_DELIMITER_REGEX.test(lines[i])) {
+          bodyRows.push(parseTableRow(lines[i]));
+        }
+        i++;
+      }
+      elements.push(
+        <div
+          key={`table-${elementKey++}`}
+          className="my-4 overflow-x-auto rounded-xl border border-slate-200"
+        >
+          <table className="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr>
+                {headerCells.map((cell, cIdx) => (
+                  <th
+                    key={cIdx}
+                    scope="col"
+                    className="px-3.5 py-2.5 bg-slate-100 text-slate-900 font-bold border-b border-slate-200"
+                  >
+                    {parseInline(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, rIdx) => (
+                <tr key={rIdx} className="even:bg-slate-50/50">
+                  {headerCells.map((_, cIdx) => (
+                    <td
+                      key={cIdx}
+                      className="px-3.5 py-2.5 text-slate-700 border-b border-slate-100 align-top"
+                    >
+                      {parseInline(row[cIdx] ?? '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    // 8. Regular Paragraphs
     const paraLines: string[] = [];
     while (
       i < lines.length &&
@@ -237,8 +308,10 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content, classNa
       !lines[i].trim().startsWith('* ') &&
       !lines[i].trim().startsWith('- ') &&
       !/^\d+\.\s+/.test(lines[i].trim()) &&
+      !isTableStart(lines, i) &&
       lines[i].trim() !== '---' &&
-      lines[i].trim() !== '***'
+      lines[i].trim() !== '***' &&
+      lines[i].trim() !== '___'
     ) {
       paraLines.push(lines[i].trim());
       i++;

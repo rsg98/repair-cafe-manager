@@ -12,9 +12,9 @@ export const SafetyBanner: React.FC<SafetyBannerProps> = ({ outcome, cautionNote
 
   if (outcome === 'DANGER_DO_NOT_ENERGIZE') {
     return (
-      <div className="rounded-lg border-2 border-red-600 bg-red-50 p-4 text-red-950 shadow-sm animate-pulse">
+      <div role="alert" className="rounded-lg border-2 border-red-600 bg-red-50 p-4 text-red-950 shadow-sm animate-pulse">
         <div className="flex items-start gap-3">
-          <ShieldAlert className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+          <ShieldAlert className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <h4 className="font-bold text-base text-red-900 tracking-wide uppercase">
               DANGER: DO NOT ENERGISE (LETHAL HAZARD)
@@ -36,9 +36,9 @@ export const SafetyBanner: React.FC<SafetyBannerProps> = ({ outcome, cautionNote
 
   if (outcome === 'FAIL_REPAIRABLE_CORD') {
     return (
-      <div className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-amber-950 shadow-sm">
+      <div role="alert" className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-amber-950 shadow-sm">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <h4 className="font-bold text-base text-amber-900 uppercase">
               Electrical Caution: Repairable Cord / Plug Defect
@@ -60,9 +60,9 @@ export const SafetyBanner: React.FC<SafetyBannerProps> = ({ outcome, cautionNote
 
   if (outcome === 'UNTESTABLE') {
     return (
-      <div className="rounded-lg border border-slate-400 bg-slate-50 p-4 text-slate-800 shadow-sm">
+      <div role="alert" className="rounded-lg border border-slate-400 bg-slate-50 p-4 text-slate-800 shadow-sm">
         <div className="flex items-start gap-3">
-          <AlertCircle className="h-6 w-6 text-slate-500 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="h-6 w-6 text-slate-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <h4 className="font-bold text-base text-slate-900">
               PAT Status: Untestable at Initial Check
@@ -84,9 +84,9 @@ export const SafetyBanner: React.FC<SafetyBannerProps> = ({ outcome, cautionNote
 
   if (outcome === 'PASS') {
     return (
-      <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-emerald-950 shadow-sm">
+      <div role="status" className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-emerald-950 shadow-sm">
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" aria-hidden="true" />
           <span className="font-medium text-sm text-emerald-900">
             Initial PAT Check Passed. Safe to inspect.
           </span>

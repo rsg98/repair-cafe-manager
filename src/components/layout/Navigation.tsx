@@ -10,7 +10,12 @@ interface NavigationProps {
 
 const STATION_NAV_ITEMS: Record<
   StationViewId,
-  { to: string; fullLabel: string; shortLabel: string; icon: React.ComponentType<{ className?: string }> }
+  {
+    to: string;
+    fullLabel: string;
+    shortLabel: string;
+    icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
+  }
 > = {
   register: {
     to: '/register',
@@ -65,7 +70,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     });
 
   return (
-    <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30">
+    <nav aria-label="Station navigation" className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex space-x-1 sm:space-x-4 overflow-x-auto py-2 no-scrollbar">
           {links.map(({ to, label, icon: Icon }) => (
@@ -80,7 +85,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 }`
               }
             >
-              <Icon className="h-4 w-4 flex-shrink-0" />
+              <Icon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
               <span>{label}</span>
             </NavLink>
           ))}

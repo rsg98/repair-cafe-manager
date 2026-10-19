@@ -22,6 +22,36 @@
       @apply bg-brand-500 text-white;
     }
   }
+
+  /* Prevent accidental double-tap zoom on rapid keypad/button taps while preserving two-finger pinch-zoom */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  label,
+  [role="button"],
+  [role="tab"] {
+    touch-action: manipulation;
+  }
+
+  /* High-visibility keyboard focus indicator (WCAG 2.4.7 / 2.4.11) */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+}
+
+/* Respect user vestibular motion preferences (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Card token badge styling */

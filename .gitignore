@@ -22,9 +22,10 @@ ui-debug.log*
 .DS_Store
 
 # Repair Café operational policies (may contain volunteer/committee PII)
-# Keep only POL00-Template.md tracked in version control
+# Keep only POL00-Template.md and POL04-AccessibilityVPAT.md tracked in version control
 src/policies/*.md
 src/policies/POL01-HealthAndSafety.md
 src/policies/POL02-Safeguarding.md
 src/policies/POL03-Whistleblowing.md
 !src/policies/POL00-Template.md
+!src/policies/POL04-AccessibilityVPAT.md

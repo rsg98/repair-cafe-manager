@@ -114,7 +114,7 @@ const KpiMetricCard: React.FC<KpiMetricCardProps> = ({
       <span className="text-3xl font-black text-slate-900 font-mono">{primaryValue}</span>
       <span className="text-sm font-bold text-slate-500">{unitLabel}</span>
     </div>
-    <p className="text-xs text-slate-400 mt-2">{caption}</p>
+    <p className="text-xs text-slate-600 mt-2">{caption}</p>
   </div>
 );
 
@@ -356,7 +356,14 @@ export const ReportsView: React.FC = () => {
                     </span>
                   </div>
                   {/* Proportional progress bar */}
-                  <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    role="progressbar"
+                    aria-valuenow={pct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${cat} share of items: ${pct}%`}
+                    className="h-3 w-full bg-slate-100 rounded-full overflow-hidden"
+                  >
                     <div
                       className="h-full bg-emerald-600 rounded-full transition-all duration-500"
                       style={{ width: `${pct}%` }}
@@ -374,7 +381,7 @@ export const ReportsView: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           {/* Archive table title */}
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-slate-500" />
+            <Calendar className="h-5 w-5 text-slate-500" aria-hidden="true" />
             Monthly Session Archive
           </h3>
 
@@ -382,6 +389,7 @@ export const ReportsView: React.FC = () => {
           {isAdmin && (testSessionCount > 0 || showTestSessions) && (
             <button
               type="button"
+              aria-pressed={showTestSessions}
               onClick={() => setShowTestSessions((prev) => !prev)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
                 showTestSessions
@@ -390,7 +398,7 @@ export const ReportsView: React.FC = () => {
               }`}
             >
               {/* Amber flask icon and live test session count */}
-              <FlaskConical className="h-3.5 w-3.5 text-amber-700" />
+              <FlaskConical className="h-3.5 w-3.5 text-amber-700" aria-hidden="true" />
               {showTestSessions
                 ? `Hide Test Sessions (${testSessionCount})`
                 : `Show Test Sessions (${testSessionCount})`}
@@ -405,7 +413,7 @@ export const ReportsView: React.FC = () => {
         ) : visibleAnalytics.length === 0 ? (
           <div className="py-12 text-center text-slate-500 text-sm">
             {/* Empty state icon and helper text */}
-            <Layers className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+            <Layers className="h-10 w-10 text-slate-300 mx-auto mb-3" aria-hidden="true" />
             {analyticsList.length === 0
               ? 'No finalised sessions found yet. Once a session is closed and finalised at the Front Desk, its aggregated metrics and environmental savings will appear here.'
               : `No official finalised sessions found yet (${testSessionCount} test session${testSessionCount === 1 ? ' is' : 's are'} hidden from official impact metrics).`}
@@ -414,20 +422,20 @@ export const ReportsView: React.FC = () => {
           <div className="overflow-x-auto">
             {/* Archived sessions table */}
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                 <tr>
                   {/* Column headers for session metrics */}
-                  <th className="py-3 px-4">Session Date</th>
-                  <th className="py-3 px-4">Session Name</th>
-                  <th className="py-3 px-4">Total Items</th>
-                  <th className="py-3 px-4">Repaired</th>
-                  <th className="py-3 px-4">Success Rate</th>
-                  <th className="py-3 px-4">Weight Diverted</th>
-                  <th className="py-3 px-4">Volunteer Hours</th>
+                  <th scope="col" className="py-3 px-4">Session Date</th>
+                  <th scope="col" className="py-3 px-4">Session Name</th>
+                  <th scope="col" className="py-3 px-4">Total Items</th>
+                  <th scope="col" className="py-3 px-4">Repaired</th>
+                  <th scope="col" className="py-3 px-4">Success Rate</th>
+                  <th scope="col" className="py-3 px-4">Weight Diverted</th>
+                  <th scope="col" className="py-3 px-4">Volunteer Hours</th>
                   {/* Additional column headers for attendance, PAT failure rate, and admin actions */}
-                  <th className="py-3 px-4">Attending Volunteers</th>
-                  <th className="py-3 px-4">PAT Fail Rate</th>
-                  {isAdmin && <th className="py-3 px-4 text-right">Actions</th>}
+                  <th scope="col" className="py-3 px-4">Attending Volunteers</th>
+                  <th scope="col" className="py-3 px-4">PAT Fail Rate</th>
+                  {isAdmin && <th scope="col" className="py-3 px-4 text-right">Actions</th>}
                 </tr>
               </thead>
               {/* Archived session rows */}

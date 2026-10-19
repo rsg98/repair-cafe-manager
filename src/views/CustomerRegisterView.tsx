@@ -269,7 +269,10 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
 
         {/* Validation or submission error banner */}
         {error && (
-          <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-medium">
+          <div
+            role="alert"
+            className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-medium"
+          >
             {error}
           </div>
         )}
@@ -284,12 +287,17 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Visitor First Name input */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label
+                  htmlFor="register-first-name"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
                   First Name <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="register-first-name"
                   type="text"
                   required
+                  autoComplete="given-name"
                   placeholder="e.g. Sarah"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
@@ -299,11 +307,19 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
 
               {/* Optional Mobile Phone input for on-day collection notification */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Mobile Phone <span className="text-slate-400 font-normal">(Optional, on-day collection only)</span>
+                <label
+                  htmlFor="register-contact-phone"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Mobile Phone{' '}
+                  <span className="text-slate-600 font-normal">
+                    (Optional, on-day collection only)
+                  </span>
                 </label>
                 <input
+                  id="register-contact-phone"
                   type="tel"
+                  autoComplete="tel"
                   placeholder="e.g. 07123 456789"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
@@ -326,7 +342,7 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                   onClick={handleAddItem}
                   className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-800"
                 >
-                  <Plus className="h-4 w-4" /> Add Another Item
+                  <Plus className="h-4 w-4" aria-hidden="true" /> Add Another Item
                 </button>
               )}
             </div>
@@ -344,9 +360,10 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                     <button
                       type="button"
                       onClick={() => handleRemoveItem(index)}
+                      aria-label={`Remove item ${index + 1}`}
                       className="text-rose-500 hover:text-rose-700 p-1"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
                 )}
@@ -354,10 +371,14 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Repair Category selector */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor={`register-item-${index}-category`}
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
                       Category <span className="text-rose-500">*</span>
                     </label>
                     <select
+                      id={`register-item-${index}-category`}
                       value={item.category}
                       onChange={(e) => handleItemChange(index, 'category', e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
@@ -373,10 +394,14 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
 
                   {/* Power Type selector (determines whether PAT 1 electrical safety testing is required) */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor={`register-item-${index}-power`}
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
                       Power Type <span className="text-rose-500">*</span>
                     </label>
                     <select
+                      id={`register-item-${index}-power`}
                       value={item.powerType}
                       onChange={(e) => handleItemChange(index, 'powerType', e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
@@ -393,10 +418,14 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
 
                 {/* Brand & Model text field */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label
+                    htmlFor={`register-item-${index}-brand`}
+                    className="block text-xs font-semibold text-slate-700 mb-1"
+                  >
                     Brand & Model <span className="text-rose-500">*</span>
                   </label>
                   <input
+                    id={`register-item-${index}-brand`}
                     type="text"
                     required
                     placeholder="e.g. Dualit 4-slice toaster, Roberts DAB radio"
@@ -408,10 +437,14 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
 
                 {/* Fault Description textarea */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label
+                    htmlFor={`register-item-${index}-fault`}
+                    className="block text-xs font-semibold text-slate-700 mb-1"
+                  >
                     What is the fault / what needs fixing? <span className="text-rose-500">*</span>
                   </label>
                   <textarea
+                    id={`register-item-${index}-fault`}
                     required
                     rows={2}
                     placeholder="e.g. Lever does not stay down; won't heat up; cord is frayed."

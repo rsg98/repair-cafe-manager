@@ -39,6 +39,7 @@ import {
   MAX_PHOTOS_PER_REPAIR
 } from '../types';
 import { useVolunteerPin } from '../hooks/useVolunteerPin';
+import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap';
 import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
 import {
   getRepairByCardNumber,
@@ -117,6 +118,20 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
   // Pre-submit confirmation modal state when outcome === 'TAKEN_HOME'
   const [showTakeHomeModal, setShowTakeHomeModal] = useState(false);
+
+  // Dialog focus trap refs for Take Home confirmation and Staged Photo preview modals
+  const takeHomeModalRef = useDialogFocusTrap<HTMLDivElement>({
+    isOpen: Boolean(showTakeHomeModal && currentItem),
+    onClose: () => {
+      if (!submittingRepair) {
+        setShowTakeHomeModal(false);
+      }
+    }
+  });
+  const stagedPhotoModalRef = useDialogFocusTrap<HTMLDivElement>({
+    isOpen: Boolean(previewStagedPhoto),
+    onClose: () => setPreviewStagedPhoto(null)
+  });
 
   // Prevent automatic PWA reload while a repair record, photo compression, or confirmation modal is active
   const isFixerDirty =
@@ -455,7 +470,10 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
         {/* Warning banner when no volunteers are checked in to the active session */}
         {session && attendingVolunteers.length === 0 && (
-          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
+          <div
+            role="status"
+            className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2"
+          >
             <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
             <span>No volunteers checked in — ask Front Desk to update session attendance</span>
           </div>
@@ -464,7 +482,11 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
         {/* Repair Item Lookup Form (autofill-safe for iOS Safari — Issue #28) */}
         <form onSubmit={handleSearchCard} autoComplete="off" role="search" className="mt-6 flex gap-3">
           <div className="relative flex-1">
-            <Search className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
+            <Search aria-hidden="true" className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
+            {/* Screen-reader label for numeric repair item lookup input */}
+            <label htmlFor="fixer-repair-item-lookup" className="sr-only">
+              Repair item number
+            </label>
             {/* Numeric repair item lookup input */}
             <input
               {...REPAIR_ITEM_LOOKUP_INPUT_PROPS}
@@ -486,14 +508,20 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
         {/* Display lookup warning or informational message */}
         {searchMessage && (
-          <div className="mt-4 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-sm font-medium">
+          <div
+            role="status"
+            className="mt-4 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-sm font-medium"
+          >
             {searchMessage}
           </div>
         )}
 
         {/* Display repair submission confirmation banner with dismiss button */}
         {successBanner && (
-          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center justify-between gap-2">
+          <div
+            role="status"
+            className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center justify-between gap-2"
+          >
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
               <span>{successBanner}</span>
@@ -549,15 +577,23 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
           <form onSubmit={handleSubmitRepair} className="space-y-6">
             {/* Outcome Selection */}
             <div>
-              <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+              <span
+                id="fixer-outcome-group-label"
+                className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2"
+              >
                 Repair Outcome <span className="text-rose-500">*</span>
-              </label>
+              </span>
 
               {/* Repair outcome button grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div
+                role="group"
+                aria-labelledby="fixer-outcome-group-label"
+                className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+              >
                 {/* Outcome: FIXED */}
                 <button
                   type="button"
+                  aria-pressed={outcome === 'FIXED'}
                   onClick={() => setOutcome('FIXED')}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all ${
                     outcome === 'FIXED'
@@ -578,6 +614,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 {/* Outcome: PARTIAL */}
                 <button
                   type="button"
+                  aria-pressed={outcome === 'PARTIAL'}
                   onClick={() => setOutcome('PARTIAL')}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all ${
                     outcome === 'PARTIAL'
@@ -598,6 +635,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 {/* Outcome: ADVICE_GIVEN */}
                 <button
                   type="button"
+                  aria-pressed={outcome === 'ADVICE_GIVEN'}
                   onClick={() => setOutcome('ADVICE_GIVEN')}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all ${
                     outcome === 'ADVICE_GIVEN'
@@ -618,6 +656,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 {/* Outcome: UNFIXABLE */}
                 <button
                   type="button"
+                  aria-pressed={outcome === 'UNFIXABLE'}
                   onClick={() => setOutcome('UNFIXABLE')}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all ${
                     outcome === 'UNFIXABLE'
@@ -638,6 +677,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 {/* Outcome: TAKEN_HOME */}
                 <button
                   type="button"
+                  aria-pressed={outcome === 'TAKEN_HOME'}
                   onClick={() => setOutcome('TAKEN_HOME')}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all ${
                     outcome === 'TAKEN_HOME'
@@ -661,16 +701,24 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
               {/* Repair Time Selector (As requested: simplified repairTime in minutes) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                <span
+                  id="fixer-duration-group-label"
+                  className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1"
+                >
                   <Clock className="h-4 w-4 text-slate-500" />
                   Estimated Time Spent (Minutes)
-                </label>
+                </span>
                 {/* Quick duration buttons and custom minute input */}
-                <div className="flex gap-2">
+                <div
+                  role="group"
+                  aria-labelledby="fixer-duration-group-label"
+                  className="flex gap-2"
+                >
                   {[15, 30, 45, 60].map((mins) => (
                     <button
                       key={mins}
                       type="button"
+                      aria-pressed={repairTimeMinutes === mins}
                       onClick={() => setRepairTimeMinutes(mins)}
                       className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
                         repairTimeMinutes === mins
@@ -683,6 +731,8 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   ))}
                   {/* Custom duration numeric input */}
                   <input
+                    id="fixer-custom-minutes"
+                    aria-label="Custom repair duration in minutes"
                     type="number"
                     min={5}
                     max={240}
@@ -696,12 +746,16 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
               {/* Item Weight for Landfill Diversion Metrics */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                <label
+                  htmlFor="fixer-weight-kg"
+                  className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1"
+                >
                   <Scale className="h-4 w-4 text-slate-500" />
                   Item Weight Diverted (kg)
                 </label>
                 {/* Weight in kg input */}
                 <input
+                  id="fixer-weight-kg"
                   type="number"
                   step="0.1"
                   min="0.1"
@@ -717,10 +771,11 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             <div className="space-y-4 pt-4 border-t border-slate-100">
               {/* Root cause diagnosis field */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="fixer-diagnosis" className="block text-xs font-bold text-slate-700 mb-1">
                   Diagnosis / What was the root cause?
                 </label>
                 <input
+                  id="fixer-diagnosis"
                   type="text"
                   placeholder="e.g. Blown thermal fuse; corroded contact; gummed up grease in gears."
                   value={diagnosis}
@@ -731,10 +786,11 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
               {/* Repair actions and notes field */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="fixer-repair-notes" className="block text-xs font-bold text-slate-700 mb-1">
                   Repair Actions & Notes
                 </label>
                 <textarea
+                  id="fixer-repair-notes"
                   rows={2}
                   placeholder="e.g. Desoldered broken switch, lubricated drive motor, replaced internal wiring with high-temp silicone wire."
                   value={repairNotes}
@@ -745,10 +801,11 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
               {/* Parts and materials used field */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="fixer-parts-used" className="block text-xs font-bold text-slate-700 mb-1">
                   Parts / Materials Used (if any)
                 </label>
                 <input
+                  id="fixer-parts-used"
                   type="text"
                   placeholder="e.g. 10A microswitch, 1x heat shrink tubing, 13A UK plug top."
                   value={partsUsed}
@@ -762,18 +819,22 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             <div className="space-y-3 pt-4 border-t border-slate-100">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <label
+                    htmlFor="fixer-photo-upload"
+                    className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5"
+                  >
                     <Camera className="h-4 w-4 text-blue-600" />
                     Item Photos (Optional — {existingPhotos.length + stagedPhotos.length} / {MAX_PHOTOS_PER_REPAIR})
                   </label>
                   {/* Mandatory UK GDPR & Safeguarding reminder */}
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-600 mt-0.5">
                     <strong>Photo Guidelines:</strong> Photograph the item only — do not include visitor faces, children, or personal name/address labels. Photos are automatically compressed and stripped of location data.
                   </p>
                 </div>
 
                 {/* Hidden file input supporting mobile camera capture and photo library selection */}
                 <input
+                  id="fixer-photo-upload"
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
@@ -807,7 +868,10 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
               {/* Photo compression or validation error alert */}
               {photoError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                <div
+                  role="alert"
+                  className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2"
+                >
                   <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
                   <span>{photoError}</span>
                 </div>
@@ -952,12 +1016,16 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
       {showTakeHomeModal && currentItem && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="take-home-modal-title"
         >
           {/* Taken Home custody, insurance, and GDPR contact warning card */}
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border-2 border-amber-300 space-y-5">
+          <div
+            ref={takeHomeModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="take-home-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border-2 border-amber-300 space-y-5"
+          >
             {/* Warning modal header and icon */}
             <div className="flex items-start gap-3.5">
               <div className="h-12 w-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0">
@@ -1035,14 +1103,19 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
       {previewStagedPhoto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          role="dialog"
-          aria-modal="true"
         >
           {/* Staged photo preview modal container */}
-          <div className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4">
+          <div
+            ref={stagedPhotoModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staged-photo-preview-title"
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4"
+          >
             {/* Header with dimensions and close button */}
             <div className="flex items-center justify-between">
-              <span className="text-sm font-black text-slate-900">
+              <span id="staged-photo-preview-title" className="text-sm font-black text-slate-900">
                 Staged Photo Preview ({previewStagedPhoto.width}×{previewStagedPhoto.height}px • {formatPhotoSizeKb(previewStagedPhoto.sizeBytes)})
               </span>
               <button

@@ -22,6 +22,7 @@ import {
   markVolunteerInducted,
 } from '../../services/volunteerService';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 
 export interface VolunteerRegisterPanelProps {
   volunteers: Volunteer[];
@@ -78,6 +79,16 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
     showFormModal || saving || selectedEmergencyVolunteer !== null,
     'volunteer-register-panel'
   );
+
+  // Focus trap and Escape key dismissal for Emergency Contact and Add/Edit Volunteer modals
+  const emergencyModalRef = useDialogFocusTrap({
+    isOpen: Boolean(selectedEmergencyVolunteer),
+    onClose: () => setSelectedEmergencyVolunteer(null),
+  });
+  const formModalRef = useDialogFocusTrap({
+    isOpen: showFormModal,
+    onClose: () => setShowFormModal(false),
+  });
 
   // Open the modal to register a brand-new volunteer with blank fields
   const handleOpenAddModal = () => {
@@ -263,6 +274,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
             <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
             <input
               type="text"
+              aria-label="Search volunteers by name, email, phone, or emergency contact"
               placeholder="Search volunteers by name, email, phone, or emergency contact..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -272,6 +284,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
           {/* Role and induction status filter dropdown */}
           <select
+            aria-label="Filter volunteers by role or induction status"
             value={roleFilter}
             onChange={(e) =>
               setRoleFilter(
@@ -319,14 +332,14 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             {/* Table column headers */}
-            <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
               <tr>
-                <th className="py-3 px-4">Volunteer Name</th>
-                <th className="py-3 px-4">Contact Details</th>
-                <th className="py-3 px-4">Emergency Contact</th>
-                <th className="py-3 px-4">Roles &amp; Skills</th>
-                <th className="py-3 px-4">Policy Induction</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th scope="col" className="py-3 px-4">Volunteer Name</th>
+                <th scope="col" className="py-3 px-4">Contact Details</th>
+                <th scope="col" className="py-3 px-4">Emergency Contact</th>
+                <th scope="col" className="py-3 px-4">Roles &amp; Skills</th>
+                <th scope="col" className="py-3 px-4">Policy Induction</th>
+                <th scope="col" className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             {/* Table body with loading, empty state, and volunteer rows */}
@@ -373,7 +386,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                         </div>
                       ) : null}
                       {!v.phone && !v.email && (
-                        <span className="italic text-slate-400">Not provided</span>
+                        <span className="italic text-slate-600">Not provided</span>
                       )}
                     </td>
 
@@ -413,7 +426,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                         </span>
                       )}
                       {!v.isOrganiser && !v.isPatTrained && (
-                        <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                        <span className="text-xs text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full">
                           Fixer / General
                         </span>
                       )}
@@ -450,6 +463,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                         type="button"
                         onClick={() => handleOpenEditModal(v)}
                         title="Edit volunteer details"
+                        aria-label={`Edit volunteer details for ${v.name}`}
                         className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                       >
                         <Edit2 className="h-4 w-4 inline" />
@@ -458,7 +472,8 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                         type="button"
                         onClick={() => handleDeleteVolunteer(v)}
                         title="Remove volunteer from register"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-700 hover:bg-rose-50 transition-colors"
+                        aria-label={`Remove ${v.name} from volunteer register`}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-700 hover:bg-rose-50 transition-colors"
                       >
                         <Trash2 className="h-4 w-4 inline" />
                       </button>
@@ -474,12 +489,22 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
       {/* Modal: Emergency Contact Quick-View Card */}
       {selectedEmergencyVolunteer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left">
+          <div
+            ref={emergencyModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="volunteer-emergency-contact-title"
+            tabIndex={-1}
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left"
+          >
             {/* Modal title and volunteer name */}
-            <div className="flex items-center gap-2 text-rose-700 font-black text-base mb-1">
+            <h3
+              id="volunteer-emergency-contact-title"
+              className="flex items-center gap-2 text-rose-700 font-black text-base mb-1"
+            >
               <HeartPulse className="h-5 w-5" />
               Emergency Contact Card
-            </div>
+            </h3>
             <p className="text-xs text-slate-500 mb-4">
               Volunteer: <strong>{selectedEmergencyVolunteer.name}</strong>
             </p>
@@ -527,9 +552,16 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
       {/* Modal: Add or Edit Volunteer */}
       {showFormModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8">
+          <div
+            ref={formModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="volunteer-form-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8"
+          >
             {/* Modal header and mandatory emergency contact subtitle */}
-            <h3 className="text-lg font-black text-slate-900">
+            <h3 id="volunteer-form-modal-title" className="text-lg font-black text-slate-900">
               {editingVolunteerId ? 'Edit Volunteer Record' : 'Add New Volunteer'}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -538,7 +570,10 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
             {/* Validation error banner if submission fails */}
             {formError && (
-              <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">
+              <div
+                role="alert"
+                className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold"
+              >
                 {formError}
               </div>
             )}
@@ -546,10 +581,14 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
             <form onSubmit={handleSaveVolunteer} className="mt-4 space-y-4">
               {/* Volunteer Full Name input */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label
+                  htmlFor="volunteer-form-name"
+                  className="block text-xs font-bold text-slate-700 mb-1"
+                >
                   Volunteer Full Name <span className="text-rose-600">*</span>
                 </label>
                 <input
+                  id="volunteer-form-name"
                   type="text"
                   required
                   placeholder="e.g. Alice Thompson"
@@ -563,10 +602,14 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Volunteer optional phone number */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label
+                    htmlFor="volunteer-form-phone"
+                    className="block text-xs font-bold text-slate-700 mb-1"
+                  >
                     Contact Phone (Optional)
                   </label>
                   <input
+                    id="volunteer-form-phone"
                     type="tel"
                     placeholder="e.g. 07700 900123"
                     value={phone}
@@ -577,7 +620,10 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
                 {/* Volunteer email address (mandatory when Organiser is checked) */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label
+                    htmlFor="volunteer-form-email"
+                    className="block text-xs font-bold text-slate-700 mb-1"
+                  >
                     Email Address{' '}
                     {isOrganiser ? (
                       <span className="text-rose-600">
@@ -588,6 +634,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                     )}
                   </label>
                   <input
+                    id="volunteer-form-email"
                     type="email"
                     required={isOrganiser}
                     placeholder="e.g. alice@example.com"
@@ -608,10 +655,14 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Emergency contact full name */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label
+                      htmlFor="volunteer-form-emergency-name"
+                      className="block text-xs font-bold text-slate-700 mb-1"
+                    >
                       Contact Name <span className="text-rose-600">*</span>
                     </label>
                     <input
+                      id="volunteer-form-emergency-name"
                       type="text"
                       required
                       placeholder="e.g. David Thompson"
@@ -623,10 +674,14 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
                   {/* Emergency contact phone number */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label
+                      htmlFor="volunteer-form-emergency-phone"
+                      className="block text-xs font-bold text-slate-700 mb-1"
+                    >
                       Emergency Phone <span className="text-rose-600">*</span>
                     </label>
                     <input
+                      id="volunteer-form-emergency-phone"
                       type="tel"
                       required
                       placeholder="e.g. 07700 900456"
@@ -639,10 +694,14 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
                 {/* Optional relationship to the volunteer */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label
+                    htmlFor="volunteer-form-emergency-relationship"
+                    className="block text-xs font-bold text-slate-700 mb-1"
+                  >
                     Relationship (Optional)
                   </label>
                   <input
+                    id="volunteer-form-emergency-relationship"
                     type="text"
                     placeholder="e.g. Partner, Parent, Sibling, Friend"
                     value={emergencyContactRelationship}
@@ -657,8 +716,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               {/* Role & Policy Induction Checkboxes */}
               <div className="space-y-2.5 pt-1">
                 {/* Organiser checkbox granting Front Desk sign-in access */}
-                <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <label
+                  htmlFor="volunteer-form-organiser"
+                  className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                >
                   <input
+                    id="volunteer-form-organiser"
                     type="checkbox"
                     checked={isOrganiser}
                     onChange={(e) => setIsOrganiser(e.target.checked)}
@@ -676,8 +739,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                 </label>
 
                 {/* PAT Electrical Safety Trained checkbox */}
-                <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <label
+                  htmlFor="volunteer-form-pat-trained"
+                  className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                >
                   <input
+                    id="volunteer-form-pat-trained"
                     type="checkbox"
                     checked={isPatTrained}
                     onChange={(e) => setIsPatTrained(e.target.checked)}
@@ -696,8 +763,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
                 {/* Confirmed Policy Induction checkbox + Read Policies shortcut */}
                 <div className="flex items-start justify-between gap-2.5 p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/50">
-                  <label className="flex items-start gap-2.5 cursor-pointer flex-1">
+                  <label
+                    htmlFor="volunteer-form-inducted"
+                    className="flex items-start gap-2.5 cursor-pointer flex-1"
+                  >
                     <input
+                      id="volunteer-form-inducted"
                       type="checkbox"
                       checked={inducted}
                       onChange={(e) => setInducted(e.target.checked)}

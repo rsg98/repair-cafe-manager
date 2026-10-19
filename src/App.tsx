@@ -1,5 +1,5 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePwaUpdate } from './hooks/usePwaUpdate';
@@ -35,12 +35,37 @@ const ReportsView = lazyWithRetry(
   'ReportsView'
 );
 
+const ROUTE_TITLES: Record<string, string> = {
+  '/register': 'Check-In Item',
+  '/frontdesk': 'Front Desk Board',
+  '/desk': 'Front Desk Board',
+  '/pat': 'PAT Safety Station',
+  '/fixer': 'Volunteer Fixer Station',
+  '/reports': 'Community Impact Reports',
+};
+
+/**
+ * Synchronises `document.title` with the active station route inside `<BrowserRouter>` (WCAG 2.4.2).
+ */
+export const RouteTitleSynchronizer: React.FC = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const stationTitle = ROUTE_TITLES[location.pathname];
+    document.title = stationTitle
+      ? `${stationTitle} | ${cafeConfig.cafeName}`
+      : cafeConfig.cafeName;
+  }, [location.pathname]);
+
+  return null;
+};
+
 // Shared loading spinner displayed while session state or lazy route chunks resolve
 const StationLoadingFallback: React.FC<{ label?: string }> = ({
   label = 'Loading station...',
 }) => (
-  <div className="max-w-md mx-auto my-20 p-8 text-center text-slate-500">
-    <div className="h-8 w-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+  <div className="max-w-md mx-auto my-20 p-8 text-center text-slate-600" role="status" aria-live="polite">
+    <div className="h-8 w-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" aria-hidden="true" />
     <p className="text-sm font-semibold">{label}</p>
   </div>
 );
@@ -48,9 +73,9 @@ const StationLoadingFallback: React.FC<{ label?: string }> = ({
 // Error screen displayed when the current hostname is not mapped in cafeConfig.hostnameViews
 const UnconfiguredHostnameNotice: React.FC<{ hostname: string }> = ({ hostname }) => (
   <div className="max-w-xl mx-auto my-16 px-4">
-    <div className="p-8 bg-white rounded-2xl shadow-sm border border-rose-200 text-center">
+    <div className="p-8 bg-white rounded-2xl shadow-sm border border-rose-200 text-center" role="alert">
       <div className="h-14 w-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
-        <AlertTriangle className="h-8 w-8" />
+        <AlertTriangle className="h-8 w-8" aria-hidden="true" />
       </div>
       <h2 className="text-2xl font-bold text-slate-900">
         Hostname Not Configured
@@ -58,7 +83,7 @@ const UnconfiguredHostnameNotice: React.FC<{ hostname: string }> = ({ hostname }
       <p className="mt-2 text-sm text-slate-600">
         This hostname (<code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800">{hostname || 'unknown'}</code>) has not been configured for {cafeConfig.cafeName}.
       </p>
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-xs text-slate-600">
         Please check the URL or add this hostname to <code className="font-mono">cafeConfig.hostnameViews</code>.
       </p>
     </div>
@@ -94,7 +119,22 @@ const AppShell: React.FC = () => {
   // Render outer shell with offline banner, update banner, top header, navigation, and lazy route outlet
   return (
     <BrowserRouter>
+      <RouteTitleSynchronizer />
       <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
+        {/* Keyboard bypass link to jump directly to main station content (WCAG 2.4.1) */}
+        <a
+          href="#main-content"
+          onClick={(e) => {
+            const mainEl = document.getElementById('main-content');
+            if (mainEl) {
+              e.preventDefault();
+              mainEl.focus();
+            }
+          }}
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:rounded-xl focus:bg-emerald-900 focus:text-white focus:font-bold focus:text-sm focus:shadow-lg"
+        >
+          Skip to main content
+        </a>
         <OfflineNotice />
         <UpdateBanner
           updateAvailable={updateAvailable}
@@ -109,7 +149,7 @@ const AppShell: React.FC = () => {
         <Header session={session} showAuthControls={hostConfig.showAuthControls} />
         {hostConfig.showNavigation && <Navigation allowedViews={allowedViews} />}
 
-        <main className="flex-1 pb-16">
+        <main id="main-content" tabIndex={-1} className="flex-1 pb-16 outline-none">
           {!hostConfig.isConfigured || !defaultRoute ? (
             <UnconfiguredHostnameNotice hostname={hostConfig.hostname} />
           ) : loading ? (
@@ -154,7 +194,7 @@ const AppShell: React.FC = () => {
         </main>
 
         {/* Global footer displaying configured Repair Café identity and active build version */}
-        <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400">
+        <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-600">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>
               {cafeConfig.cafeName} • {cafeConfig.venueName}
@@ -164,11 +204,11 @@ const AppShell: React.FC = () => {
                 href="https://github.com/rsg98/repair-cafe-manager/blob/main/README.md"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-slate-600 underline underline-offset-2 transition-colors"
+                className="hover:text-slate-900 underline underline-offset-2 transition-colors"
               >
                 RCM
               </a>
-              <span className="font-mono text-[11px] text-slate-400">
+              <span className="font-mono text-[11px] text-slate-600">
                 v{appVersion}
               </span>
               {updateAvailable && (
@@ -179,7 +219,7 @@ const AppShell: React.FC = () => {
                   }}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold hover:bg-emerald-200 transition-colors cursor-pointer"
                 >
-                  <RefreshCw className="h-3 w-3" />
+                  <RefreshCw className="h-3 w-3" aria-hidden="true" />
                   <span>Update ready</span>
                 </button>
               )}

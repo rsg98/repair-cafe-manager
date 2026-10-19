@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BookOpen, X, ShieldCheck, Calendar, Tag } from 'lucide-react';
 import { getPolicies } from '../../services/policyService';
 import { PolicyDocument } from '../../types';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { MarkdownViewer } from './MarkdownViewer';
 
 export interface PoliciesModalProps {
@@ -27,6 +28,12 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
     initialPolicyId || policies[0]?.id || ''
   );
 
+  // Trap focus only when rendered as a standalone modal dialog (!inline)
+  const dialogRef = useDialogFocusTrap({
+    isOpen: !inline && isOpen,
+    onClose,
+  });
+
   // Do not render anything when used as a closed modal
   if (!inline && !isOpen) {
     return null;
@@ -39,6 +46,11 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
   // Build the shared inner layout for navigating and reading policy documents
   const viewerBody = (
     <div
+      ref={inline ? undefined : dialogRef}
+      role={inline ? undefined : 'dialog'}
+      aria-modal={inline ? undefined : true}
+      aria-labelledby={inline ? undefined : 'policies-modal-title'}
+      tabIndex={inline ? undefined : -1}
       className={`bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col ${
         inline ? 'min-h-[540px]' : 'w-full max-w-5xl max-h-[88vh] shadow-2xl'
       }`}
@@ -47,10 +59,10 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
-            <BookOpen className="h-5 w-5" />
+            <BookOpen className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-900">
+            <h3 id="policies-modal-title" className="text-lg font-black text-slate-900">
               Repair Café Policies & Induction Pack
             </h3>
             <p className="text-xs text-slate-500">
@@ -66,7 +78,7 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
             aria-label="Close policies viewer"
             className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -75,7 +87,7 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
         {/* Policy navigation sidebar */}
         <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50/70 p-4 space-y-2 overflow-y-auto">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 px-2 block">
             Active Policies ({policies.length})
           </span>
           {policies.map((policy) => {
@@ -85,6 +97,7 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
               <button
                 key={policy.id}
                 type="button"
+                aria-current={isSelected ? 'true' : undefined}
                 onClick={() => setSelectedPolicyId(policy.id)}
                 className={`w-full text-left p-3 rounded-2xl border transition-all ${
                   isSelected
@@ -122,11 +135,11 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
               {/* Policy metadata badges */}
               <div className="flex flex-wrap items-center gap-2 pb-4 mb-4 border-b border-slate-100 text-xs text-slate-500">
                 <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                  <ShieldCheck className="h-3.5 w-3.5" /> {activePolicy.id}
+                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> {activePolicy.id}
                 </span>
                 {activePolicy.category && (
                   <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg font-medium">
-                    <Tag className="h-3.5 w-3.5" /> {activePolicy.category}
+                    <Tag className="h-3.5 w-3.5" aria-hidden="true" /> {activePolicy.category}
                   </span>
                 )}
                 {activePolicy.version && (
@@ -136,7 +149,7 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
                 )}
                 {activePolicy.lastUpdated && (
                   <span className="inline-flex items-center gap-1 text-slate-500">
-                    <Calendar className="h-3.5 w-3.5" /> Updated {activePolicy.lastUpdated}
+                    <Calendar className="h-3.5 w-3.5" aria-hidden="true" /> Updated {activePolicy.lastUpdated}
                   </span>
                 )}
               </div>

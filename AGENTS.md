@@ -394,6 +394,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   │   ├── useRepairs.ts              # Real-time repairs snapshot for Front Desk
 │   │   ├── useAuth.ts                 # Google Sign-In state hook
 │   │   ├── useVolunteerPin.ts         # PIN authentication modal & token management
+│   │   ├── useDialogFocusTrap.ts      # WCAG 2.2 AA modal dialog focus trap & Escape stack
 │   │   └── useNetworkStatus.ts        # Online/offline browser state
 │   │
 │   ├── components/
@@ -401,8 +402,10 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   │   │   ├── CardToken.tsx          # Card token badge (#1..#N)
 │   │   │   ├── StatusBadge.tsx        # High-contrast queue status badges
 │   │   │   ├── SafetyBanner.tsx       # Amber/Red hazard alerts for PAT 1 defects
-│   │   │   ├── PinModal.tsx           # 4-digit keypad for volunteer PIN
+│   │   │   ├── PinModal.tsx           # 4-digit keypad & keyboard entry for volunteer PIN
 │   │   │   ├── TermsModal.tsx         # Scrollable Terms & Conditions modal
+│   │   │   ├── PoliciesModal.tsx      # Volunteer Induction & Policy Pack viewer modal
+│   │   │   ├── PhotoViewerModal.tsx   # Item photo lightbox, download & atomic deletion modal
 │   │   │   └── OfflineNotice.tsx      # Top banner when network connectivity drops
 │   │   └── layout/
 │   │       ├── Header.tsx             # Branding, active session badge, connection status
@@ -415,12 +418,15 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │       ├── FixerStationView.tsx       # Station 4: Volunteer fixer log & time tracker
 │       └── ReportsView.tsx            # Station 5: Visual analytics & CSV report download
 │
-└── tests/                             # Vitest unit test suites
+└── tests/                             # Vitest unit & WCAG 2.2 AA accessibility test suites
     ├── stateMachine.test.ts           # Full item lifecycle state transition tests
     ├── repairService.test.ts          # Analytics calculation & CSV formatting tests
     ├── sessionService.test.ts         # Reference token, PIN hash, test filtering & CLI parser tests
     ├── historicalIngest.test.ts       # Historical CSV ingestion, normalizer & redaction tests
-    └── mergeVolunteers.test.ts        # Volunteer lookup, credit rewrite & merge plan tests
+    ├── mergeVolunteers.test.ts        # Volunteer lookup, credit rewrite & merge plan tests
+    ├── wcagStaticGuardrails.test.ts   # Static WCAG 2.2 AA guardrails (labels, th scope, modals, contrast)
+    ├── wcagAxeAudit.test.tsx          # Automated axe-core WCAG 2.2 AA audits across stations & modals
+    └── wcagKeyboardAndFocus.test.tsx  # Keyboard navigation, stacked modal focus trap & route title tests
 ```
 
 ---
@@ -440,11 +446,15 @@ Because repair cafes operate with zero budget, the application is strictly desig
 4. **Offline Resilience:**
    - When calling Firestore, handle network disconnections gracefully.
    - Catch errors on collection queries that require composite indexes when offline, and allow local cache fallback.
-5. **UI & Accessibility:**
-   - Stations are operated on mobile phones and budget 10" Android/iPad tablets.
+5. **UI & WCAG 2.2 Level AA Accessibility Guardrails:**
+   - Stations are operated on mobile phones and budget 10" Android/iPad tablets; never restrict viewport pinch-to-zoom (`user-scalable=no` or `maximum-scale=1` are prohibited).
    - Use large touch targets (minimum `min-h-[44px]` or `p-3`).
-   - Use high-contrast colour coding for safety-critical states:
-     - `DANGER_DO_NOT_ENERGIZE`: Deep red pulsing alert banner (`border-red-600 bg-red-50 text-red-950`).
+   - **Programmatic Form Labels (WCAG 1.3.1, 3.3.2, 4.1.2):** Every `<label>` must declare an explicit `htmlFor` matching the control's `id` (or wrap the control), and icon-only / standalone inputs must declare `aria-label`. Button groups (`role="group"`) must use `<span id="...">` + `aria-labelledby` and `aria-pressed` on toggle buttons.
+   - **Modal Dialog Focus Trap (WCAG 2.1.2, 2.4.3, 4.1.2):** Every modal dialog must wire `useDialogFocusTrap` (`src/hooks/useDialogFocusTrap.ts`) and declare `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, and `tabIndex={-1}`.
+   - **Table Semantics (WCAG 1.3.1):** Every `<th>` in data tables must include `scope="col"` (or `scope="row"`).
+   - **Live Status & Error Announcements (WCAG 4.1.3):** Validation and fault banners must declare `role="alert"`; polite status updates and lookup feedback must declare `role="status"`.
+   - **Colour Contrast (WCAG 1.4.3, 1.4.11):** Muted body/helper text on white (`bg-white`) or `bg-slate-50` surfaces must use `text-slate-600` or darker ($\ge 4.5:1$), form input borders must use `border-slate-300` or darker, and safety-critical states must use high-contrast palettes:
+     - `DANGER_DO_NOT_ENERGIZE`: Deep red alert banner (`border-red-600 bg-red-50 text-red-950`).
      - `FAIL_REPAIRABLE_CORD`: Amber warning banner (`border-amber-500 bg-amber-50 text-amber-950`).
      - `PASS`: Fresh emerald green badge (`border-emerald-300 bg-emerald-50 text-emerald-950`).
 6. **UK English Spelling Throughout UI & Documentation:**
@@ -474,7 +484,7 @@ npm run dev
 npm run manage-sessions -- --list
 ```
 
-When modifying domain logic, always ensure tests in `tests/stateMachine.test.ts`, `tests/repairService.test.ts`, and `tests/sessionService.test.ts` remain aligned and pass.
+When modifying domain logic or UI components, always ensure tests in `tests/stateMachine.test.ts`, `tests/repairService.test.ts`, `tests/sessionService.test.ts`, `tests/wcagStaticGuardrails.test.ts`, `tests/wcagAxeAudit.test.tsx`, and `tests/wcagKeyboardAndFocus.test.tsx` remain aligned and pass.
 
 ---
 

@@ -18,6 +18,7 @@ import {
   getVolunteerById,
 } from '../../services/volunteerService';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 
 export interface SessionAttendanceBarProps {
   session: Session;
@@ -59,6 +60,16 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
       loadingEmergency,
     'session-attendance-bar'
   );
+
+  // Focus trap and Escape key dismissal for Emergency Contact and Attendance modals
+  const emergencyModalRef = useDialogFocusTrap({
+    isOpen: Boolean(emergencyVolunteer),
+    onClose: () => setEmergencyVolunteer(null),
+  });
+  const attendanceModalRef = useDialogFocusTrap({
+    isOpen: showAttendanceModal,
+    onClose: () => setShowAttendanceModal(false),
+  });
 
   // Derive attending summaries and any uninducted or PAT-qualified attendees
   const attending = session.attendingVolunteers || [];
@@ -284,11 +295,13 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
               {v.isOrganiser && (
                 <span title="Organiser" className="inline-flex items-center">
                   <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="sr-only"> (Organiser)</span>
                 </span>
               )}
               {v.isPatTrained && (
                 <span title="PAT Trained" className="inline-flex items-center">
                   <Zap className="h-3.5 w-3.5 text-amber-600" />
+                  <span className="sr-only"> (PAT Trained)</span>
                 </span>
               )}
               {!v.inducted && (
@@ -304,12 +317,22 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
       {/* Modal: Emergency Contact Quick-View Card from active session badge */}
       {emergencyVolunteer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left">
+          <div
+            ref={emergencyModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="session-emergency-contact-title"
+            tabIndex={-1}
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left"
+          >
             {/* Modal header identifying the volunteer */}
-            <div className="flex items-center gap-2 text-rose-700 font-black text-base mb-1">
+            <h3
+              id="session-emergency-contact-title"
+              className="flex items-center gap-2 text-rose-700 font-black text-base mb-1"
+            >
               <HeartPulse className="h-5 w-5" />
               Emergency Contact Card
-            </div>
+            </h3>
             <p className="text-xs text-slate-500 mb-4">
               Attending Volunteer: <strong>{emergencyVolunteer.name}</strong>
             </p>
@@ -357,9 +380,19 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
       {/* Modal: Edit Attending Volunteers during an active session */}
       {showAttendanceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200">
+          <div
+            ref={attendanceModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="update-attendance-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200"
+          >
             {/* Modal title and instructions */}
-            <h3 className="text-lg font-black text-slate-900">
+            <h3
+              id="update-attendance-modal-title"
+              className="text-lg font-black text-slate-900"
+            >
               Update Session Attendance
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -369,9 +402,10 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
 
             {/* Filter input inside modal */}
             <div className="relative mt-4">
-              <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
+              <Search aria-hidden="true" className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
               <input
                 type="text"
+                aria-label="Filter volunteers by name"
                 placeholder="Filter volunteers by name..."
                 value={modalSearch}
                 onChange={(e) => setModalSearch(e.target.value)}
@@ -392,6 +426,7 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
                   return (
                     <label
                       key={v.id}
+                      htmlFor={`attendance-volunteer-${v.id}`}
                       className={`flex items-center justify-between gap-3 px-4 py-2.5 cursor-pointer text-sm transition-colors ${
                         isChecked ? 'bg-blue-50/70' : 'hover:bg-slate-50'
                       }`}
@@ -399,6 +434,7 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
                       {/* Checkbox and volunteer full name */}
                       <div className="flex items-center gap-3">
                         <input
+                          id={`attendance-volunteer-${v.id}`}
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleVolunteerSelection(v.id)}

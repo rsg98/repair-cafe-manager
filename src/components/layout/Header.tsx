@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Left: Cafe Brand Identity */}
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 shadow-inner">
-            <Wrench className="h-6 w-6 text-brand-300" />
+            <Wrench className="h-6 w-6 text-brand-300" aria-hidden="true" />
           </div>
           {/* Cafe title and desktop tagline */}
           <div>
@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Center: Session Status Pill (desktop viewports) */}
         <div className="hidden md:flex items-center gap-2 bg-emerald-900/60 px-3 py-1.5 rounded-full border border-emerald-700/60 text-xs">
-          <span className={`h-2 w-2 rounded-full ${session ? 'bg-brand-400 animate-pulse' : 'bg-slate-400'}`} />
+          <span className={`h-2 w-2 rounded-full ${session ? 'bg-brand-400 animate-pulse' : 'bg-slate-400'}`} aria-hidden="true" />
           <span className="font-medium text-emerald-100">
             {session ? session.name : 'No Active Session'}
           </span>
@@ -75,25 +75,28 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-emerald-950/80 border-emerald-700 text-brand-200' 
                     : 'bg-amber-950/80 border-amber-700 text-amber-200'
                 }`}>
-                  <Shield className={`h-3.5 w-3.5 ${isAuthorizedRole ? 'text-brand-400' : 'text-amber-400'}`} />
+                  <Shield className={`h-3.5 w-3.5 ${isAuthorizedRole ? 'text-brand-400' : 'text-amber-400'}`} aria-hidden="true" />
                   {bannerState.label}
                 </span>
                 {/* Sign-out button */}
                 <button
+                  type="button"
                   onClick={signOut}
+                  aria-label="Sign out"
                   title="Sign out"
                   className="p-1.5 rounded-lg text-emerald-200 hover:text-white hover:bg-white/10 transition-colors"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             ) : (
               /* Organiser Google login button */
               <button
+                type="button"
                 onClick={signInWithGoogle}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white text-emerald-900 px-3 py-1.5 rounded-lg shadow-sm hover:bg-emerald-50 active:bg-emerald-100 transition-colors"
               >
-                <LogIn className="h-3.5 w-3.5" />
+                <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Organiser Login</span>
               </button>
             )}

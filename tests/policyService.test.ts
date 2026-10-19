@@ -101,9 +101,13 @@ Treat all visitors with dignity and respect.`;
     expect(ids).not.toContain('POL00');
     expect(getPolicyById('POL00')).toBeUndefined();
 
+    // Verify the tracked POL04 Accessibility VPAT 2.5 report is always present
+    expect(ids).toContain('POL04');
+    expect(getPolicyById('POL04')?.title).toContain('Accessibility Conformance Report');
+
     // When local operational policy files are present, verify their IDs and metadata
-    if (policies.length > 0) {
-      expect(ids).toEqual(['POL01', 'POL02', 'POL03']);
+    if (ids.includes('POL01')) {
+      expect(ids).toEqual(['POL01', 'POL02', 'POL03', 'POL04']);
       expect(getPolicyById('POL01')?.title).toContain('Health and Safety');
       expect(getPolicyById('POL02')?.title).toContain('Safeguarding');
       expect(getPolicyById('POL03')?.title).toContain('Whistleblowing');

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { KeyRound, X } from 'lucide-react';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 
 export interface PinKeyAction {
   type: 'DIGIT' | 'BACKSPACE' | 'CLEAR' | 'SUBMIT' | 'CLOSE' | 'IGNORE';
@@ -77,6 +78,12 @@ export const PinModal: React.FC<PinModalProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  // Trap focus inside the PIN dialog and handle Escape dismissal when not actively submitting
+  const dialogRef = useDialogFocusTrap({
+    isOpen,
+    onClose: submitting ? undefined : onClose,
+  });
+
   // Prevent automatic PWA reload while a volunteer is actively typing or verifying their PIN
   useRegisterUnsavedWork(isOpen && (pin.length > 0 || submitting), 'pin-modal');
 
@@ -98,7 +105,7 @@ export const PinModal: React.FC<PinModalProps> = ({
     }
   }, [onVerify]);
 
-  // Listen for physical keyboard input (digits 0-9, Backspace, Delete, Enter, Escape) while the modal is open
+  // Listen for physical keyboard input (digits 0-9, Backspace, Delete, Enter) while the modal is open
   useEffect(() => {
     if (!isOpen || submitting) return;
 
@@ -109,23 +116,21 @@ export const PinModal: React.FC<PinModalProps> = ({
         altKey: e.altKey,
       });
 
-      if (action.type === 'IGNORE') return;
-
-      e.preventDefault();
+      // Escape dismissal is handled by useDialogFocusTrap
+      if (action.type === 'IGNORE' || action.type === 'CLOSE') return;
 
       switch (action.type) {
         case 'DIGIT':
         case 'BACKSPACE':
         case 'CLEAR':
+          e.preventDefault();
           setLocalError(null);
           setPin(action.nextPin);
           break;
         case 'SUBMIT':
-          void verifyPin(pin);
-          break;
-        case 'CLOSE':
-          if (onClose) {
-            onClose();
+          if (pin.length === 4) {
+            e.preventDefault();
+            void verifyPin(pin);
           }
           break;
       }
@@ -135,7 +140,7 @@ export const PinModal: React.FC<PinModalProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, submitting, pin, verifyPin, onClose]);
+  }, [isOpen, submitting, pin, verifyPin]);
 
   // Do not render modal DOM when already unlocked or closed
   if (!isOpen) return null;
@@ -162,19 +167,30 @@ export const PinModal: React.FC<PinModalProps> = ({
   return (
     // Full-screen translucent backdrop locking interaction with the underlying station view
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pin-modal-title"
+        tabIndex={-1}
+        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200"
+      >
         {/* Modal Header with key icon and optional close button */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <KeyRound className="h-6 w-6 text-brand-700" />
-            <h3 className="text-lg font-bold text-slate-800">Volunteer Unlock</h3>
+            <KeyRound className="h-6 w-6 text-brand-700" aria-hidden="true" />
+            <h3 id="pin-modal-title" className="text-lg font-bold text-slate-800">
+              Volunteer Unlock
+            </h3>
           </div>
           {onClose && (
-            <button 
-              onClick={onClose} 
-              className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close PIN dialog"
+              className="rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -185,7 +201,7 @@ export const PinModal: React.FC<PinModalProps> = ({
         </p>
 
         {/* 4-box masked PIN progress indicator */}
-        <div className="mt-6 flex justify-center gap-4">
+        <div className="mt-6 flex justify-center gap-4" aria-hidden="true">
           {[0, 1, 2, 3].map((idx) => {
             const hasDigit = pin.length > idx;
             return (
@@ -194,7 +210,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                 className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-mono font-bold transition-all ${
                   hasDigit
                     ? 'border-brand-600 bg-brand-50 text-brand-900 shadow-sm'
-                    : 'border-slate-200 bg-slate-50 text-slate-400'
+                    : 'border-slate-200 bg-slate-50 text-slate-500'
                 }`}
               >
                 {hasDigit ? '•' : ''}
@@ -202,10 +218,13 @@ export const PinModal: React.FC<PinModalProps> = ({
             );
           })}
         </div>
+        <span className="sr-only" role="status" aria-live="polite">
+          {pin.length} of 4 digits entered
+        </span>
 
         {/* Display server verification error or local length validation error */}
         {(error || localError) && (
-          <p className="mt-4 text-center text-sm font-semibold text-rose-600">
+          <p role="alert" className="mt-4 text-center text-sm font-semibold text-rose-600">
             {error || localError}
           </p>
         )}
@@ -227,6 +246,7 @@ export const PinModal: React.FC<PinModalProps> = ({
           <button
             type="button"
             onClick={handleBackspace}
+            aria-label="Backspace"
             className="h-12 rounded-xl bg-slate-100 text-sm font-semibold text-slate-700 active:bg-slate-200 transition-colors shadow-sm"
           >
             Del

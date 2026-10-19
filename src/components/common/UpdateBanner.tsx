@@ -56,7 +56,7 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({
       {/* Flex container aligning the update message and action buttons */}
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-center sm:text-left">
-          <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
+          <RefreshCw className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
           <span>
             {isMandatoryUpdate
               ? 'A required app update is ready. It will install automatically once you finish this screen, or you can update now.'
@@ -79,11 +79,11 @@ export const UpdateBanner: React.FC<UpdateBannerProps> = ({
             <button
               type="button"
               onClick={onDismiss}
-              aria-label="Dismiss update notice"
+              aria-label="Later — dismiss update notice"
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-700/80 text-emerald-100 hover:bg-emerald-700 transition-colors cursor-pointer"
             >
               <span>Later</span>
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
         </div>

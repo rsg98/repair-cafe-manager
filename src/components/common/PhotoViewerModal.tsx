@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { RepairItem, RepairPhoto } from '../../types';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { fetchRepairPhotos, deleteRepairPhoto } from '../../services/repairService';
 import {
   formatPhotoSizeKb,
@@ -66,6 +67,7 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
   const [deleting, setDeleting] = useState<boolean>(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useDialogFocusTrap({ isOpen, onClose });
 
   // Load or synchronise photos when the modal opens
   useEffect(() => {
@@ -149,10 +151,12 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="photo-viewer-modal-title"
+      tabIndex={-1}
     >
       {/* Modal card container */}
       <div className="w-full max-w-xl rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200 my-8">
@@ -160,7 +164,7 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="h-10 w-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center flex-shrink-0">
-              <Camera className="h-5 w-5" />
+              <Camera className="h-5 w-5" aria-hidden="true" />
             </div>
             {/* Item title, card number, and reference token subtitle */}
             <div>
@@ -178,16 +182,19 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close photo viewer"
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Error alert banner */}
         {error && (
-          <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-800 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+          <div
+            role="alert"
+            className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-800 flex items-center gap-2"
+          >
+            <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
@@ -195,12 +202,12 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
         {/* Body: Loading spinner, empty state, or active photo preview */}
         {loading ? (
           <div className="py-16 text-center text-slate-500">
-            <RefreshCw className="h-7 w-7 animate-spin mx-auto mb-2 text-brand-600" />
+            <RefreshCw className="h-7 w-7 animate-spin mx-auto mb-2 text-brand-600" aria-hidden="true" />
             <p className="text-xs font-semibold">Loading item photos...</p>
           </div>
         ) : !activePhoto ? (
           <div className="py-12 text-center text-slate-500">
-            <Camera className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+            <Camera className="h-8 w-8 mx-auto mb-2 text-slate-300" aria-hidden="true" />
             <p className="text-sm font-semibold text-slate-700">No photos attached to this item</p>
           </div>
         ) : (
@@ -223,10 +230,11 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
                       setConfirmDeleteId(null);
                       setActiveIndex((prev) => (prev > 0 ? prev - 1 : photos.length - 1));
                     }}
+                    aria-label="Previous photo"
                     title="Previous photo"
                     className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
                   >
-                    <ChevronLeft className="h-5 w-5" />
+                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
                   </button>
                   {/* Next photo button */}
                   <button
@@ -235,10 +243,11 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
                       setConfirmDeleteId(null);
                       setActiveIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0));
                     }}
+                    aria-label="Next photo"
                     title="Next photo"
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
                   >
-                    <ChevronRight className="h-5 w-5" />
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </>
               )}
@@ -252,6 +261,8 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
                   <button
                     key={p.id}
                     type="button"
+                    aria-label={`Select photo ${idx + 1}`}
+                    aria-pressed={idx === safeIndex}
                     onClick={() => {
                       setConfirmDeleteId(null);
                       setActiveIndex(idx);

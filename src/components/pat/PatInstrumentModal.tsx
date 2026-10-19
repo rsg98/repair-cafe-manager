@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { PatInstrument, PatInstrumentInput } from '../../types';
 import { cafeConfig } from '../../config/cafe.config';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import {
   createPatInstrument,
   updatePatInstrument,
@@ -74,6 +75,7 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useDialogFocusTrap({ isOpen, onClose });
 
   // Hydrate or reset form fields whenever the modal opens or switches between add/edit modes
   useEffect(() => {
@@ -166,10 +168,12 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="pat-instrument-modal-title"
+      tabIndex={-1}
     >
       {/* Modal Container */}
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 animate-fade-in my-8">
@@ -177,7 +181,7 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
         <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="h-11 w-11 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0">
-              <Zap className="h-5 w-5" />
+              <Zap className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
               {/* Dynamic Add vs Edit modal heading */}
@@ -195,16 +199,19 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close PAT instrument modal"
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Error Banner */}
         {error && (
-          <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+          <div
+            role="alert"
+            className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2"
+          >
+            <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
@@ -252,7 +259,7 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
             {/* Optional Model input */}
             <div>
               <label htmlFor="pat-inst-model" className="block text-xs font-bold text-slate-700 mb-1">
-                Model <span className="text-slate-400 font-normal">(Optional)</span>
+                Model <span className="text-slate-600 font-normal">(Optional)</span>
               </label>
               {/* Optional hardware model identifier */}
               <input
@@ -318,14 +325,14 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
               {/* Render overdue warning or valid interval badge */}
               {isEnteredDateOverdue ? (
                 <>
-                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" aria-hidden="true" />
                   <span>
                     Service date is older than {serviceIntervalMonths} months. An amber overdue warning will be shown when selected.
                   </span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" aria-hidden="true" />
                   <span>
                     Within the {serviceIntervalMonths}-month calibration interval.
                   </span>
@@ -337,7 +344,7 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
           {/* Optional Notes textarea */}
           <div>
             <label htmlFor="pat-inst-notes" className="block text-xs font-bold text-slate-700 mb-1">
-              Notes <span className="text-slate-400 font-normal">(Optional)</span>
+              Notes <span className="text-slate-600 font-normal">(Optional)</span>
             </label>
             <textarea
               id="pat-inst-notes"

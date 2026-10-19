@@ -72,6 +72,7 @@ import { PhotoViewerModal } from '../components/common/PhotoViewerModal';
 import { VolunteerRegisterPanel } from '../components/frontdesk/VolunteerRegisterPanel';
 import { SessionAttendanceBar } from '../components/frontdesk/SessionAttendanceBar';
 import { cafeConfig } from '../config/cafe.config';
+import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap';
 
 /**
  * Props accepted by the {@link FrontDeskView} station component.
@@ -155,6 +156,23 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     isDiscardingSession ||
     creatingSession;
   useRegisterUnsavedWork(isFrontDeskDirty, 'frontdesk-view');
+
+  // Focus traps and Escape key dismissal for Front Desk inline modals
+  const assignCardModalRef = useDialogFocusTrap({
+    isOpen: Boolean(selectedRepairId),
+    onClose: () => setSelectedRepairId(null),
+  });
+  const customerPiiModalRef = useDialogFocusTrap({
+    isOpen: Boolean(contactModalData),
+    onClose: () => setContactModalData(null),
+  });
+  const startSessionModalRef = useDialogFocusTrap({
+    isOpen: showNewSessionModal,
+    onClose: () => {
+      setIsTestSession(false);
+      setShowNewSessionModal(false);
+    },
+  });
 
   // Automatically publish the current build version to settings/system when an admin opens Front Desk
   const hasPublishedVersionRef = useRef<string | null>(null);
@@ -512,10 +530,15 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       </div>
 
       {/* Front Desk Sub-Navigation Tabs (Queue, Volunteer Register, Policies) */}
-      <div className="flex flex-wrap items-center gap-2 my-5 border-b border-slate-200 pb-3">
+      <div
+        role="group"
+        aria-label="Front desk workspace views"
+        className="flex flex-wrap items-center gap-2 my-5 border-b border-slate-200 pb-3"
+      >
         {/* Session Queue sub-tab button */}
         <button
           type="button"
+          aria-pressed={activeTab === 'QUEUE'}
           onClick={() => setActiveTab('QUEUE')}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
             activeTab === 'QUEUE'
@@ -529,6 +552,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         {/* Volunteer Register sub-tab button */}
         <button
           type="button"
+          aria-pressed={activeTab === 'VOLUNTEERS'}
           onClick={() => setActiveTab('VOLUNTEERS')}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
             activeTab === 'VOLUNTEERS'
@@ -542,6 +566,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         {/* Repair Café Policies sub-tab button */}
         <button
           type="button"
+          aria-pressed={activeTab === 'POLICIES'}
           onClick={() => setActiveTab('POLICIES')}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
             activeTab === 'POLICIES'
@@ -627,11 +652,12 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               <div className="flex flex-col sm:flex-row gap-3 my-4">
                 {/* Text search input matching name, reference token, item #, or item */}
                 <div className="relative flex-1">
-                  <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" />
+                  <Search className="h-4 w-4 absolute left-3.5 top-3 text-slate-400" aria-hidden="true" />
                   <input
                     type="text"
                     id="frontdesk-queue-search"
                     name="frontdesk-queue-search"
+                    aria-label="Search queue by customer name, card number, reference token, or item"
                     autoComplete="off"
                     autoCorrect="off"
                     // Disable browser autofill and password manager overlays on queue search
@@ -650,6 +676,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                 </div>
                 {/* Lifecycle status dropdown filter with live queue counts */}
                 <select
+                  aria-label="Filter queue by item status"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
@@ -671,19 +698,19 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     {/* Queue table column headers */}
-                    <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                       <tr>
                         {/* Identity and wait-time columns */}
-                        <th className="py-3 px-4">Card #</th>
-                        <th className="py-3 px-4">Customer</th>
-                        <th className="py-3 px-4">Ref Token</th>
-                        <th className="py-3 px-4">Wait Time</th>
+                        <th scope="col" className="py-3 px-4">Card #</th>
+                        <th scope="col" className="py-3 px-4">Customer</th>
+                        <th scope="col" className="py-3 px-4">Ref Token</th>
+                        <th scope="col" className="py-3 px-4">Wait Time</th>
                         {/* Item details, status, attribution, and row actions columns */}
-                        <th className="py-3 px-4">Item &amp; Fault</th>
-                        <th className="py-3 px-4">Power Type</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Fixer / PAT</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
+                        <th scope="col" className="py-3 px-4">Item &amp; Fault</th>
+                        <th scope="col" className="py-3 px-4">Power Type</th>
+                        <th scope="col" className="py-3 px-4">Status</th>
+                        <th scope="col" className="py-3 px-4">Fixer / PAT</th>
+                        <th scope="col" className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
@@ -722,7 +749,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                   <CardToken number={r.cardNumber} size="sm" dimmed={isCompleted} />
                                 ) : isCompleted ? (
                                   /* Terminal item without assigned card */
-                                  <span className="text-xs text-slate-400 font-mono">—</span>
+                                  <span className="text-xs text-slate-600 font-mono">—</span>
                                 ) : (
                                   <span className="text-xs italic text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-bold">
                                     Unassigned
@@ -744,7 +771,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                 <span
                                   className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded ${
                                     isCompleted
-                                      ? 'text-slate-500 bg-slate-200/70'
+                                      ? 'text-slate-600 bg-slate-200/70'
                                       : 'text-slate-700 bg-slate-100'
                                   }`}
                                   title="Time elapsed since customer registration (refreshed every 5 minutes)"
@@ -797,6 +824,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                 {canAssignCard(r) && (
                                   /* Open Assign Physical Card modal for unassigned items */
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setSelectedRepairId(r.id);
                                       setCardNumberInput('');
@@ -814,6 +842,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                     type="button"
                                     onClick={() => setPhotoModalRepairId(r.id)}
                                     title={`View or download ${r.repair?.photoCount} item photo${r.repair?.photoCount === 1 ? '' : 's'}`}
+                                    aria-label={`View photos for ${r.item.brandModel}`}
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
                                   >
                                     {/* Camera icon and attached photo count */}
@@ -824,8 +853,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
                                 {/* Customer Contact Phone Lookup */}
                                 <button
+                                  type="button"
                                   onClick={() => handleViewContact(r)}
                                   title="View customer contact phone"
+                                  aria-label={`View customer contact details for ${r.referenceToken}`}
                                   className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
                                 >
                                   <Phone className="h-4 w-4 inline" />
@@ -834,6 +865,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                 {/* Checkout / Collection Action */}
                                 {(r.status === 'READY_FOR_COLLECTION' || r.status === 'UNFIXABLE') && (
                                   <button
+                                    type="button"
                                     onClick={() => handleCompleteCollection(r.id)}
                                     className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm inline-flex items-center gap-1"
                                   >
@@ -879,8 +911,17 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       {selectedRepairId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           {/* Card assignment dialog box */}
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Assign Physical Card</h3>
+          <div
+            ref={assignCardModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="assign-card-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200"
+          >
+            <h3 id="assign-card-modal-title" className="text-lg font-bold text-slate-900 mb-1">
+              Assign Physical Card
+            </h3>
             {/* Instructions */}
             <p className="text-xs text-slate-500 mb-3">
               Enter the number on the reusable physical card handed to the customer.
@@ -888,12 +929,18 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
             {/* Card conflict or validation error message */}
             {assignError && (
-              <p className="text-xs font-bold text-rose-600 mb-3 bg-rose-50 p-2 rounded">
+              <p
+                role="alert"
+                className="text-xs font-bold text-rose-600 mb-3 bg-rose-50 p-2 rounded"
+              >
                 {assignError}
               </p>
             )}
 
             {/* Numeric input for physical card token (#1..#200) */}
+            <label htmlFor="frontdesk-assign-item-token" className="sr-only">
+              Assign repair item token
+            </label>
             <input
               {...REPAIR_ITEM_LOOKUP_INPUT_PROPS}
               id="frontdesk-assign-item-token"
@@ -933,8 +980,17 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       {contactModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           {/* Contact card modal dialog container */}
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 text-left">
-            <h3 className="text-base font-bold text-slate-900 mb-1">Customer Contact Card</h3>
+          <div
+            ref={customerPiiModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-pii-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 text-left"
+          >
+            <h3 id="customer-pii-modal-title" className="text-base font-bold text-slate-900 mb-1">
+              Customer Contact Card
+            </h3>
             {/* Item brand/model and card token subtitle */}
             <p className="text-xs text-slate-500 mb-4">
               Item: <strong>{contactModalData.brandModel}</strong>{' '}
@@ -959,13 +1015,15 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     <Phone className="h-3.5 w-3.5" /> {contactModalData.contactPhone}
                   </a>
                 ) : (
-                  <span className="text-xs italic text-slate-400">No phone provided</span>
+                  <span className="text-xs italic text-slate-600">No phone provided</span>
                 )}
               </div>
             </div>
 
             {/* Close contact card modal button */}
             <button
+              type="button"
+              aria-label="Close customer contact details"
               onClick={() => setContactModalData(null)}
               className="mt-5 w-full py-2.5 rounded-xl bg-slate-800 text-xs font-bold text-white hover:bg-slate-900"
             >
@@ -979,14 +1037,23 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       {showNewSessionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
           {/* New session configuration dialog */}
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8">
+          <div
+            ref={startSessionModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="start-session-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8"
+          >
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
               {/* Calendar icon badge */}
               <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
                 <Calendar className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Start Today&apos;s Repair Café</h3>
+                <h3 id="start-session-modal-title" className="text-lg font-bold text-slate-900">
+                  Start Today&apos;s Repair Café
+                </h3>
                 <p className="text-xs text-slate-500">Configure the active session, PIN, and attending volunteers</p>
               </div>
             </div>
@@ -994,11 +1061,15 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             {/* New session launch form */}
             <form onSubmit={handleCreateSession} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label
+                  htmlFor="start-session-name"
+                  className="block text-xs font-bold text-slate-700 mb-1"
+                >
                   Session Name
                 </label>
                 {/* Session display name input */}
                 <input
+                  id="start-session-name"
                   type="text"
                   required
                   placeholder="e.g. October 2026 - Seears Park"
@@ -1011,11 +1082,15 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               {/* Date and 4-digit volunteer PIN inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label
+                    htmlFor="start-session-date"
+                    className="block text-xs font-bold text-slate-700 mb-1"
+                  >
                     Session Date
                   </label>
                   {/* ISO date picker */}
                   <input
+                    id="start-session-date"
                     type="date"
                     required
                     value={sessionDate}
@@ -1026,11 +1101,15 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
                 {/* Daily 4-digit volunteer station PIN input */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label
+                    htmlFor="start-session-pin"
+                    className="block text-xs font-bold text-slate-700 mb-1"
+                  >
                     Daily Volunteer 4-Digit PIN
                   </label>
                   {/* 4-character PIN input field */}
                   <input
+                    id="start-session-pin"
                     type="text"
                     required
                     maxLength={4}
@@ -1043,8 +1122,12 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               </div>
 
               {/* Test / Training Session Classification Toggle */}
-              <label className="flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/70 cursor-pointer">
+              <label
+                htmlFor="start-session-is-test"
+                className="flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/70 cursor-pointer"
+              >
                 <input
+                  id="start-session-is-test"
                   type="checkbox"
                   checked={isTestSession}
                   onChange={(e) => setIsTestSession(e.target.checked)}
@@ -1063,11 +1146,14 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               </label>
 
               {/* Attending Volunteers Multi-Select Checklist */}
-              <div>
+              <div role="group" aria-labelledby="start-session-volunteers-label">
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700">
+                  <span
+                    id="start-session-volunteers-label"
+                    className="block text-xs font-bold text-slate-700"
+                  >
                     Attending Volunteers ({selectedNewSessionVolunteerIds.length} selected)
-                  </label>
+                  </span>
                   {/* Note that mid-session arrivals can be added later */}
                   <span className="text-[11px] text-slate-500">
                     Can also be updated while session is running
@@ -1082,9 +1168,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   <div className="space-y-2">
                     {/* Search input to quickly filter volunteers when launching a session */}
                     <div className="relative">
-                      <Search className="h-3.5 w-3.5 absolute left-3 top-2.5 text-slate-400" />
+                      <Search className="h-3.5 w-3.5 absolute left-3 top-2.5 text-slate-400" aria-hidden="true" />
                       <input
                         type="text"
+                        aria-label="Filter volunteers for session attendance"
                         placeholder="Filter volunteers by name..."
                         value={newSessionVolunteerSearch}
                         onChange={(e) => setNewSessionVolunteerSearch(e.target.value)}
@@ -1120,6 +1207,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                           return (
                             <label
                               key={v.id}
+                              htmlFor={`start-session-volunteer-${v.id}`}
                               className={`flex items-center justify-between px-3 py-2 cursor-pointer text-xs transition-colors ${
                                 isChecked ? 'bg-emerald-50/80' : 'hover:bg-white'
                               }`}
@@ -1127,6 +1215,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                               {/* Checkbox and volunteer full name */}
                               <div className="flex items-center gap-2.5">
                                 <input
+                                  id={`start-session-volunteer-${v.id}`}
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={() => handleToggleNewSessionVolunteer(v.id)}

@@ -568,7 +568,10 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
         {/* Warning banner when no PAT-trained volunteers are checked in to the active session */}
         {session && qualifiedTesters.length === 0 && (
-          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
+          <div
+            role="status"
+            className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2"
+          >
             <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
             <span>No PAT-trained volunteers checked in — ask Front Desk to update session attendance</span>
           </div>
@@ -577,7 +580,11 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
         {/* Repair Item Point-Lookup Form (autofill-safe for iOS Safari — Issue #28) */}
         <form onSubmit={handleSearchCard} autoComplete="off" role="search" className="mt-6 flex gap-3">
           <div className="relative flex-1">
-            <Search className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
+            <Search aria-hidden="true" className="h-5 w-5 absolute left-3.5 top-3.5 text-slate-400" />
+            {/* Screen-reader label for numeric repair item lookup input */}
+            <label htmlFor="pat-repair-item-lookup" className="sr-only">
+              Repair item number
+            </label>
             {/* Numeric repair item lookup input */}
             <input
               {...REPAIR_ITEM_LOOKUP_INPUT_PROPS}
@@ -599,14 +606,20 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
         {/* Display lookup warning or informational message */}
         {searchMessage && (
-          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-medium">
+          <div
+            role="status"
+            className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-medium"
+          >
             {searchMessage}
           </div>
         )}
 
         {/* Display PAT record or power type override confirmation banner with dismiss button */}
         {successBanner && (
-          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center justify-between gap-2">
+          <div
+            role="status"
+            className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold flex items-center justify-between gap-2"
+          >
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
               <span>{successBanner}</span>
@@ -836,10 +849,11 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {/* Appliance insulation class selector */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label htmlFor="pat-appliance-class" className="block text-xs font-bold text-slate-700 mb-1">
                         Appliance Class
                       </label>
                       <select
+                        id="pat-appliance-class"
                         value={applianceClass}
                         onChange={(e) => setApplianceClass(e.target.value as ApplianceClass)}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-semibold"
@@ -854,10 +868,11 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
                     {/* BS 1363 Plug Fuse Rating selector */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label htmlFor="pat-fuse-rating" className="block text-xs font-bold text-slate-700 mb-1">
                         BS 1363 Plug Fuse Rating
                       </label>
                       <select
+                        id="pat-fuse-rating"
                         value={fuseRatingAmps}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -877,10 +892,11 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
                     {/* DC Test Voltage selector */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label htmlFor="pat-test-voltage" className="block text-xs font-bold text-slate-700 mb-1">
                         DC Test Voltage
                       </label>
                       <select
+                        id="pat-test-voltage"
                         value={testVoltageVolts}
                         onChange={(e) =>
                           setTestVoltageVolts(parseInt(e.target.value, 10) as 250 | 500)
@@ -898,11 +914,16 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
                     {/* Visual inspection pass/fail toggle */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <span
+                        id="pat-visual-check-label"
+                        className="block text-xs font-bold text-slate-700 mb-1"
+                      >
                         Visual Inspection Check
-                      </label>
+                      </span>
                       <button
                         type="button"
+                        aria-labelledby="pat-visual-check-label"
+                        aria-pressed={visualPass}
                         onClick={() => setVisualPass(!visualPass)}
                         className={`w-full py-2.5 px-3 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 ${
                           visualPass
@@ -919,10 +940,12 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                     {/* Earth Continuity measurement input (required for Class I) */}
                     {applianceClass === 'CLASS_I' && (
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                        <label htmlFor="pat-earth-continuity" className="block text-xs font-bold text-slate-700 mb-1">
                           Earth Continuity (Ω)
                         </label>
                         <input
+                          id="pat-earth-continuity"
+                          aria-describedby="pat-earth-threshold"
                           type="number"
                           step="0.01"
                           placeholder="≤ 0.10 Ω"
@@ -931,7 +954,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                           className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold text-sm"
                         />
                         {/* Threshold guidance for Class I earth bond */}
-                        <span className="text-[10px] text-slate-500">
+                        <span id="pat-earth-threshold" className="text-[10px] text-slate-600">
                           Threshold: ≤ 0.10 Ω + lead
                         </span>
                       </div>
@@ -939,10 +962,12 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
                     {/* Insulation Resistance measurement input */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label htmlFor="pat-insulation-resistance" className="block text-xs font-bold text-slate-700 mb-1">
                         Insulation Resistance (MΩ)
                       </label>
                       <input
+                        id="pat-insulation-resistance"
+                        aria-describedby="pat-insulation-threshold"
                         type="number"
                         step="0.1"
                         placeholder="≥ 2.0 MΩ"
@@ -951,7 +976,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono font-bold text-sm"
                       />
                       {/* Threshold guidance for Class I and Class II insulation */}
-                      <span className="text-[10px] text-slate-500">
+                      <span id="pat-insulation-threshold" className="text-[10px] text-slate-600">
                         Threshold: ≥ 1.0 MΩ (Class I) / ≥ 2.0 MΩ (Class II)
                       </span>
                     </div>
@@ -959,18 +984,26 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
                   {/* Outcome Selection */}
                   <div className="pt-4 border-t border-slate-100">
-                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+                    <span
+                      id="pat-outcome-group-label"
+                      className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2"
+                    >
                       {isPat2
                         ? 'Final Safety Certification Outcome'
                         : 'Initial Screening Outcome'}
-                    </label>
+                    </span>
 
                     {/* PAT 1 vs PAT 2 outcome buttons */}
                     {!isPat2 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div
+                        role="group"
+                        aria-labelledby="pat-outcome-group-label"
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                      >
                         {/* Outcome: PASS */}
                         <button
                           type="button"
+                          aria-pressed={initialOutcome === 'PASS'}
                           onClick={() => setInitialOutcome('PASS')}
                           className={`p-4 rounded-2xl border-2 text-left transition-all ${
                             initialOutcome === 'PASS'
@@ -992,6 +1025,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         {/* Outcome: FAIL_REPAIRABLE_CORD */}
                         <button
                           type="button"
+                          aria-pressed={initialOutcome === 'FAIL_REPAIRABLE_CORD'}
                           onClick={() => setInitialOutcome('FAIL_REPAIRABLE_CORD')}
                           className={`p-4 rounded-2xl border-2 text-left transition-all ${
                             initialOutcome === 'FAIL_REPAIRABLE_CORD'
@@ -1013,6 +1047,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         {/* Outcome: DANGER_DO_NOT_ENERGIZE */}
                         <button
                           type="button"
+                          aria-pressed={initialOutcome === 'DANGER_DO_NOT_ENERGIZE'}
                           onClick={() => setInitialOutcome('DANGER_DO_NOT_ENERGIZE')}
                           className={`p-4 rounded-2xl border-2 text-left transition-all ${
                             initialOutcome === 'DANGER_DO_NOT_ENERGIZE'
@@ -1033,6 +1068,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         {/* Outcome: UNTESTABLE */}
                         <button
                           type="button"
+                          aria-pressed={initialOutcome === 'UNTESTABLE'}
                           onClick={() => setInitialOutcome('UNTESTABLE')}
                           className={`p-4 rounded-2xl border-2 text-left transition-all ${
                             initialOutcome === 'UNTESTABLE'
@@ -1051,10 +1087,15 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         </button>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div
+                        role="group"
+                        aria-labelledby="pat-outcome-group-label"
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                      >
                         {/* PAT 2 Outcome: PASS */}
                         <button
                           type="button"
+                          aria-pressed={finalOutcome === 'PASS'}
                           onClick={() => setFinalOutcome('PASS')}
                           className={`p-4 rounded-2xl border-2 text-left transition-all ${
                             finalOutcome === 'PASS'
@@ -1075,6 +1116,7 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
                         {/* PAT 2 Outcome: FAIL */}
                         <button
                           type="button"
+                          aria-pressed={finalOutcome === 'FAIL'}
                           onClick={() => setFinalOutcome('FAIL')}
                           className={`p-4 rounded-2xl border-2 text-left transition-all ${
                             finalOutcome === 'FAIL'
@@ -1097,10 +1139,11 @@ export const PatStationView: React.FC<PatStationViewProps> = ({ session }) => {
 
                   {/* PAT Notes & Certificate Remarks input */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label htmlFor="pat-caution-notes" className="block text-xs font-bold text-slate-700 mb-1">
                       PAT Notes & Certificate Remarks
                     </label>
                     <textarea
+                      id="pat-caution-notes"
                       rows={2}
                       placeholder="e.g. Earth bond tested on toaster chassis screw; insulation resistance >20MΩ; fitted new 13A BS1362 fuse."
                       value={cautionNotes}

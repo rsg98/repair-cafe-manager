@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, ShieldCheck, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { cafeConfig } from '../../config/cafe.config';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { MarkdownViewer } from './MarkdownViewer';
 
 interface TermsModalProps {
@@ -25,6 +26,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose, onAccep
   const [content, setContent] = useState<string>(cachedTermsText || '');
   const [loading, setLoading] = useState<boolean>(!cachedTermsText);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useDialogFocusTrap({ isOpen, onClose });
 
   const fetchTerms = useCallback(async () => {
     const source = cafeConfig.termsAndConditions;
@@ -74,26 +76,35 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose, onAccep
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="terms-modal-title"
+        tabIndex={-1}
+        className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-200">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-6 w-6 text-brand-700" />
+            <ShieldCheck className="h-6 w-6 text-brand-700" aria-hidden="true" />
             <div>
-              <h3 className="text-lg font-bold text-slate-900 leading-none">
+              <h2 id="terms-modal-title" className="text-lg font-bold text-slate-900 leading-none">
                 {cafeConfig.cafeName} Terms & House Rules
-              </h3>
+              </h2>
               <p className="text-xs text-slate-500 mt-1">
                 Version {cafeConfig.termsVersion} • Legal Agreement & Safety Code
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            aria-label="Close terms and conditions"
+            className="rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
             title="Close"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -101,14 +112,17 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose, onAccep
         <div className="my-4 overflow-y-auto pr-2 text-sm text-slate-700 space-y-3 leading-relaxed flex-1">
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center text-slate-500 gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
+              <Loader2 className="h-8 w-8 animate-spin text-brand-600" aria-hidden="true" />
               <p className="text-sm font-medium">Loading terms & conditions...</p>
             </div>
           ) : (
             <>
               {error && (
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs sm:text-sm flex items-start gap-2.5 mb-3">
-                  <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div
+                  role="alert"
+                  className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs sm:text-sm flex items-start gap-2.5 mb-3"
+                >
+                  <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="flex-1">
                     <p className="font-semibold">{error}</p>
                     <p className="mt-0.5 text-amber-700">Displaying offline summary below.</p>
@@ -118,7 +132,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose, onAccep
                     onClick={fetchTerms}
                     className="flex items-center gap-1 px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-xs font-semibold shrink-0"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                     Retry
                   </button>
                 </div>
