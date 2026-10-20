@@ -1,0 +1,122 @@
+name: Update App Version on Release
+
+on:
+  release:
+    types:
+      - published
+      - created
+      - edited
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic version to set in app footer (e.g. 1.2.0 or v1.2.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-version-on-release
+  cancel-in-progress: false
+
+jobs:
+  update-version:
+    name: Sync Release Version to App Footer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Update version in package.json and functions/package.json
+        id: bump
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET: ${{ github.event.release.target_commitish }}
+          INPUT_VERSION: ${{ inputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            RAW_TAG="${INPUT_VERSION}"
+          else
+            RAW_TAG="${RELEASE_TAG}"
+          fi
+
+          RAW_TAG="$(echo "${RAW_TAG}" | xargs)"
+          CLEAN_VERSION="${RAW_TAG#[vV]}"
+
+          if [[ ! "${CLEAN_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '${RAW_TAG}' does not resolves to a valid semantic version (expected e.g. v1.2.0 or 1.2.0)."
+            exit 1
+          fi
+
+          # Determine target branch to commit the updated version to (defaults to main)
+          TARGET_BRANCH="${DEFAULT_BRANCH:-main}"
+          if [[ -n "${RELEASE_TARGET}" ]] && git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_TARGET}"; then
+            TARGET_BRANCH="${RELEASE_TARGET}"
+          fi
+
+          git checkout -B "${TARGET_BRANCH}" "origin/${TARGET_BRANCH}"
+
+          PREV_VERSION="$(node -p "require('./package.json').version")"
+
+          CLEAN_VERSION="${CLEAN_VERSION}" node <<'EOF'
+          const fs = require('node:fs');
+          const nextVersion = process.env.CLEAN_VERSION;
+          for (const file of ['package.json', 'functions/package.json']) {
+            if (!fs.existsSync(file)) continue;
+            const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+            pkg.version = nextVersion;
+            fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+          }
+          EOF
+
+          if git diff --quiet package.json functions/package.json; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "App version is already ${CLEAN_VERSION}; no commit needed."
+            {
+              echo "### App Footer Version Already Up to Date"
+              echo "- **Version:** \`v${CLEAN_VERSION}\`"
+              echo "- **Branch:** \`${TARGET_BRANCH}\`"
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add package.json functions/package.json
+          git commit -m "chore(release): update app footer version to v${CLEAN_VERSION}"
+          git push origin "HEAD:${TARGET_BRANCH}"
+
+          NEW_SHORT_SHA="$(git rev-parse --short HEAD)"
+
+          # If triggered by a GitHub Release, move the release tag to include the version bump commit
+          if [[ "${EVENT_NAME}" == "release" && -n "${RAW_TAG}" ]]; then
+            git tag -f "${RAW_TAG}" HEAD
+            git push origin "refs/tags/${RAW_TAG}" --force
+          fi
+
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+          echo "version=${CLEAN_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "sha=${NEW_SHORT_SHA}" >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### Updated App Footer Version"
+            echo "- **Previous Version:** \`v${PREV_VERSION}\`"
+            echo "- **New Footer Version:** \`v${CLEAN_VERSION}+${NEW_SHORT_SHA}\`"
+            echo "- **Target Branch:** \`${TARGET_BRANCH}\`"
+            echo "- **Commit:** \`${NEW_SHORT_SHA}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

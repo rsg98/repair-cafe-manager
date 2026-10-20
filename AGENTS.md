@@ -328,6 +328,9 @@ Because repair cafes operate with zero budget, the application is strictly desig
 ## 9. Codebase File Manifest
 
 ```
+├── .github/workflows/
+│   ├── build-and-test.yml             # CI workflow: Vitest, WCAG 2.2 AA audit & builds
+│   └── update-version-on-release.yml  # Syncs GitHub Release tag version to package.json & app footer
 ├── .env.example                       # Sample Firebase frontend env variables
 ├── AGENTS.md                          # This file (operating guide for AI agents)
 ├── README.md                          # Public documentation and setup guide
