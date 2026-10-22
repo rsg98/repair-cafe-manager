@@ -330,6 +330,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
 ```
 ├── .github/workflows/
 │   ├── build-and-test.yml             # CI workflow: Vitest, WCAG 2.2 AA audit & builds
+│   ├── npm-audit.yml                  # Security workflow: npm audit across frontend & Cloud Functions
 │   └── update-version-on-release.yml  # Syncs GitHub Release tag version to package.json & app footer
 ├── .env.example                       # Sample Firebase frontend env variables
 ├── AGENTS.md                          # This file (operating guide for AI agents)
