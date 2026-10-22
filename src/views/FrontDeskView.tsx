@@ -63,7 +63,8 @@ import {
 import {
   listVolunteers,
   syncOrganiserEmailsToSystemSettings,
-  toSessionVolunteerSummary
+  toSessionVolunteerSummary,
+  filterActiveVolunteers
 } from '../services/volunteerService';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { CardToken } from '../components/common/CardToken';
@@ -105,6 +106,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
   // Volunteer register state and modal policy viewer state
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const activeVolunteers = filterActiveVolunteers(volunteers);
   const [loadingVolunteers, setLoadingVolunteers] = useState(false);
   const [showPoliciesModal, setShowPoliciesModal] = useState(false);
 
@@ -299,8 +301,8 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       const sessionId = isTestSession && !baseSessionId.endsWith('-test')
         ? `${baseSessionId}-test`
         : baseSessionId;
-      // Map selected attending volunteer records to non-PII summaries
-      const selectedObjects = volunteers.filter((v) =>
+      // Map selected active attending volunteer records to non-PII summaries
+      const selectedObjects = activeVolunteers.filter((v) =>
         selectedNewSessionVolunteerIds.includes(v.id)
       );
       const attendingSummaries = selectedObjects.map(toSessionVolunteerSummary);
@@ -561,7 +563,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           }`}
         >
           <Users className="h-4 w-4" />
-          Volunteer Register ({volunteers.length})
+          Volunteer Register ({activeVolunteers.length})
         </button>
         {/* Repair Café Policies sub-tab button */}
         <button
@@ -1160,9 +1162,9 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   </span>
                 </div>
 
-                {volunteers.length === 0 ? (
+                {activeVolunteers.length === 0 ? (
                   <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    No volunteers in the register yet. You can add volunteers from the Volunteer Register tab at any time.
+                    No active volunteers in the register yet. You can add volunteers from the Volunteer Register tab at any time.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -1185,7 +1187,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
                         <span>No volunteers selected yet. You can still launch the session and check in volunteers as they arrive.</span>
                       </div>
-                    ) : !volunteers.some((v) => selectedNewSessionVolunteerIds.includes(v.id) && v.isPatTrained) ? (
+                    ) : !activeVolunteers.some((v) => selectedNewSessionVolunteerIds.includes(v.id) && v.isPatTrained) ? (
                       /* Amber warning when volunteers are selected but none are PAT-trained */
                       <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-center gap-2 font-medium">
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
@@ -1193,9 +1195,9 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                       </div>
                     ) : null}
 
-                    {/* Scrollable checklist of registered volunteers */}
+                    {/* Scrollable checklist of active registered volunteers */}
                     <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-50/50">
-                      {volunteers
+                      {activeVolunteers
                         .filter((v) =>
                           /* Match search text against volunteer full name */
                           !newSessionVolunteerSearch.trim() ||

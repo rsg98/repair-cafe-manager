@@ -137,6 +137,9 @@ export interface Volunteer {
   inducted: boolean;
   inductedAt?: number;
   inductedBy?: string;
+  // GDPR archival state for volunteers who no longer attend
+  archived?: boolean;
+  archivedAt?: number;
   // Audit timestamps for register maintenance
   createdAt: number;
   updatedAt: number;

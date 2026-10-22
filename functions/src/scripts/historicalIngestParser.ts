@@ -80,6 +80,8 @@ export interface Volunteer {
   inducted: boolean;
   inductedAt?: number;
   inductedBy?: string;
+  archived?: boolean;
+  archivedAt?: number;
   createdAt: number;
   updatedAt: number;
 }

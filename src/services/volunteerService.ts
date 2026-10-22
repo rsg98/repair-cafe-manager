@@ -103,20 +103,128 @@ export function validateVolunteerInput(input: VolunteerInput): {
 
 /**
  * Checks whether a volunteer name already exists in the register (case-insensitive),
- * optionally excluding a specific volunteer ID when editing an existing record.
+ * ignoring archived records and optionally excluding a specific volunteer ID when editing.
  */
 export function hasDuplicateVolunteerName(
   name: string,
-  existingVolunteers: ReadonlyArray<Pick<Volunteer, 'id' | 'name'>>,
+  existingVolunteers: ReadonlyArray<Pick<Volunteer, 'id' | 'name'> & { archived?: boolean }>,
   excludeId?: string
 ): boolean {
   const normalized = name.trim().toLowerCase();
   if (!normalized) return false;
 
-  // Match against existing volunteers while ignoring the record currently being updated
+  // Match against active volunteers while ignoring archived records and the record being updated
   return existingVolunteers.some(
-    (v) => v.id !== excludeId && v.name.trim().toLowerCase() === normalized
+    (v) =>
+      v.id !== excludeId &&
+      !v.archived &&
+      v.name.trim().toLowerCase() === normalized
   );
+}
+
+/**
+ * Formats a volunteer's full name to First-name and Initial of Surname only
+ * (e.g. "Alice Smith" -> "Alice S") for UK GDPR compliance when archiving.
+ */
+export function formatArchivedVolunteerName(fullName: string): string {
+  const parts = (fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0];
+
+  const firstName = parts[0];
+  const surname = parts[parts.length - 1];
+  const letterMatch = surname.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/);
+  const surnameInitial = (
+    letterMatch ? letterMatch[0] : surname.charAt(0)
+  ).toUpperCase();
+
+  return surnameInitial ? `${firstName} ${surnameInitial}` : firstName;
+}
+
+/**
+ * Evaluates whether a volunteer record is eligible to be archived.
+ * Volunteers enabled as an organiser (`isOrganiser: true`) cannot be archived
+ * until their organiser flag has been removed.
+ */
+export function canArchiveVolunteer(
+  volunteer: Pick<Volunteer, 'isOrganiser' | 'archived'>
+): { allowed: boolean; reason?: string } {
+  if (volunteer.archived) {
+    return {
+      allowed: false,
+      reason: 'This volunteer is already archived.',
+    };
+  }
+  if (volunteer.isOrganiser) {
+    return {
+      allowed: false,
+      reason:
+        'Cannot archive a volunteer who is enabled as an organiser. Please remove the Organiser role from this volunteer before archiving.',
+    };
+  }
+  return { allowed: true };
+}
+
+/**
+ * Verifies that the confirmation text entered by the Front Desk organiser matches
+ * the volunteer's full name (case-insensitive, whitespace-normalised).
+ */
+export function validateArchiveConfirmationName(
+  expectedFullName: string,
+  confirmationInput: string
+): boolean {
+  const expected = (expectedFullName || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  const actual = (confirmationInput || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  if (!expected || !actual) return false;
+  return expected === actual;
+}
+
+/**
+ * Pure helper that transforms a `Volunteer` record into its GDPR-archived form:
+ * - Alters `name` to First-name and Initial of Surname only
+ * - Removes `phone`, `email`, and all emergency contact details
+ * - Sets `archived: true` and `archivedAt` while preserving `id` and historical metadata
+ */
+export function buildArchivedVolunteerRecord(
+  volunteer: Volunteer,
+  now: number = Date.now()
+): Volunteer {
+  const check = canArchiveVolunteer(volunteer);
+  if (!check.allowed) {
+    throw new Error(check.reason);
+  }
+
+  return removeUndefined({
+    id: volunteer.id,
+    name: formatArchivedVolunteerName(volunteer.name),
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    isOrganiser: false,
+    isPatTrained: Boolean(volunteer.isPatTrained),
+    inducted: Boolean(volunteer.inducted),
+    inductedAt: volunteer.inductedAt,
+    inductedBy: volunteer.inductedBy,
+    archived: true,
+    archivedAt: now,
+    createdAt: volunteer.createdAt,
+    updatedAt: now,
+  });
+}
+
+/**
+ * Filters a list of volunteers to only active (non-archived) records.
+ * Used by default in the Volunteer Register and when starting or editing a live session.
+ */
+export function filterActiveVolunteers<T extends { archived?: boolean }>(
+  volunteers: ReadonlyArray<T>
+): T[] {
+  return volunteers.filter((v) => !v.archived);
 }
 
 /**
@@ -140,12 +248,12 @@ export function toSessionVolunteerSummary(
 }
 
 /**
- * Merges static `cafeConfig.organizerEmails` with the email addresses of all volunteers
+ * Merges static `cafeConfig.organizerEmails` with the email addresses of all active volunteers
  * who have `isOrganiser: true`, returning a deduplicated, normalized array.
  */
 export function mergeOrganiserEmails(
   staticEmails: string[],
-  volunteers: Array<Pick<Volunteer, 'isOrganiser' | 'email'>>
+  volunteers: Array<Pick<Volunteer, 'isOrganiser' | 'email'> & { archived?: boolean }>
 ): string[] {
   const emailSet = new Set<string>();
 
@@ -157,9 +265,9 @@ export function mergeOrganiserEmails(
     }
   }
 
-  // Add normalized emails for all volunteers currently marked as organisers
+  // Add normalized emails for all active volunteers currently marked as organisers
   for (const volunteer of volunteers) {
-    if (volunteer.isOrganiser && volunteer.email) {
+    if (volunteer.isOrganiser && !volunteer.archived && volunteer.email) {
       const cleaned = volunteer.email.trim().toLowerCase();
       if (cleaned) {
         emailSet.add(cleaned);
@@ -184,6 +292,28 @@ export function getQualifiedPatTesters(
 }
 
 /**
+ * Normalises a raw Firestore document from `volunteers/{volunteerId}` into a typed `Volunteer`
+ * object, defaulting omitted emergency contact fields (e.g. on archived records) to empty strings.
+ */
+function normalizeVolunteerDoc(
+  id: string,
+  raw: Partial<Volunteer>
+): Volunteer {
+  return {
+    ...(raw as Omit<Volunteer, 'id'>),
+    id,
+    name: raw.name || '',
+    emergencyContactName: raw.emergencyContactName ?? '',
+    emergencyContactPhone: raw.emergencyContactPhone ?? '',
+    isOrganiser: Boolean(raw.isOrganiser),
+    isPatTrained: Boolean(raw.isPatTrained),
+    inducted: Boolean(raw.inducted),
+    createdAt: raw.createdAt ?? 0,
+    updatedAt: raw.updatedAt ?? 0,
+  };
+}
+
+/**
  * Fetches all volunteers from the `volunteers` collection, sorted alphabetically by name.
  */
 export async function listVolunteers(): Promise<Volunteer[]> {
@@ -191,8 +321,8 @@ export async function listVolunteers(): Promise<Volunteer[]> {
   const snap = await getDocs(volunteersRef);
 
   // Map Firestore documents to typed Volunteer objects and sort by name
-  const volunteers = snap.docs.map(
-    (d) => ({ id: d.id, ...(d.data() as Omit<Volunteer, 'id'>) }) as Volunteer
+  const volunteers = snap.docs.map((d) =>
+    normalizeVolunteerDoc(d.id, d.data() as Partial<Volunteer>)
   );
   return volunteers.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -209,10 +339,7 @@ export async function getVolunteerById(
   if (!snap.exists()) return null;
 
   // Return the hydrated Volunteer record with its document ID
-  return {
-    id: snap.id,
-    ...(snap.data() as Omit<Volunteer, 'id'>),
-  } as Volunteer;
+  return normalizeVolunteerDoc(snap.id, snap.data() as Partial<Volunteer>);
 }
 
 /**
@@ -366,6 +493,90 @@ export async function updateVolunteer(
   }
 
   return updatedVolunteer;
+}
+
+/**
+ * Archives a volunteer in `volunteers/{volunteerId}` in compliance with UK GDPR:
+ * - Prevents archival if `isOrganiser` is true until the organiser flag is removed
+ * - Requires the organiser to confirm by entering the volunteer's full name
+ * - Alters `name` to First-name and Initial of Surname only
+ * - Removes emergency contact information, email address, and phone number from the database
+ * - Preserves the document ID so completed repairs and historical session volunteer counts remain accurate
+ * - Removes the volunteer from any currently active live session attendance
+ */
+export async function archiveVolunteer(
+  volunteerId: string,
+  confirmationName: string,
+  activeSessionId?: string | null
+): Promise<Volunteer> {
+  const currentRecord = await getVolunteerById(volunteerId);
+  if (!currentRecord) {
+    throw new Error('Volunteer record not found.');
+  }
+
+  // Enforce organiser archival guard
+  const eligibility = canArchiveVolunteer(currentRecord);
+  if (!eligibility.allowed) {
+    throw new Error(eligibility.reason);
+  }
+
+  // Verify full-name confirmation matches before redacting PII
+  if (!validateArchiveConfirmationName(currentRecord.name, confirmationName)) {
+    throw new Error(
+      `Confirmation name does not match "${currentRecord.name}". Please enter the volunteer's full name.`
+    );
+  }
+
+  const archivedRecord = buildArchivedVolunteerRecord(currentRecord, Date.now());
+
+  // Build Firestore document omitting emergency contact, email, and phone fields entirely
+  const {
+    emergencyContactName: _omitEmergencyName,
+    emergencyContactPhone: _omitEmergencyPhone,
+    emergencyContactRelationship: _omitEmergencyRel,
+    phone: _omitPhone,
+    email: _omitEmail,
+    ...firestorePayload
+  } = archivedRecord;
+  void _omitEmergencyName;
+  void _omitEmergencyPhone;
+  void _omitEmergencyRel;
+  void _omitPhone;
+  void _omitEmail;
+
+  const volunteerRef = doc(db, 'volunteers', volunteerId);
+  await setDoc(volunteerRef, removeUndefined(firestorePayload));
+
+  // Remove the archived volunteer from the active live session's attendance roster if present
+  if (activeSessionId) {
+    const sessionRef = doc(db, 'sessions', activeSessionId);
+    const sessionSnap = await getDoc(sessionRef);
+    if (sessionSnap.exists()) {
+      const sessionData = sessionSnap.data() as Session;
+      const currentSummaries = sessionData.attendingVolunteers || [];
+      if (currentSummaries.some((s) => s.id === volunteerId)) {
+        const nextSummaries = currentSummaries.filter((s) => s.id !== volunteerId);
+        await updateDoc(sessionRef, {
+          attendingVolunteerIds: nextSummaries.map((s) => s.id),
+          attendingVolunteers: nextSummaries,
+        });
+      }
+    }
+  }
+
+  return archivedRecord;
+}
+
+/**
+ * Restores an archived volunteer record to active status once their full name and
+ * mandatory emergency contact details have been re-entered by an organiser.
+ */
+export async function restoreVolunteer(
+  volunteerId: string,
+  input: VolunteerInput,
+  activeSessionId?: string | null
+): Promise<Volunteer> {
+  return updateVolunteer(volunteerId, input, activeSessionId);
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   updateSessionAttendance,
   markVolunteerInducted,
   getVolunteerById,
+  filterActiveVolunteers,
 } from '../../services/volunteerService';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
@@ -71,14 +72,22 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
     onClose: () => setShowAttendanceModal(false),
   });
 
+  // Derive active (non-archived) volunteers for live session selection
+  const activeVolunteers = filterActiveVolunteers(volunteers);
+
   // Derive attending summaries and any uninducted or PAT-qualified attendees
   const attending = session.attendingVolunteers || [];
   const uninductedAttendees = attending.filter((v) => !v.inducted);
   const patTestersPresent = attending.filter((v) => v.isPatTrained);
 
-  // Open the attendance editor modal pre-populated with current session attendees
+  // Open the attendance editor modal pre-populated with current active session attendees
   const handleOpenAttendanceModal = () => {
-    setSelectedIds(attending.map((v) => v.id));
+    const activeIds = new Set(activeVolunteers.map((v) => v.id));
+    setSelectedIds(
+      attending
+        .map((v) => v.id)
+        .filter((id) => activeVolunteers.length === 0 || activeIds.has(id))
+    );
     setModalSearch('');
     setShowAttendanceModal(true);
   };
@@ -126,8 +135,8 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
   const handleSaveAttendance = async () => {
     setSavingAttendance(true);
     try {
-      // Map selected IDs back to full Volunteer objects for summary projection
-      const selectedObjects = volunteers.filter((v) =>
+      // Map selected IDs back to active Volunteer objects for summary projection
+      const selectedObjects = activeVolunteers.filter((v) =>
         selectedIds.includes(v.id)
       );
       await updateSessionAttendance(session.id, selectedObjects);
@@ -161,8 +170,8 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
     }
   };
 
-  // Filter volunteers inside the modal search box
-  const filteredModalVolunteers = volunteers.filter((v) => {
+  // Filter active volunteers inside the modal search box (archived volunteers are excluded)
+  const filteredModalVolunteers = activeVolunteers.filter((v) => {
     const q = modalSearch.trim().toLowerCase();
     return !q || v.name.toLowerCase().includes(q);
   });
