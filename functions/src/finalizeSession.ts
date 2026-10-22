@@ -6,21 +6,28 @@
  */
 
 import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
-import * as admin from "firebase-admin";
+import { initializeApp, getApps } from "firebase-admin/app";
+import {
+  getFirestore,
+  FieldValue,
+  DocumentReference,
+  QueryDocumentSnapshot,
+  DocumentData,
+} from "firebase-admin/firestore";
 import { defaultOrganizerEmails } from "./config";
 import { isAuthorizedOrganizer } from "./authUtils";
 
 // Initialize the default Firebase Admin app if not already initialized
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 
 /** Pair of Firestore document references queued for GDPR PII redaction. */
 interface RedactionPair {
-  repairRef: admin.firestore.DocumentReference;
-  privateRef: admin.firestore.DocumentReference;
+  repairRef: DocumentReference;
+  privateRef: DocumentReference;
 }
 
 /** Mutable counters accumulated across repair items during session finalization. */
@@ -99,7 +106,7 @@ async function verifyOrganizerCaller(request: CallableRequest): Promise<void> {
  */
 function tallyRepairDoc(
   acc: FinalizeMetricsAccumulator,
-  docSnap: admin.firestore.QueryDocumentSnapshot
+  docSnap: QueryDocumentSnapshot
 ): void {
   // Increment total item counter and category breakdown
   acc.totalItems++;
@@ -164,8 +171,8 @@ async function commitRedactionPairsInChunks(pairs: RedactionPair[]): Promise<voi
       batch.update(pair.repairRef, { customerName: "[REDACTED]" });
       batch.update(pair.privateRef, {
         firstName: "[REDACTED]",
-        contactPhone: admin.firestore.FieldValue.delete(),
-        redactedAt: admin.firestore.FieldValue.serverTimestamp(),
+        contactPhone: FieldValue.delete(),
+        redactedAt: FieldValue.serverTimestamp(),
       });
     }
     await batch.commit();
@@ -178,7 +185,7 @@ async function commitRedactionPairsInChunks(pairs: RedactionPair[]): Promise<voi
  */
 function buildAnalyticsSummaryDoc(
   sessionId: string,
-  sessionData: admin.firestore.DocumentData,
+  sessionData: DocumentData,
   acc: FinalizeMetricsAccumulator
 ): Record<string, unknown> {
   // Compute success rate, mean repair time, and PAT failure rate percentages
@@ -221,7 +228,7 @@ function buildAnalyticsSummaryDoc(
     patTestedCount: acc.patTestedCount,
     patFailureRatePercent,
     volunteerCount,
-    finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
+    finalizedAt: FieldValue.serverTimestamp(),
   };
 }
 
@@ -275,7 +282,7 @@ export const finalizeSession = onCall(async (request) => {
   batch.set(db.collection("analytics").doc(sessionId), analyticsDoc);
   batch.update(sessionRef, {
     status: "FINALIZED",
-    finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
+    finalizedAt: FieldValue.serverTimestamp(),
   });
   // Clear active session pointer and disable public registration in settings/system
   batch.update(db.collection("settings").doc("system"), {

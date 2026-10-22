@@ -1,6 +1,13 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import * as admin from "firebase-admin";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 import * as crypto from "crypto";
+
+// Initialize the default Firebase Admin app if not already initialized
+if (!getApps().length) {
+  initializeApp();
+}
 
 export const verifyVolunteerPin = onCall(async (request) => {
   const { sessionId, pin } = request.data;
@@ -8,7 +15,7 @@ export const verifyVolunteerPin = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Missing sessionId or pin");
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const sessionSnap = await db.doc(`sessions/${sessionId}`).get();
   if (!sessionSnap.exists) {
     throw new HttpsError("not-found", "Session not found");
@@ -25,7 +32,7 @@ export const verifyVolunteerPin = onCall(async (request) => {
   }
 
   // Mint custom token with volunteer claim
-  const customToken = await admin.auth().createCustomToken(`volunteer-${sessionId}`, {
+  const customToken = await getAuth().createCustomToken(`volunteer-${sessionId}`, {
     role: "volunteer",
     sessionId
   });

@@ -1,7 +1,9 @@
-import * as admin from "firebase-admin";
+import { initializeApp, getApps } from "firebase-admin/app";
 
 // Initialize Firebase Admin SDK
-admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
+}
 
 export { verifyVolunteerPin } from "./verifyVolunteerPin";
 export { finalizeSession } from "./finalizeSession";
