@@ -38,7 +38,10 @@ import {
   ItemCategory
 } from '../types';
 import { cafeConfig } from '../config/cafe.config';
+import { ITEM_TYPE_SUGGESTIONS, type ItemTypeSuggestion } from '../config/itemTypeSuggestions';
 import { validatePhotoDataUrl } from '../utils/imageCompression';
+
+export { ITEM_TYPE_SUGGESTIONS, type ItemTypeSuggestion };
 
 /**
  * Generates a customer-facing 4-character uppercase alphanumeric reference token
@@ -141,6 +144,224 @@ export function getPowerTypeLabel(powerType: PowerType): string {
   // Match against the shared POWER_TYPE_OPTIONS table or fall back to the raw enum string
   const found = POWER_TYPE_OPTIONS.find((opt) => opt.value === powerType);
   return found ? found.label : powerType;
+}
+
+/**
+ * Returns ranked autocomplete suggestions for a partial item type query
+ * (e.g. `"Toas"` -> `[{ label: "Toaster", category: "ELECTRICAL", powerType: "MAINS_240V" }]`).
+ */
+export function getItemTypeSuggestions(
+  rawQuery: string,
+  limit = 6
+): ItemTypeSuggestion[] {
+  const queryText = (rawQuery || '').trim().toLowerCase();
+  if (!queryText || limit <= 0) {
+    return [];
+  }
+
+  // Partition matching suggestions into priority tiers so prefix matches rank first
+  const tier1LabelPrefix: ItemTypeSuggestion[] = [];
+  const tier2WordPrefix: ItemTypeSuggestion[] = [];
+  const tier3KeywordPrefix: ItemTypeSuggestion[] = [];
+  const tier4Substring: ItemTypeSuggestion[] = [];
+
+  for (const suggestion of ITEM_TYPE_SUGGESTIONS) {
+    const lowerLabel = suggestion.label.toLowerCase();
+    const labelWords = lowerLabel.split(/[\s/()-]+/).filter(Boolean);
+    const keywords = suggestion.keywords ?? [];
+
+    if (lowerLabel.startsWith(queryText)) {
+      tier1LabelPrefix.push(suggestion);
+    } else if (labelWords.some((word) => word.startsWith(queryText))) {
+      tier2WordPrefix.push(suggestion);
+    } else if (keywords.some((kw) => kw.toLowerCase().startsWith(queryText))) {
+      tier3KeywordPrefix.push(suggestion);
+    } else if (
+      lowerLabel.includes(queryText) ||
+      keywords.some((kw) => kw.toLowerCase().includes(queryText))
+    ) {
+      tier4Substring.push(suggestion);
+    }
+  }
+
+  return [
+    ...tier1LabelPrefix,
+    ...tier2WordPrefix,
+    ...tier3KeywordPrefix,
+    ...tier4Substring,
+  ].slice(0, limit);
+}
+
+/**
+ * Resolves the appropriate `ItemCategory` and `PowerType` for a typed or selected
+ * item type string (e.g. `"Toas"` or `"Toaster"` -> `{ category: 'ELECTRICAL', powerType: 'MAINS_240V' }`).
+ * Returns `null` when no recognised item type prefix or keyword matches.
+ */
+export function resolveItemTypeClassification(
+  rawItemType: string
+): { category: ItemCategory; powerType: PowerType } | null {
+  const queryText = (rawItemType || '').trim().toLowerCase();
+  if (!queryText) {
+    return null;
+  }
+
+  // 1. Exact match on a suggestion label or keyword
+  for (const suggestion of ITEM_TYPE_SUGGESTIONS) {
+    if (suggestion.label.toLowerCase() === queryText) {
+      return { category: suggestion.category, powerType: suggestion.powerType };
+    }
+    if ((suggestion.keywords ?? []).some((kw) => kw.toLowerCase() === queryText)) {
+      return { category: suggestion.category, powerType: suggestion.powerType };
+    }
+  }
+
+  // 2. Prefix match once the customer has typed at least 2 characters (e.g. "Toas" -> "Toaster")
+  if (queryText.length >= 2) {
+    const matches = getItemTypeSuggestions(queryText, 1);
+    if (matches.length > 0) {
+      const top = matches[0];
+      const lowerLabel = top.label.toLowerCase();
+      const labelWords = lowerLabel.split(/[\s/()-]+/).filter(Boolean);
+      const keywords = top.keywords ?? [];
+      const isPrefixMatch =
+        lowerLabel.startsWith(queryText) ||
+        labelWords.some((word) => word.startsWith(queryText)) ||
+        keywords.some((kw) => kw.toLowerCase().startsWith(queryText));
+      if (isPrefixMatch) {
+        return { category: top.category, powerType: top.powerType };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether a customer-entered `itemType` matches any label in `cafeConfig.excludedItems`
+ * (either directly by label/plural/substring or via its associated `ITEM_TYPE_SUGGESTIONS` keywords).
+ * Returns the matched canonical excluded item label (e.g. `"Microwave"`) when excluded, or `null` otherwise.
+ */
+export function findExcludedItemMatch(
+  rawItemType: string,
+  excludedItems: readonly string[] = cafeConfig.excludedItems
+): string | null {
+  const queryText = (rawItemType || '').trim().toLowerCase();
+  if (!queryText || !excludedItems || excludedItems.length === 0) {
+    return null;
+  }
+
+  // Map normalised lowercase excluded label -> canonical configured display label
+  const canonicalByLower = new Map<string, string>();
+  for (const rawLabel of excludedItems) {
+    const clean = (rawLabel || '').trim();
+    if (clean) {
+      canonicalByLower.set(clean.toLowerCase(), clean);
+    }
+  }
+  if (canonicalByLower.size === 0) {
+    return null;
+  }
+
+  // 1. Direct exact, plural, or phrase-inclusion match against configured excludedItems labels
+  for (const [excludedLower, canonicalLabel] of canonicalByLower.entries()) {
+    if (
+      queryText === excludedLower ||
+      queryText === `${excludedLower}s` ||
+      `${queryText}s` === excludedLower ||
+      (excludedLower.length >= 3 && queryText.includes(excludedLower))
+    ) {
+      return canonicalLabel;
+    }
+  }
+
+  // 2. Match against ITEM_TYPE_SUGGESTIONS entries whose label is in excludedItems
+  for (const suggestion of ITEM_TYPE_SUGGESTIONS) {
+    const canonicalLabel = canonicalByLower.get(suggestion.label.toLowerCase());
+    if (!canonicalLabel) continue;
+
+    const keywords = suggestion.keywords ?? [];
+    for (const kw of keywords) {
+      const kwLower = kw.toLowerCase();
+      if (
+        queryText === kwLower ||
+        queryText === `${kwLower}s` ||
+        `${queryText}s` === kwLower ||
+        (kwLower.length >= 4 && queryText.includes(kwLower))
+      ) {
+        return canonicalLabel;
+      }
+    }
+  }
+
+  // 3. Unambiguous autocomplete prefix match (when typing >= 3 characters and all matching suggestions are excluded)
+  if (queryText.length >= 3) {
+    const suggestions = getItemTypeSuggestions(queryText);
+    if (
+      suggestions.length > 0 &&
+      suggestions.every((s) => canonicalByLower.has(s.label.toLowerCase()))
+    ) {
+      const topCanonical = canonicalByLower.get(suggestions[0].label.toLowerCase());
+      if (topCanonical) {
+        return topCanonical;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Concatenates separate `brand`, `model`, and `itemType` inputs from the Customer
+ * Registration View into the single persisted `item.brandModel` string without
+ * duplicating words when a customer repeats the brand or item type across boxes.
+ */
+export function formatItemBrandModel(params: {
+  itemType?: string;
+  brand?: string;
+  model?: string;
+  fallbackBrandModel?: string;
+}): string {
+  const itemType = (params.itemType ?? '').trim();
+  const brand = (params.brand ?? '').trim();
+  const model = (params.model ?? '').trim();
+
+  // Combine brand and model while avoiding duplicate prefix (e.g. Brand: "Dualit", Model: "Dualit 4-Slice")
+  let brandAndModel = '';
+  if (brand && model) {
+    const lowerBrand = brand.toLowerCase();
+    const lowerModel = model.toLowerCase();
+    if (lowerModel.startsWith(lowerBrand)) {
+      brandAndModel = model;
+    } else if (lowerBrand.includes(lowerModel)) {
+      brandAndModel = brand;
+    } else {
+      brandAndModel = `${brand} ${model}`;
+    }
+  } else {
+    brandAndModel = brand || model;
+  }
+
+  // Append itemType unless brandAndModel already contains it (or vice versa)
+  if (brandAndModel && itemType) {
+    const lowerCombined = brandAndModel.toLowerCase();
+    const lowerType = itemType.toLowerCase();
+    if (lowerCombined.includes(lowerType)) {
+      return brandAndModel;
+    }
+    if (lowerType.includes(lowerCombined)) {
+      return itemType;
+    }
+    return `${brandAndModel} ${itemType}`;
+  }
+
+  if (brandAndModel) {
+    return brandAndModel;
+  }
+  if (itemType) {
+    return itemType;
+  }
+
+  return (params.fallbackBrandModel ?? '').trim();
 }
 
 /**

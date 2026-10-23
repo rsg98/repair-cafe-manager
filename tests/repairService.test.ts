@@ -17,6 +17,11 @@ import {
   getDefaultPowerTypeForCategory,
   POWER_TYPE_OPTIONS,
   getPowerTypeLabel,
+  ITEM_TYPE_SUGGESTIONS,
+  getItemTypeSuggestions,
+  resolveItemTypeClassification,
+  findExcludedItemMatch,
+  formatItemBrandModel,
   buildPowerTypeOverrideUpdate,
   buildPatInitialUpdate,
   buildPatFinalUpdate,
@@ -1008,6 +1013,149 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       expect(patFinalPayload.testerName).toBe('Bob');
       expect(patFinalPayload.instrumentSerial).toBe('KT-200002');
       expect(patFinalPayload.testVoltageVolts).toBe(250);
+    });
+  });
+
+  // Verify Customer Registration Item Type autocomplete suggestions, category/power mapping, and Brand/Model concatenation
+  describe('Registration Item Type Autocomplete & Brand/Model Concatenation', () => {
+    it('suggests "Toaster" when typing "Toas" and maps to ELECTRICAL + MAINS_240V', () => {
+      const suggestions = getItemTypeSuggestions('Toas');
+      expect(suggestions.length).toBeGreaterThan(0);
+      expect(suggestions[0]).toMatchObject({
+        label: 'Toaster',
+        category: 'ELECTRICAL',
+        powerType: 'MAINS_240V',
+      });
+
+      // Verify automatic classification for both partial prefix ("Toas") and full match ("Toaster")
+      expect(resolveItemTypeClassification('Toas')).toEqual({
+        category: 'ELECTRICAL',
+        powerType: 'MAINS_240V',
+      });
+      expect(resolveItemTypeClassification('Toaster')).toEqual({
+        category: 'ELECTRICAL',
+        powerType: 'MAINS_240V',
+      });
+    });
+
+    it('resolves appropriate Category and PowerType across battery electronics, mechanical, textiles, woodwork, and toys', () => {
+      expect( ITEM_TYPE_SUGGESTIONS.length).toBeGreaterThan(30);
+
+      // Battery / Low-Voltage Electrical
+      expect(resolveItemTypeClassification('Lap')).toEqual({
+        category: 'ELECTRICAL',
+        powerType: 'BATTERY_LOW_VOLTAGE',
+      });
+      expect(resolveItemTypeClassification('Mobile Phone')).toEqual({
+        category: 'ELECTRICAL',
+        powerType: 'BATTERY_LOW_VOLTAGE',
+      });
+
+      // Mechanical
+      expect(resolveItemTypeClassification('Bic')).toEqual({
+        category: 'MECHANICAL',
+        powerType: 'MECHANICAL',
+      });
+      expect(resolveItemTypeClassification('Bike')).toEqual({
+        category: 'MECHANICAL',
+        powerType: 'MECHANICAL',
+      });
+
+      // Textiles
+      expect(resolveItemTypeClassification('Coat')).toEqual({
+        category: 'TEXTILES',
+        powerType: 'NOT_APPLICABLE',
+      });
+      expect(resolveItemTypeClassification('Jeans')).toEqual({
+        category: 'TEXTILES',
+        powerType: 'NOT_APPLICABLE',
+      });
+
+      // Woodwork
+      expect(resolveItemTypeClassification('Chair')).toEqual({
+        category: 'WOODWORK',
+        powerType: 'NOT_APPLICABLE',
+      });
+
+      // Toys
+      expect(resolveItemTypeClassification('Electronic Toy')).toEqual({
+        category: 'TOY',
+        powerType: 'BATTERY_LOW_VOLTAGE',
+      });
+      expect(resolveItemTypeClassification('Teddy Bear')).toEqual({
+        category: 'TOY',
+        powerType: 'NOT_APPLICABLE',
+      });
+
+      // Blank or unknown single character returns null
+      expect(resolveItemTypeClassification('')).toBeNull();
+      expect(resolveItemTypeClassification('   ')).toBeNull();
+      expect(getItemTypeSuggestions('')).toEqual([]);
+    });
+
+    it('concatenates Brand, Model, and Item Type into brandModel without duplicating words', () => {
+      // Full Brand + Model + Item Type
+      expect(
+        formatItemBrandModel({
+          itemType: 'Toaster',
+          brand: 'Dualit',
+          model: '4-Slice',
+        })
+      ).toBe('Dualit 4-Slice Toaster');
+
+      // Brand + Item Type only
+      expect(
+        formatItemBrandModel({
+          itemType: 'Kettle',
+          brand: 'Russell Hobbs',
+          model: '',
+        })
+      ).toBe('Russell Hobbs Kettle');
+
+      // Item Type only (e.g. unbranded textile or furniture item)
+      expect(
+        formatItemBrandModel({
+          itemType: 'Coat / Jacket',
+          brand: '',
+          model: '',
+        })
+      ).toBe('Coat / Jacket');
+
+      // Deduplicates when customer repeats Brand inside Model or Item Type inside Model
+      expect(
+        formatItemBrandModel({
+          itemType: 'Toaster',
+          brand: 'Dualit',
+          model: 'Dualit 4-Slice Toaster',
+        })
+      ).toBe('Dualit 4-Slice Toaster');
+    });
+
+    it('detects excluded item types from cafeConfig.excludedItems and returns the canonical label for the registration warning', () => {
+      // Exact labels and plurals/keywords for Microwave, Petrol-Driven Item, Electric Bike, and Electric Scooter
+      expect(findExcludedItemMatch('Microwave')).toBe('Microwave');
+      expect(findExcludedItemMatch('microwaves')).toBe('Microwave');
+      expect(findExcludedItemMatch('Microwave oven')).toBe('Microwave');
+
+      expect(findExcludedItemMatch('Petrol-Driven Item')).toBe('Petrol-Driven Item');
+      expect(findExcludedItemMatch('Petrol lawnmower')).toBe('Petrol-Driven Item');
+      expect(findExcludedItemMatch('petrol strimmer')).toBe('Petrol-Driven Item');
+
+      expect(findExcludedItemMatch('Electric Bike')).toBe('Electric Bike');
+      expect(findExcludedItemMatch('electric bikes')).toBe('Electric Bike');
+      expect(findExcludedItemMatch('e-bike')).toBe('Electric Bike');
+
+      expect(findExcludedItemMatch('Electric Scooter')).toBe('Electric Scooter');
+      expect(findExcludedItemMatch('e-scooter')).toBe('Electric Scooter');
+      expect(findExcludedItemMatch('scooter')).toBe('Electric Scooter');
+
+      // Standard repairable items and partial prefixes must not trigger a false warning
+      expect(findExcludedItemMatch('Toaster')).toBeNull();
+      expect(findExcludedItemMatch('Bicycle')).toBeNull();
+      expect(findExcludedItemMatch('Mountain bike')).toBeNull();
+      expect(findExcludedItemMatch('Electric Toothbrush')).toBeNull();
+      expect(findExcludedItemMatch('Electric')).toBeNull();
+      expect(findExcludedItemMatch('')).toBeNull();
     });
   });
 });

@@ -15,6 +15,12 @@ export interface CafeConfig {
   };
   allowMultiItemRegistration: boolean;
   /**
+   * List of item type labels (matching `ITEM_TYPE_SUGGESTIONS` labels or custom terms)
+   * that the Repair Café does not generally repair. Entering or selecting one of these
+   * displays an advisory warning on the Customer Registration form (`/register`).
+   */
+  excludedItems: string[];
+  /**
    * Service/calibration interval in calendar months for PAT testing instruments (Issue #27).
    * Instruments with `lastCalibratedDate` older than this interval display a non-blocking warning.
    */
@@ -56,6 +62,13 @@ export const cafeConfig: CafeConfig = {
   // Set to false for Sutton Repair Cafe to ensure equitable queuing across visitors.
   // Other repair cafes deploying this software can set this to true if multi-item check-in is permitted.
   allowMultiItemRegistration: false,
+  // Item types that the Repair Café does not generally repair (triggers an advisory warning on registration)
+  excludedItems: [
+    "Microwave",
+    "Petrol-Driven Item",
+    "Electric Bike",
+    "Electric Scooter"
+  ],
   // Flag PAT testing instruments whose calibration date is older than 12 months (Issue #27)
   patTesterServiceIntervalMonths: 12,
   termsVersion: "2026.1",

@@ -6,7 +6,8 @@ import {
   Plus, 
   Trash2, 
   ArrowRight,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import { cafeConfig } from '../config/cafe.config';
 import { Session, ItemCategory, PowerType } from '../types';
@@ -14,6 +15,12 @@ import {
   submitRegistration,
   generateReferenceToken,
   getDefaultPowerTypeForCategory,
+  getPowerTypeLabel,
+  getItemTypeSuggestions,
+  resolveItemTypeClassification,
+  findExcludedItemMatch,
+  formatItemBrandModel,
+  ItemTypeSuggestion,
   POWER_TYPE_OPTIONS
 } from '../services/repairService';
 import { TermsModal } from '../components/common/TermsModal';
@@ -27,10 +34,36 @@ interface CustomerRegisterViewProps {
 
 // Local form state for each item being registered by the visitor
 interface ItemInputState {
+  itemType: string;
+  brand: string;
+  model: string;
   category: ItemCategory;
   brandModel: string;
   faultDescription: string;
   powerType: PowerType;
+}
+
+// Human-readable category badge labels shown in the Item Type autocomplete menu
+const CATEGORY_SHORT_LABELS: Record<ItemCategory, string> = {
+  ELECTRICAL: 'Electrical',
+  MECHANICAL: 'Mechanical',
+  TEXTILES: 'Textiles',
+  WOODWORK: 'Woodwork',
+  TOY: 'Toys',
+  OTHER: 'Other'
+};
+
+// Creates a blank default item state for initial render, "Add Another Item", and form reset
+function createEmptyItemState(): ItemInputState {
+  return {
+    itemType: '',
+    brand: '',
+    model: '',
+    category: 'ELECTRICAL',
+    brandModel: '',
+    faultDescription: '',
+    powerType: getDefaultPowerTypeForCategory('ELECTRICAL')
+  };
 }
 
 /**
@@ -47,14 +80,11 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
   // Repair item description entries (defaulting to a single Electrical item)
-  const [items, setItems] = useState<ItemInputState[]>([
-    {
-      category: 'ELECTRICAL',
-      brandModel: '',
-      faultDescription: '',
-      powerType: getDefaultPowerTypeForCategory('ELECTRICAL')
-    }
-  ]);
+  const [items, setItems] = useState<ItemInputState[]>([createEmptyItemState()]);
+
+  // Autocomplete dropdown state for the Item Type input (tracks which item card has open suggestions)
+  const [openTypeSuggestionItemIndex, setOpenTypeSuggestionItemIndex] = useState<number | null>(null);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState<number>(0);
 
   // Submission status and generated reference token state
   const [submitting, setSubmitting] = useState(false);
@@ -75,7 +105,12 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     submitting ||
     submissionResult !== null ||
     items.some(
-      (i) => i.brandModel.trim().length > 0 || i.faultDescription.trim().length > 0
+      (i) =>
+        i.itemType.trim().length > 0 ||
+        i.brand.trim().length > 0 ||
+        i.model.trim().length > 0 ||
+        i.brandModel.trim().length > 0 ||
+        i.faultDescription.trim().length > 0
     );
   useRegisterUnsavedWork(isRegisterDirty, 'customer-register-view');
 
@@ -95,36 +130,99 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
   // Append an additional item slot when multi-item registration is enabled in cafeConfig (capped at 4)
   const handleAddItem = () => {
     if (items.length >= 4) return;
-    setItems(prev => [
-      ...prev,
-      {
-        category: 'ELECTRICAL',
-        brandModel: '',
-        faultDescription: '',
-        powerType: getDefaultPowerTypeForCategory('ELECTRICAL')
-      }
-    ]);
+    setItems((prev) => [...prev, createEmptyItemState()]);
   };
 
   // Remove an item slot by index while ensuring at least one item remains in the form
   const handleRemoveItem = (index: number) => {
     if (items.length <= 1) return;
-    setItems(prev => prev.filter((_, i) => i !== index));
+    setItems((prev) => prev.filter((_, i) => i !== index));
+    if (openTypeSuggestionItemIndex === index) {
+      setOpenTypeSuggestionItemIndex(null);
+    }
   };
 
-  // Update a specific field on an item entry and auto-select the sensible default PowerType when category changes
+  // Update a specific field on an item entry, synchronising brandModel and Category / PowerType
   const handleItemChange = (index: number, field: keyof ItemInputState, value: string) => {
-    setItems(prev => {
+    setItems((prev) => {
       const copy = [...prev];
+      const current = copy[index];
+
       if (field === 'category') {
         const category = value as ItemCategory;
         const autoPowerType = getDefaultPowerTypeForCategory(category);
-        copy[index] = { ...copy[index], category, powerType: autoPowerType };
+        copy[index] = { ...current, category, powerType: autoPowerType };
+      } else if (field === 'itemType') {
+        // Resolve matching Category and PowerType as the customer types (e.g. "Toas" -> Toaster -> ELECTRICAL + MAINS_240V)
+        const classification = resolveItemTypeClassification(value);
+        const nextItem: ItemInputState = {
+          ...current,
+          itemType: value,
+          ...(classification
+            ? { category: classification.category, powerType: classification.powerType }
+            : {})
+        };
+        nextItem.brandModel = formatItemBrandModel(nextItem);
+        copy[index] = nextItem;
+      } else if (field === 'brand' || field === 'model') {
+        const nextItem: ItemInputState = {
+          ...current,
+          [field]: value
+        };
+        nextItem.brandModel = formatItemBrandModel(nextItem);
+        copy[index] = nextItem;
       } else {
-        copy[index] = { ...copy[index], [field]: value };
+        copy[index] = { ...current, [field]: value };
       }
+
       return copy;
     });
+  };
+
+  // Apply a selected autocomplete suggestion to the item's Type, Category, Power Type, and concatenated brandModel
+  const handleSelectItemTypeSuggestion = (index: number, suggestion: ItemTypeSuggestion) => {
+    setItems((prev) => {
+      const copy = [...prev];
+      const current = copy[index];
+      const nextItem: ItemInputState = {
+        ...current,
+        itemType: suggestion.label,
+        category: suggestion.category,
+        powerType: suggestion.powerType
+      };
+      nextItem.brandModel = formatItemBrandModel(nextItem);
+      copy[index] = nextItem;
+      return copy;
+    });
+    setOpenTypeSuggestionItemIndex(null);
+    setHighlightedSuggestionIndex(0);
+  };
+
+  // Handle keyboard navigation (ArrowDown, ArrowUp, Enter, Escape) inside the Item Type autocomplete input
+  const handleItemTypeKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+    suggestions: ItemTypeSuggestion[]
+  ) => {
+    if (suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpenTypeSuggestionItemIndex(index);
+      setHighlightedSuggestionIndex((prev) => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setOpenTypeSuggestionItemIndex(index);
+      setHighlightedSuggestionIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === 'Enter' && openTypeSuggestionItemIndex === index) {
+      const targetSuggestion = suggestions[highlightedSuggestionIndex] ?? suggestions[0];
+      if (targetSuggestion) {
+        e.preventDefault();
+        handleSelectItemTypeSuggestion(index, targetSuggestion);
+      }
+    } else if (e.key === 'Escape') {
+      setOpenTypeSuggestionItemIndex(null);
+    }
   };
 
   // Validate visitor inputs, generate a collision-safe reference token, and write the registration to Firestore
@@ -132,18 +230,31 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     e.preventDefault();
     // Require visitor first name so Front Desk volunteers can call them up
     if (!firstName.trim()) {
-      setError("Please provide your first name.");
+      setError('Please provide your first name.');
       return;
     }
     // Enforce mandatory acceptance of Repair Café House Rules & disclaimer
     if (!agreedToTerms) {
-      setError("Please accept the terms and house rules to proceed.");
+      setError('Please accept the terms and house rules to proceed.');
       return;
     }
 
-    // Ensure every item has both a brand/model description and a fault description
-    for (let i = 0; i < items.length; i++) {
-      if (!items[i].brandModel.trim() || !items[i].faultDescription.trim()) {
+    // Build submission items with concatenated brandModel (from Brand, Model, and Item Type)
+    const normalizedItems = items.map((item) => ({
+      category: item.category,
+      brandModel: formatItemBrandModel({
+        itemType: item.itemType,
+        brand: item.brand,
+        model: item.model,
+        fallbackBrandModel: item.brandModel
+      }),
+      faultDescription: item.faultDescription.trim(),
+      powerType: item.powerType
+    }));
+
+    // Ensure every item has an item description (Type / Brand / Model) and a fault description
+    for (let i = 0; i < normalizedItems.length; i++) {
+      if (!normalizedItems[i].brandModel || !normalizedItems[i].faultDescription) {
         setError(`Please fill in the item details and fault for item #${i + 1}.`);
         return;
       }
@@ -169,18 +280,18 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
             agreedToTerms,
             termsVersion: cafeConfig.termsVersion
           },
-          items
+          items: normalizedItems
         }
       });
 
       // Transition to the confirmation screen displaying the visitor's reference token
       setSubmissionResult({
         referenceToken,
-        itemCount: items.length
+        itemCount: normalizedItems.length
       });
     } catch (err: unknown) {
-      console.error("Submission error:", err);
-      const message = err instanceof Error ? err.message : "Failed to register item. Please try again.";
+      console.error('Submission error:', err);
+      const message = err instanceof Error ? err.message : 'Failed to register item. Please try again.';
       setError(message);
     } finally {
       setSubmitting(false);
@@ -193,14 +304,9 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
     setFirstName('');
     setContactPhone('');
     setAgreedToTerms(false);
-    setItems([
-      {
-        category: 'ELECTRICAL',
-        brandModel: '',
-        faultDescription: '',
-        powerType: getDefaultPowerTypeForCategory('ELECTRICAL')
-      }
-    ]);
+    setOpenTypeSuggestionItemIndex(null);
+    setHighlightedSuggestionIndex(0);
+    setItems([createEmptyItemState()]);
   };
 
   // Confirmation Screen: displayed after successful check-in until the visitor taps "Register Another Item"
@@ -348,113 +454,229 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
             </div>
 
             {/* Render input card for each item being registered */}
-            {items.map((item, index) => (
-              <div 
-                key={index} 
-                className="p-5 rounded-2xl bg-slate-50 border border-slate-200 relative space-y-4"
-              >
-                {/* Show item number header and remove button when multiple items are present */}
-                {items.length > 1 && (
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                    <span className="text-xs font-bold text-slate-700 uppercase">Item #{index + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(index)}
-                      aria-label={`Remove item ${index + 1}`}
-                      className="text-rose-500 hover:text-rose-700 p-1"
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                )}
+            {items.map((item, index) => {
+              const typeSuggestions = getItemTypeSuggestions(item.itemType);
+              const showTypeSuggestions =
+                openTypeSuggestionItemIndex === index && typeSuggestions.length > 0;
+              const excludedItemLabel = findExcludedItemMatch(item.itemType);
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Repair Category selector */}
-                  <div>
+              return (
+                <div
+                  key={index}
+                  className="p-5 rounded-2xl bg-slate-50 border border-slate-200 relative space-y-4"
+                >
+                  {/* Show item number header and remove button when multiple items are present */}
+                  {items.length > 1 && (
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <span className="text-xs font-bold text-slate-700 uppercase">Item #{index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(index)}
+                        aria-label={`Remove item ${index + 1}`}
+                        className="text-rose-500 hover:text-rose-700 p-1"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 1. Item Type input with autocomplete suggestions */}
+                  <div className="relative">
                     <label
-                      htmlFor={`register-item-${index}-category`}
+                      htmlFor={`register-item-${index}-type`}
                       className="block text-xs font-semibold text-slate-700 mb-1"
                     >
-                      Category <span className="text-rose-500">*</span>
+                      Item Type <span className="text-rose-500">*</span>
                     </label>
-                    <select
-                      id={`register-item-${index}-category`}
-                      value={item.category}
-                      onChange={(e) => handleItemChange(index, 'category', e.target.value)}
+                    <input
+                      id={`register-item-${index}-type`}
+                      type="text"
+                      required
+                      autoComplete="off"
+                      placeholder="Start typing e.g. Toaster, Kettle, Bicycle, Coat..."
+                      value={item.itemType}
+                      onFocus={() => {
+                        setOpenTypeSuggestionItemIndex(index);
+                        setHighlightedSuggestionIndex(0);
+                      }}
+                      onBlur={() => {
+                        setOpenTypeSuggestionItemIndex((prev) => (prev === index ? null : prev));
+                      }}
+                      onChange={(e) => {
+                        handleItemChange(index, 'itemType', e.target.value);
+                        setOpenTypeSuggestionItemIndex(index);
+                        setHighlightedSuggestionIndex(0);
+                      }}
+                      onKeyDown={(e) => handleItemTypeKeyDown(index, e, typeSuggestions)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-                    >
-                      <option value="ELECTRICAL">Electrical & Electronics (Appliances, Audio, Computing, Lamps)</option>
-                      <option value="MECHANICAL">Mechanical / Clocks / Bikes / Tools</option>
-                      <option value="TEXTILES">Textiles / Clothing / Zips</option>
-                      <option value="WOODWORK">Woodwork / Furniture</option>
-                      <option value="TOY">Toys / Dolls / Gadgets</option>
-                      <option value="OTHER">Other / Miscellaneous</option>
-                    </select>
+                    />
+
+                    {/* Autocomplete dropdown menu suggesting matching item types and auto-selecting Category & Power Type */}
+                    {showTypeSuggestions && (
+                      <ul
+                        id={`register-item-${index}-type-suggestions`}
+                        aria-label="Suggested item types"
+                        className="absolute z-20 left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-300 bg-white shadow-lg divide-y divide-slate-100"
+                      >
+                        {typeSuggestions.map((suggestion, suggestionIdx) => {
+                          const isHighlighted = suggestionIdx === highlightedSuggestionIndex;
+                          return (
+                            <li key={suggestion.label}>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  // Prevent input blur before selection completes on mouse/touch
+                                  e.preventDefault();
+                                  handleSelectItemTypeSuggestion(index, suggestion);
+                                }}
+                                onClick={() => handleSelectItemTypeSuggestion(index, suggestion)}
+                                className={`w-full px-3.5 py-2.5 text-left flex items-center justify-between gap-2 text-sm transition-colors ${
+                                  isHighlighted
+                                    ? 'bg-emerald-50 text-emerald-950 font-semibold'
+                                    : 'text-slate-800 hover:bg-slate-50'
+                                }`}
+                              >
+                                <span className="font-semibold">{suggestion.label}</span>
+                                <span className="text-xs text-slate-600">
+                                  {CATEGORY_SHORT_LABELS[suggestion.category]} &bull;{' '}
+                                  {getPowerTypeLabel(suggestion.powerType)}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    {/* Advisory warning when the customer enters an item type in cafeConfig.excludedItems */}
+                    {excludedItemLabel && (
+                      <div
+                        id={`register-excluded-warning-${index}`}
+                        role="alert"
+                        className="mt-2 p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs sm:text-sm flex items-start gap-2.5"
+                      >
+                        <AlertTriangle
+                          className="h-4 w-4 text-amber-800 shrink-0 mt-0.5"
+                          aria-hidden="true"
+                        />
+                        <span>
+                          {cafeConfig.cafeName} does not generally repair items of type{' '}
+                          <strong>{excludedItemLabel}</strong>, please see the Front Desk team to
+                          confirm.
+                        </span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Power Type selector (determines whether PAT 1 electrical safety testing is required) */}
+                  {/* 2 & 3. Separate Brand and Model inputs to encourage visitors to provide both */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Brand text field */}
+                    <div>
+                      <label
+                        htmlFor={`register-item-${index}-brand`}
+                        className="block text-xs font-semibold text-slate-700 mb-1"
+                      >
+                        Brand
+                      </label>
+                      <input
+                        id={`register-item-${index}-brand`}
+                        type="text"
+                        placeholder="e.g. Dualit, Dyson, Roberts"
+                        value={item.brand}
+                        onChange={(e) => handleItemChange(index, 'brand', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+                      />
+                    </div>
+
+                    {/* Model text field */}
+                    <div>
+                      <label
+                        htmlFor={`register-item-${index}-model`}
+                        className="block text-xs font-semibold text-slate-700 mb-1"
+                      >
+                        Model
+                      </label>
+                      <input
+                        id={`register-item-${index}-model`}
+                        type="text"
+                        placeholder="e.g. Classic 4-Slice, V8, Revival"
+                        value={item.model}
+                        onChange={(e) => handleItemChange(index, 'model', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 4 & 5. Category and Power Type selectors (auto-set by Item Type, adjustable by visitor) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Repair Category selector */}
+                    <div>
+                      <label
+                        htmlFor={`register-item-${index}-category`}
+                        className="block text-xs font-semibold text-slate-700 mb-1"
+                      >
+                        Category <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        id={`register-item-${index}-category`}
+                        value={item.category}
+                        onChange={(e) => handleItemChange(index, 'category', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+                      >
+                        <option value="ELECTRICAL">Electrical &amp; Electronics (Appliances, Audio, Computing, Lamps)</option>
+                        <option value="MECHANICAL">Mechanical / Clocks / Bikes / Tools</option>
+                        <option value="TEXTILES">Textiles / Clothing / Zips</option>
+                        <option value="WOODWORK">Woodwork / Furniture</option>
+                        <option value="TOY">Toys / Dolls / Gadgets</option>
+                        <option value="OTHER">Other / Miscellaneous</option>
+                      </select>
+                    </div>
+
+                    {/* Power Type selector (determines whether PAT 1 electrical safety testing is required) */}
+                    <div>
+                      <label
+                        htmlFor={`register-item-${index}-power`}
+                        className="block text-xs font-semibold text-slate-700 mb-1"
+                      >
+                        Power Type <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        id={`register-item-${index}-power`}
+                        value={item.powerType}
+                        onChange={(e) => handleItemChange(index, 'powerType', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+                      >
+                        {/* Render shared power type options so registration and PAT station labels stay in sync */}
+                        {POWER_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 6. Fault Description textarea */}
                   <div>
                     <label
-                      htmlFor={`register-item-${index}-power`}
+                      htmlFor={`register-item-${index}-fault`}
                       className="block text-xs font-semibold text-slate-700 mb-1"
                     >
-                      Power Type <span className="text-rose-500">*</span>
+                      What is the fault / what needs fixing? <span className="text-rose-500">*</span>
                     </label>
-                    <select
-                      id={`register-item-${index}-power`}
-                      value={item.powerType}
-                      onChange={(e) => handleItemChange(index, 'powerType', e.target.value)}
+                    <textarea
+                      id={`register-item-${index}-fault`}
+                      required
+                      rows={2}
+                      placeholder="e.g. Lever does not stay down; won't heat up; cord is frayed."
+                      value={item.faultDescription}
+                      onChange={(e) => handleItemChange(index, 'faultDescription', e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-                    >
-                      {/* Render shared power type options so registration and PAT station labels stay in sync */}
-                      {POWER_TYPE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                 </div>
-
-                {/* Brand & Model text field */}
-                <div>
-                  <label
-                    htmlFor={`register-item-${index}-brand`}
-                    className="block text-xs font-semibold text-slate-700 mb-1"
-                  >
-                    Brand & Model <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    id={`register-item-${index}-brand`}
-                    type="text"
-                    required
-                    placeholder="e.g. Dualit 4-slice toaster, Roberts DAB radio"
-                    value={item.brandModel}
-                    onChange={(e) => handleItemChange(index, 'brandModel', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-                  />
-                </div>
-
-                {/* Fault Description textarea */}
-                <div>
-                  <label
-                    htmlFor={`register-item-${index}-fault`}
-                    className="block text-xs font-semibold text-slate-700 mb-1"
-                  >
-                    What is the fault / what needs fixing? <span className="text-rose-500">*</span>
-                  </label>
-                  <textarea
-                    id={`register-item-${index}-fault`}
-                    required
-                    rows={2}
-                    placeholder="e.g. Lever does not stay down; won't heat up; cord is frayed."
-                    value={item.faultDescription}
-                    onChange={(e) => handleItemChange(index, 'faultDescription', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Section 3: Terms & Conditions Acceptance */}

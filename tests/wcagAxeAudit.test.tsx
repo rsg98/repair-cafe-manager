@@ -264,7 +264,7 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
     vi.unstubAllGlobals();
   });
 
-  it('Station 1: CustomerRegisterView passes axe WCAG 2.2 AA audit', async () => {
+  it('Station 1: CustomerRegisterView passes axe WCAG 2.2 AA audit and enforces Type, Brand, Model, Category, Power Type, Fault order with autocomplete', async () => {
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={['/register']}>
@@ -275,8 +275,79 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
       );
     });
 
-    const violations = await runAxeWcagAudit(container);
-    expect(violations).toEqual([]);
+    // Verify DOM field order: Type, Brand, Model, Category, Power Type, Fault
+    const itemFieldIds = Array.from(
+      container.querySelectorAll<HTMLElement>('[id^="register-item-0-"]')
+    ).map((el) => el.id);
+    expect(itemFieldIds).toEqual([
+      'register-item-0-type',
+      'register-item-0-brand',
+      'register-item-0-model',
+      'register-item-0-category',
+      'register-item-0-power',
+      'register-item-0-fault',
+    ]);
+
+    const initialViolations = await runAxeWcagAudit(container);
+    expect(initialViolations).toEqual([]);
+
+    // Type "Toas" into Item Type and verify "Toaster" suggestion appears and sets Category + Power Type
+    const typeInput = container.querySelector<HTMLInputElement>('#register-item-0-type')!;
+    const categorySelect = container.querySelector<HTMLSelectElement>('#register-item-0-category')!;
+    const powerSelect = container.querySelector<HTMLSelectElement>('#register-item-0-power')!;
+
+    // First switch Category to TEXTILES so we can observe "Toas" automatically setting ELECTRICAL + MAINS_240V
+    await act(async () => {
+      const selectSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLSelectElement.prototype,
+        'value'
+      )?.set;
+      selectSetter?.call(categorySelect, 'TEXTILES');
+      categorySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(categorySelect.value).toBe('TEXTILES');
+    expect(powerSelect.value).toBe('NOT_APPLICABLE');
+
+    // Focus and type "Toas" in the Item Type input
+    await act(async () => {
+      typeInput.focus();
+      const inputSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      inputSetter?.call(typeInput, 'Toas');
+      typeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const suggestionList = container.querySelector('#register-item-0-type-suggestions');
+    expect(suggestionList).not.toBeNull();
+    expect(suggestionList?.textContent).toContain('Toaster');
+    expect(categorySelect.value).toBe('ELECTRICAL');
+    expect(powerSelect.value).toBe('MAINS_240V');
+
+    // Run axe WCAG 2.2 AA audit while the autocomplete suggestion menu is open
+    const openAutocompleteViolations = await runAxeWcagAudit(container);
+    expect(openAutocompleteViolations).toEqual([]);
+    expect(container.querySelector('#register-excluded-warning-0')).toBeNull();
+
+    // Enter an excluded item type ("Microwave") and verify the warning message appears and passes axe WCAG 2.2 AA
+    await act(async () => {
+      const inputSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      inputSetter?.call(typeInput, 'Microwave');
+      typeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const excludedWarning = container.querySelector('#register-excluded-warning-0');
+    expect(excludedWarning).not.toBeNull();
+    expect(excludedWarning?.textContent).toContain(
+      'does not generally repair items of type Microwave, please see the Front Desk team to confirm.'
+    );
+
+    const excludedWarningViolations = await runAxeWcagAudit(container);
+    expect(excludedWarningViolations).toEqual([]);
   });
 
   it('Station 2: FrontDeskView (active session board & attendance bar) passes axe WCAG 2.2 AA audit', async () => {
