@@ -1093,6 +1093,42 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       expect(getItemTypeSuggestions('')).toEqual([]);
     });
 
+    it('includes the user-entered custom text as a selectable suggestion when it does not match a catalogue label', () => {
+      // Partial query "Toas" returns "Toaster" plus the user's literal text "Toas" as a selectable custom option
+      const partialSuggestions = getItemTypeSuggestions('Toas', 6, {
+        category: 'ELECTRICAL',
+        powerType: 'MAINS_240V'
+      });
+      expect(partialSuggestions[0].label).toBe('Toaster');
+      expect(partialSuggestions[0].isCustom).toBeUndefined();
+      const customPartial = partialSuggestions.find((s) => s.isCustom);
+      expect(customPartial).toEqual({
+        label: 'Toas',
+        category: 'ELECTRICAL',
+        powerType: 'MAINS_240V',
+        isCustom: true
+      });
+
+      // Completely uncatalogued item type ("Waffle Maker") returns the custom selectable entry preserving fallback classification
+      const customOnly = getItemTypeSuggestions('Waffle Maker', 6, {
+        category: 'ELECTRICAL',
+        powerType: 'MAINS_240V'
+      });
+      expect(customOnly).toEqual([
+        {
+          label: 'Waffle Maker',
+          category: 'ELECTRICAL',
+          powerType: 'MAINS_240V',
+          isCustom: true
+        }
+      ]);
+
+      // Exact catalogue label match ("Toaster" or "toaster") does not duplicate as a custom entry
+      const exactMatch = getItemTypeSuggestions('toaster');
+      expect(exactMatch.some((s) => s.label === 'Toaster')).toBe(true);
+      expect(exactMatch.some((s) => s.isCustom)).toBe(false);
+    });
+
     it('concatenates Brand, Model, and Item Type into brandModel without duplicating words', () => {
       // Full Brand + Model + Item Type
       expect(

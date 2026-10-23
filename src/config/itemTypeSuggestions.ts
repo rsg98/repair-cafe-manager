@@ -17,6 +17,8 @@ export interface ItemTypeSuggestion {
   category: ItemCategory;
   powerType: PowerType;
   keywords?: readonly string[];
+  /** True when this option represents the customer's custom-typed string rather than a predefined catalogue entry. */
+  isCustom?: boolean;
 }
 
 /**

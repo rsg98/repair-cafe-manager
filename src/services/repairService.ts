@@ -148,13 +148,17 @@ export function getPowerTypeLabel(powerType: PowerType): string {
 
 /**
  * Returns ranked autocomplete suggestions for a partial item type query
- * (e.g. `"Toas"` -> `[{ label: "Toaster", category: "ELECTRICAL", powerType: "MAINS_240V" }]`).
+ * (e.g. `"Toas"` -> `[{ label: "Toaster", category: "ELECTRICAL", powerType: "MAINS_240V" }]`),
+ * always including the user's entered string as a selectable custom option when it does not
+ * already match a suggestion label in the returned list.
  */
 export function getItemTypeSuggestions(
   rawQuery: string,
-  limit = 6
+  limit = 6,
+  fallbackClassification?: { category: ItemCategory; powerType: PowerType }
 ): ItemTypeSuggestion[] {
-  const queryText = (rawQuery || '').trim().toLowerCase();
+  const trimmedQuery = (rawQuery || '').trim();
+  const queryText = trimmedQuery.toLowerCase();
   if (!queryText || limit <= 0) {
     return [];
   }
@@ -184,12 +188,34 @@ export function getItemTypeSuggestions(
     }
   }
 
-  return [
+  const matchedSuggestions = [
     ...tier1LabelPrefix,
     ...tier2WordPrefix,
     ...tier3KeywordPrefix,
     ...tier4Substring,
   ].slice(0, limit);
+
+  // Ensure the customer's exact entered text is also selectable when it does not already match a suggestion label
+  const hasExactLabelMatch = matchedSuggestions.some(
+    (s) => s.label.toLowerCase() === queryText
+  );
+  if (!hasExactLabelMatch) {
+    const customCategory = fallbackClassification?.category ?? 'ELECTRICAL';
+    const customPowerType =
+      fallbackClassification?.powerType ?? getDefaultPowerTypeForCategory(customCategory);
+    const customOption: ItemTypeSuggestion = {
+      label: trimmedQuery,
+      category: customCategory,
+      powerType: customPowerType,
+      isCustom: true,
+    };
+    if (matchedSuggestions.length >= limit) {
+      return [...matchedSuggestions.slice(0, limit - 1), customOption];
+    }
+    return [...matchedSuggestions, customOption];
+  }
+
+  return matchedSuggestions;
 }
 
 /**
@@ -217,7 +243,7 @@ export function resolveItemTypeClassification(
 
   // 2. Prefix match once the customer has typed at least 2 characters (e.g. "Toas" -> "Toaster")
   if (queryText.length >= 2) {
-    const matches = getItemTypeSuggestions(queryText, 1);
+    const matches = getItemTypeSuggestions(queryText, 2).filter((s) => !s.isCustom);
     if (matches.length > 0) {
       const top = matches[0];
       const lowerLabel = top.label.toLowerCase();
@@ -295,7 +321,7 @@ export function findExcludedItemMatch(
 
   // 3. Unambiguous autocomplete prefix match (when typing >= 3 characters and all matching suggestions are excluded)
   if (queryText.length >= 3) {
-    const suggestions = getItemTypeSuggestions(queryText);
+    const suggestions = getItemTypeSuggestions(queryText).filter((s) => !s.isCustom);
     if (
       suggestions.length > 0 &&
       suggestions.every((s) => canonicalByLower.has(s.label.toLowerCase()))

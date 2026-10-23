@@ -322,6 +322,7 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
     const suggestionList = container.querySelector('#register-item-0-type-suggestions');
     expect(suggestionList).not.toBeNull();
     expect(suggestionList?.textContent).toContain('Toaster');
+    expect(suggestionList?.textContent).toContain('Custom item type');
     expect(categorySelect.value).toBe('ELECTRICAL');
     expect(powerSelect.value).toBe('MAINS_240V');
 
@@ -329,6 +330,30 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
     const openAutocompleteViolations = await runAxeWcagAudit(container);
     expect(openAutocompleteViolations).toEqual([]);
     expect(container.querySelector('#register-excluded-warning-0')).toBeNull();
+
+    // Enter a custom item type not in the predefined list ("Waffle Maker") and verify it is selectable in the dropdown
+    await act(async () => {
+      const inputSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      inputSetter?.call(typeInput, 'Waffle Maker');
+      typeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const customSuggestionList = container.querySelector('#register-item-0-type-suggestions');
+    expect(customSuggestionList).not.toBeNull();
+    expect(customSuggestionList?.textContent).toContain('Waffle Maker');
+    expect(customSuggestionList?.textContent).toContain('Custom item type');
+
+    // Click the custom item type button in the dropdown to confirm selection and close the list
+    const customButton = customSuggestionList?.querySelector('button');
+    expect(customButton).not.toBeNull();
+    await act(async () => {
+      customButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(typeInput.value).toBe('Waffle Maker');
+    expect(container.querySelector('#register-item-0-type-suggestions')).toBeNull();
 
     // Enter an excluded item type ("Microwave") and verify the warning message appears and passes axe WCAG 2.2 AA
     await act(async () => {

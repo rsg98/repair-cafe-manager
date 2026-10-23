@@ -455,7 +455,10 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
 
             {/* Render input card for each item being registered */}
             {items.map((item, index) => {
-              const typeSuggestions = getItemTypeSuggestions(item.itemType);
+              const typeSuggestions = getItemTypeSuggestions(item.itemType, 6, {
+                category: item.category,
+                powerType: item.powerType
+              });
               const showTypeSuggestions =
                 openTypeSuggestionItemIndex === index && typeSuggestions.length > 0;
               const excludedItemLabel = findExcludedItemMatch(item.itemType);
@@ -521,7 +524,13 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                         {typeSuggestions.map((suggestion, suggestionIdx) => {
                           const isHighlighted = suggestionIdx === highlightedSuggestionIndex;
                           return (
-                            <li key={suggestion.label}>
+                            <li
+                              key={
+                                suggestion.isCustom
+                                  ? `custom-${suggestion.label}`
+                                  : suggestion.label
+                              }
+                            >
                               <button
                                 type="button"
                                 onMouseDown={(e) => {
@@ -538,8 +547,14 @@ export const CustomerRegisterView: React.FC<CustomerRegisterViewProps> = ({ sess
                               >
                                 <span className="font-semibold">{suggestion.label}</span>
                                 <span className="text-xs text-slate-600">
-                                  {CATEGORY_SHORT_LABELS[suggestion.category]} &bull;{' '}
-                                  {getPowerTypeLabel(suggestion.powerType)}
+                                  {suggestion.isCustom ? (
+                                    'Custom item type'
+                                  ) : (
+                                    <>
+                                      {CATEGORY_SHORT_LABELS[suggestion.category]} &bull;{' '}
+                                      {getPowerTypeLabel(suggestion.powerType)}
+                                    </>
+                                  )}
                                 </span>
                               </button>
                             </li>
