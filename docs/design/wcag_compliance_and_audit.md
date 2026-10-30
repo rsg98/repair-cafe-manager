@@ -224,7 +224,7 @@ Table Block Detection & Paragraph Boundary Rule:
 
 ### 1.5 Subsystem 4: Tier 1 Enduring Accessibility Verification & CI Pipeline
 
-To ensure zero regressions without adding heavy browser dependencies to GitHub Actions, we add `"axe-core": "^4.10.2"` and `"happy-dom": "^20.9.0"` to `devDependencies` in `package.json`, render React 19 components in `happy-dom` using `react-dom/client` (`createRoot`) + `act` from `'react'`, and structure the verification suite into three fast Vitest layers:
+To ensure zero regressions without adding heavy browser dependencies to GitHub Actions, we add `"axe-core": "^4.10.2"` and `"happy-dom": "^21.0.4"` to `devDependencies` in `package.json`, render React 19 components in `happy-dom` using `react-dom/client` (`createRoot`) + `act` from `'react'`, and structure the verification suite into three fast Vitest layers:
 
 | Test Suite | File | Scope & Execution Mechanism |
 | :--- | :--- | :--- |
@@ -389,7 +389,7 @@ The VPAT document will conform to the **Information Technology Industry Council 
 The implementation is sequenced into six deterministic work packages so that shared hooks, renderers, and primitives exist before station views and automated tests consume them:
 
 1. **Work Package 1 — Dependencies, Viewport Scaling & Global CSS (`package.json`, `index.html`, `src/index.css`):**
-   - Add devDependencies to `package.json`: `"axe-core": "^4.10.2"` and `"happy-dom": "^20.9.0"`.
+   - Add devDependencies to `package.json`: `"axe-core": "^4.10.2"` and `"happy-dom": "^21.0.4"`.
    - Remove `maximum-scale=1.0, user-scalable=no` from `index.html`.
    - Add `touch-action: manipulation` on interactive controls, global `:focus-visible` outlines, and `@media (prefers-reduced-motion: reduce)` rules in `src/index.css`.
 2. **Work Package 2 — Shared Accessibility Hook & GFM Table Renderer (`src/hooks/useDialogFocusTrap.ts`, `src/components/common/MarkdownViewer.tsx`):**
