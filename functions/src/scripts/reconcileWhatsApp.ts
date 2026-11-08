@@ -6,8 +6,11 @@
  */
 
 import * as fs from 'node:fs';
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { Firestore } from 'firebase-admin/firestore';
+import {
+  initAdminFirestore,
+  formatAdminCliError,
+} from './adminFirestore';
 import { removeUndefined, type Volunteer } from './historicalIngestParser';
 import {
   buildWhatsAppReconciliationPlan,
@@ -19,27 +22,6 @@ import {
 
 /** Maximum operations per Firestore writeBatch (strictly under the 500 hard limit). */
 const BATCH_CHUNK_SIZE = 400;
-
-/**
- * Resolves the target Firebase project ID from CLI options or environment variables
- * and initialises the Firebase Admin Firestore instance.
- */
-function initAdminFirestore(explicitProjectId?: string): {
-  db: Firestore;
-  projectId: string;
-} {
-  const projectId =
-    explicitProjectId ||
-    process.env.FIREBASE_PROJECT_ID ||
-    process.env.GCLOUD_PROJECT ||
-    process.env.VITE_FIREBASE_PROJECT_ID ||
-    'sutton-repair-cafe';
-
-  if (getApps().length === 0) {
-    initializeApp({ projectId });
-  }
-  return { db: getFirestore(), projectId };
-}
 
 /**
  * Prints CLI usage instructions for administrators.
@@ -205,8 +187,8 @@ async function main(): Promise<void> {
   const rawText = fs.readFileSync(options.filePath!, 'utf8');
   const participants = parseWhatsAppParticipantsText(rawText);
 
-  const { db, projectId } = initAdminFirestore(options.projectId);
-  console.log(`Connected to Firebase project: ${projectId}`);
+  const { db, projectId, source: projectSource } = initAdminFirestore(options.projectId);
+  console.log(`Connected to Firebase project: ${projectId} (via ${projectSource})`);
 
   const volunteers = await fetchAllVolunteers(db);
   const plan = buildWhatsAppReconciliationPlan({
@@ -252,7 +234,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
-  console.error(`Error: ${message}`);
+  console.error(`Error: ${formatAdminCliError(err)}`);
   process.exit(1);
 });

@@ -778,4 +778,4 @@ npm run merge-volunteers -- --from <sourceIdOrName> --into <targetIdOrName> --dr
 npm run merge-volunteers -- --from <sourceIdOrName> --into <targetIdOrName> --confirm
 ```
 
-For full documentation on date snapping, brand/volunteer canonicalization, orphan handling, and merge rules, see **[`docs/HISTORICAL_INGEST_CLI.md`](docs/HISTORICAL_INGEST_CLI.md)**.
+For full documentation on date snapping, brand/volunteer canonicalization, orphan handling, and merge rules, see **[`docs/HISTORICAL_INGEST_CLI.md`](docs/HISTORICAL_INGEST_CLI.md)** and **[`docs/MERGE_VOLUNTEERS_CLI.md`](docs/MERGE_VOLUNTEERS_CLI.md)**. For WhatsApp group reconciliation (`npm run whatsapp-reconcile`), see **[`docs/WHATSAPP_RECONCILE_CLI.md`](docs/WHATSAPP_RECONCILE_CLI.md)**.

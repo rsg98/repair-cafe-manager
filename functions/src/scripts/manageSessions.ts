@@ -6,13 +6,15 @@
  * Uses the Firebase Admin SDK to detect phantom documents and clean up nested subcollections.
  */
 
-import { initializeApp, getApps } from 'firebase-admin/app';
 import {
-  getFirestore,
   Firestore,
   DocumentReference,
   DocumentSnapshot,
 } from 'firebase-admin/firestore';
+import {
+  initAdminFirestore,
+  formatAdminCliError,
+} from './adminFirestore';
 import { parseManageSessionsArgs, ManageSessionsCliOptions } from './manageSessionsArgs';
 
 /** Maximum operations per Firestore writeBatch (strictly under the 500 hard limit). */
@@ -28,26 +30,6 @@ interface DiscoveredSessionRecord {
   repairsCount: number;
   hasSessionDoc: boolean;
   hasAnalyticsDoc: boolean;
-}
-
-/**
- * Resolves the target Firebase project ID from CLI options or environment variables
- * and initializes the Firebase Admin Firestore instance.
- */
-function initAdminFirestore(explicitProjectId?: string): { db: Firestore; projectId: string } {
-  // Prioritize --project flag, then standard Firebase/Google Cloud environment variables
-  const projectId =
-    explicitProjectId ||
-    process.env.FIREBASE_PROJECT_ID ||
-    process.env.GCLOUD_PROJECT ||
-    process.env.VITE_FIREBASE_PROJECT_ID ||
-    'sutton-repair-cafe';
-
-  // Initialize the default Admin app once for the resolved project ID
-  if (getApps().length === 0) {
-    initializeApp({ projectId });
-  }
-  return { db: getFirestore(), projectId };
 }
 
 /**
@@ -334,8 +316,8 @@ async function main(): Promise<void> {
   }
 
   // Initialize Firestore Admin SDK for the target project
-  const { db, projectId } = initAdminFirestore(options.projectId);
-  console.log(`Connected to Firebase project: ${projectId}`);
+  const { db, projectId, source: projectSource } = initAdminFirestore(options.projectId);
+  console.log(`Connected to Firebase project: ${projectId} (via ${projectSource})`);
 
   // Dispatch to the requested command handler
   if (options.command === 'list') {
@@ -353,7 +335,6 @@ async function main(): Promise<void> {
 
 // Run CLI main entrypoint when invoked directly
 main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
-  console.error(`Error: ${message}`);
+  console.error(`Error: ${formatAdminCliError(err)}`);
   process.exit(1);
 });

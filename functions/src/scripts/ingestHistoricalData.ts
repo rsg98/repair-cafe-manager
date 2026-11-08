@@ -8,12 +8,14 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { initializeApp, getApps } from 'firebase-admin/app';
 import {
-  getFirestore,
   Firestore,
   DocumentReference,
 } from 'firebase-admin/firestore';
+import {
+  initAdminFirestore,
+  formatAdminCliError,
+} from './adminFirestore';
 import {
   buildHistoricalIngestionPlan,
   parseIngestHistoricalArgs,
@@ -32,26 +34,6 @@ type QueuedBatchOp =
   | { type: 'set'; ref: DocumentReference; data: Record<string, unknown> }
   | { type: 'update'; ref: DocumentReference; data: Record<string, unknown> }
   | { type: 'delete'; ref: DocumentReference };
-
-/**
- * Resolves the target Firebase project ID from CLI options or environment variables
- * and initializes the Firebase Admin Firestore instance.
- */
-function initAdminFirestore(explicitProjectId?: string): { db: Firestore; projectId: string } {
-  // Prioritize --project flag, then standard Firebase/Google Cloud environment variables
-  const projectId =
-    explicitProjectId ||
-    process.env.FIREBASE_PROJECT_ID ||
-    process.env.GCLOUD_PROJECT ||
-    process.env.VITE_FIREBASE_PROJECT_ID ||
-    'sutton-repair-cafe';
-
-  // Initialize the default Admin app once for the resolved project ID
-  if (getApps().length === 0) {
-    initializeApp({ projectId });
-  }
-  return { db: getFirestore(), projectId };
-}
 
 /**
  * Prints CLI usage instructions for administrators.
@@ -255,8 +237,8 @@ async function main(): Promise<void> {
   const patCsv = readCsvFile(options.patPath!, 'PAT Tests');
 
   // 2. Connect to Firestore and load existing volunteers and session IDs
-  const { db, projectId } = initAdminFirestore(options.projectId);
-  console.log(`Connected to Firebase project: ${projectId}`);
+  const { db, projectId, source: projectSource } = initAdminFirestore(options.projectId);
+  console.log(`Connected to Firebase project: ${projectId} (via ${projectSource})`);
   const isPreviewOnly = options.dryRun || !options.confirm;
   const { existingVolunteers, existingSessionIds } = await loadFirestoreBaseline(
     db,
@@ -379,7 +361,6 @@ async function main(): Promise<void> {
 
 // Run CLI main entrypoint when invoked directly
 main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
-  console.error(`Error: ${message}`);
+  console.error(`Error: ${formatAdminCliError(err)}`);
   process.exit(1);
 });
