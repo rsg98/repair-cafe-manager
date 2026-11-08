@@ -1373,7 +1373,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               ? repairs.find((r) => r.id === photoModalTarget.repairItem.id)
               : undefined) ?? photoModalTarget.repairItem
           }
-          onPhotosChange={(remainingCount) => {
+          onPhotosChange={(remainingPhotos) => {
             // Keep cross-session taken-home entries in sync if an organiser deletes a photo
             setPersistedTakenHomeEntries((prev) =>
               prev.map((entry) => {
@@ -1391,7 +1391,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     ...entry.repairItem,
                     repair: {
                       ...entry.repairItem.repair,
-                      photoCount: remainingCount,
+                      photoCount: remainingPhotos.length,
                     },
                   },
                 };

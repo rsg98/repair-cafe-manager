@@ -510,7 +510,7 @@ export function isResolvedTakenHomeItem(
  * already been scrubbed to `[REDACTED]` under UK GDPR.
  */
 export function isCustomerPiiRedacted(
-  pii: Pick<PrivateCustomerData, 'firstName' | 'redactedAt'> | null | undefined
+  pii: Partial<PrivateCustomerData> | null | undefined
 ): boolean {
   // Treat missing records, blank names, "[REDACTED]" placeholders, or stamped redactedAt as redacted
   if (!pii || !pii.firstName) return true;
