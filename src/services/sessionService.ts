@@ -32,7 +32,7 @@ import {
 } from '../types';
 import { cafeConfig } from '../config/cafe.config';
 import { isAuthorizedOrganizer } from '../utils/authUtils';
-import { removeUndefined } from './repairService';
+import { removeUndefined, isUnresolvedTakenHomeItem } from './repairService';
 import {
   APP_BUILD_TIMESTAMP,
   APP_VERSION,
@@ -366,11 +366,13 @@ export function calculateSessionAnalytics(
  *
  * Explicitly clarifies that attached item photos remain persisted in Firebase
  * (Firestore), while noting that they are not currently accessible via the UI
- * once the active session is closed.
+ * once the active session is closed, and notes deferred GDPR retention when
+ * `takenHomeCount > 0`.
  */
 export function buildFinalizeSessionPrompt(
   sessionName: string,
-  totalSessionPhotos: number
+  totalSessionPhotos: number,
+  takenHomeCount: number = 0
 ): string {
   // Include a non-alarming photo persistence note when one or more repair photos exist
   const photoReminder =
@@ -378,51 +380,171 @@ export function buildFinalizeSessionPrompt(
       ? `\n\nNote: ${totalSessionPhotos} item photo${totalSessionPhotos === 1 ? ' is' : 's are'} attached to this session. Item photos remain safely stored in Firebase after closing, but are not currently accessible via the UI once the session is closed—download any photos you need now from the queue if you want a local copy.`
       : '';
 
+  // Include a deferred GDPR retention notice when unresolved Taken Home items exist in the session
+  const takenHomeNotice =
+    takenHomeCount > 0
+      ? `\n\nTaken Home Notice: ${takenHomeCount} item${takenHomeCount === 1 ? ' is' : 's are'} marked as Taken Home. Visitor contact details for ${takenHomeCount === 1 ? 'this item' : 'these items'} will remain securely retained in the organiser-only Taken Home tab until the repair is completed and resolved.`
+      : '';
+
   // Return the structured finalization and GDPR redaction confirmation message
-  return `Are you sure you want to CLOSE and FINALISE "${sessionName}"?\n\nThis will:\n1. Compute final impact metrics (weight diverted, success rates).\n2. Automatically REDACT all visitor customer names and phone numbers (GDPR).\n3. Archive the session for reporting.${photoReminder}`;
+  return `Are you sure you want to CLOSE and FINALISE "${sessionName}"?\n\nThis will:\n1. Compute final impact metrics (weight diverted, success rates).\n2. Automatically REDACT all visitor customer names and phone numbers (GDPR).\n3. Archive the session for reporting.${photoReminder}${takenHomeNotice}`;
 }
 
+/**
+ * Pure helper that partitions session repair items into those whose segregated
+ * `private/customer` PII should be redacted immediately on session close versus
+ * unresolved `TAKEN_HOME` items whose `private/customer` PII is retained until resolved.
+ */
+export function partitionRepairsForSessionRedaction(
+  repairs: Array<Pick<RepairItem, 'id' | 'status' | 'repair'>>
+): { redactPrivateIds: string[]; retainPrivateIds: string[] } {
+  const redactPrivateIds: string[] = [];
+  const retainPrivateIds: string[] = [];
+
+  // Route unresolved TAKEN_HOME items to retainPrivateIds and all others to redactPrivateIds
+  for (const item of repairs) {
+    if (isUnresolvedTakenHomeItem(item)) {
+      retainPrivateIds.push(item.id);
+    } else {
+      redactPrivateIds.push(item.id);
+    }
+  }
+
+  return { redactPrivateIds, retainPrivateIds };
+}
 
 /**
  * Redacts customer PII (`customerName`, `firstName`, `contactPhone`) across all repair
- * documents in chunks of 200 items (400 operations per batch).
+ * documents in chunks of 200 items (at most 400 operations per batch).
+ *
+ * Always redacts `customerName` on the public repair document, while deferring
+ * `private/customer` redaction for unresolved `TAKEN_HOME` items until resolved.
  */
 async function redactSessionRepairsPii(
   sessionId: string,
   repairDocs: QueryDocumentSnapshot[],
   now: number
 ): Promise<void> {
-  // Process repair documents in chunks of 200 (2 writes per repair = 400 batch ops)
+  // Process repair documents in chunks of 200 (at most 2 writes per repair = 400 batch ops)
   const CHUNK_SIZE = 200;
   for (let i = 0; i < repairDocs.length; i += CHUNK_SIZE) {
     const chunk = repairDocs.slice(i, i + CHUNK_SIZE);
     const batch = writeBatch(db);
-    // Redact visitor name on each repair doc and scrub private/customer subcollection
+    // Redact visitor name on each repair doc and scrub private/customer for non-taken-home items
     for (const repairDoc of chunk) {
+      const data = repairDoc.data() as Partial<RepairItem>;
+      const isTakenHome = isUnresolvedTakenHomeItem({
+        status: (data.status || 'REGISTERED') as RepairItem['status'],
+        repair: data.repair,
+      });
+      // Always redact public customerName on repairs/{repairId} and stamp wasTakenHome if unresolved
       const repairRef = doc(db, 'sessions', sessionId, 'repairs', repairDoc.id);
-      batch.update(repairRef, { customerName: '[REDACTED]' });
-      const privateCustomerRef = doc(
-        db,
-        'sessions',
-        sessionId,
-        'repairs',
-        repairDoc.id,
-        'private',
-        'customer'
+      batch.update(
+        repairRef,
+        isTakenHome
+          ? { customerName: '[REDACTED]', wasTakenHome: true }
+          : { customerName: '[REDACTED]' }
       );
-      // Overwrite firstName, delete contactPhone, and stamp redactedAt
-      batch.set(
-        privateCustomerRef,
-        {
-          firstName: '[REDACTED]',
-          contactPhone: deleteField(),
-          redactedAt: now,
-        },
-        { merge: true }
-      );
+
+      // Defer private/customer redaction for unresolved TAKEN_HOME items until resolution
+      if (!isTakenHome) {
+        const privateCustomerRef = doc(
+          db,
+          'sessions',
+          sessionId,
+          'repairs',
+          repairDoc.id,
+          'private',
+          'customer'
+        );
+        // Overwrite firstName, delete contactPhone, and stamp redactedAt
+        batch.set(
+          privateCustomerRef,
+          {
+            firstName: '[REDACTED]',
+            contactPhone: deleteField(),
+            redactedAt: now,
+          },
+          { merge: true }
+        );
+      }
     }
+    // Commit current chunk of up to 200 repair document pairs
     await batch.commit();
   }
+}
+
+/**
+ * Recomputes and persists `analytics/{sessionId}` for a finalized session when an
+ * organiser updates or resolves a `TAKEN_HOME` item after session close.
+ */
+export async function recalculateSessionAnalytics(
+  sessionId: string
+): Promise<SessionAnalytics | null> {
+  // Load both sessions/{sessionId} and analytics/{sessionId} to verify finalized state
+  const sessionRef = doc(db, 'sessions', sessionId);
+  const analyticsRef = doc(db, 'analytics', sessionId);
+  const [sessionSnap, analyticsSnap] = await Promise.all([
+    getDoc(sessionRef),
+    getDoc(analyticsRef),
+  ]);
+
+  if (!sessionSnap.exists() && !analyticsSnap.exists()) {
+    return null;
+  }
+
+  // Only recalculate when the session is FINALIZED or an analytics document already exists
+  const sessionData = sessionSnap.exists() ? (sessionSnap.data() as Session) : null;
+  const existingAnalytics = analyticsSnap.exists()
+    ? (analyticsSnap.data() as SessionAnalytics)
+    : null;
+  if (sessionData?.status !== 'FINALIZED' && !existingAnalytics) {
+    return null;
+  }
+
+  // Fetch all repair documents in the session
+  const repairsSnap = await getDocs(collection(db, 'sessions', sessionId, 'repairs'));
+  const repairs: RepairItem[] = repairsSnap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<RepairItem, 'id'>),
+  }));
+
+  // Resolve session display metadata and attending volunteer count without nested ternaries
+  const sessionName = sessionData?.name ?? existingAnalytics?.sessionName ?? sessionId;
+  const sessionDate = sessionData?.date ?? existingAnalytics?.date ?? '';
+  let volunteerCount = existingAnalytics?.volunteerCount ?? 0;
+  if (Array.isArray(sessionData?.attendingVolunteers)) {
+    volunteerCount = sessionData.attendingVolunteers.length;
+  } else if (Array.isArray(sessionData?.attendingVolunteerIds)) {
+    volunteerCount = sessionData.attendingVolunteerIds.length;
+  }
+  const isTest = Boolean(sessionData?.isTest ?? existingAnalytics?.isTest);
+
+  // Preserve original numeric finalizedAt timestamp (or convert Firestore Timestamp.toMillis())
+  const rawFinalizedAt = (existingAnalytics?.finalizedAt ?? sessionData?.finalizedAt) as
+    | number
+    | { toMillis?: () => number }
+    | undefined;
+  let preservedFinalizedAt = Date.now();
+  if (typeof rawFinalizedAt === 'number') {
+    preservedFinalizedAt = rawFinalizedAt;
+  } else if (typeof rawFinalizedAt?.toMillis === 'function') {
+    preservedFinalizedAt = rawFinalizedAt.toMillis();
+  }
+
+  // Compute updated SessionAnalytics snapshot from current repair documents
+  const updatedAnalytics = calculateSessionAnalytics(
+    sessionId,
+    sessionName,
+    sessionDate,
+    repairs,
+    preservedFinalizedAt,
+    volunteerCount,
+    isTest
+  );
+  // Persist updated analytics snapshot and return it to caller
+  await setDoc(analyticsRef, updatedAnalytics);
+  return updatedAnalytics;
 }
 
 /**

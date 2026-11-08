@@ -207,6 +207,13 @@ vi.mock('../src/services/repairService', async (importOriginal) => {
     ...actual,
     getRepairByCardNumber: vi.fn().mockResolvedValue(SAMPLE_REPAIR_ITEM),
     fetchRepairPhotos: vi.fn().mockResolvedValue([]),
+    listTakenHomeRepairs: vi.fn().mockResolvedValue([]),
+    getPrivateCustomerData: vi.fn().mockResolvedValue({
+      firstName: 'Sarah',
+      contactPhone: '07700900333',
+      agreedToTerms: true,
+      termsVersion: '1.0',
+    }),
   };
 });
 
@@ -216,6 +223,7 @@ import { FrontDeskView } from '../src/views/FrontDeskView';
 import { PatStationView } from '../src/views/PatStationView';
 import { FixerStationView } from '../src/views/FixerStationView';
 import { ReportsView } from '../src/views/ReportsView';
+import { TakenHomeTabPanel } from '../src/components/frontdesk/TakenHomeTabPanel';
 import { TermsModal } from '../src/components/common/TermsModal';
 import { PinModal } from '../src/components/common/PinModal';
 import { PoliciesModal } from '../src/components/common/PoliciesModal';
@@ -510,5 +518,73 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
       const violations = await runAxeWcagAudit(container);
       expect(violations).toEqual([]);
     }
+  });
+
+  it('Station 2 TakenHomeTabPanel (cross-session table and Organiser Taken-Home Repair Modal) passes axe WCAG 2.2 AA audit', async () => {
+    // Build sample unresolved Taken Home repair item fixture
+    const takenHomeRepairItem: RepairItem = {
+      ...SAMPLE_REPAIR_ITEM,
+      id: 'repair-taken-home-1',
+      status: 'TAKEN_HOME',
+      wasTakenHome: true,
+      // Initial taken-home repair record with 1 saved photo
+      repair: {
+        fixerName: SAMPLE_VOLUNTEER.name,
+        repairTimeMinutes: 30,
+        outcome: 'TAKEN_HOME',
+        diagnosis: 'Awaiting spare thermal fuse',
+        repairNotes: 'Customer called for an update.',
+        photoCount: 1,
+      },
+      // Audit metadata for when the item was taken home
+      takenHome: {
+        fixerName: SAMPLE_VOLUNTEER.name,
+        takenHomeAt: 1792229000000,
+      },
+    };
+
+    // Render TakenHomeTabPanel with a spec-compliant TakenHomeRepairEntry
+    await act(async () => {
+      root.render(
+        <UnsavedWorkProvider>
+          <TakenHomeTabPanel
+            entries={[
+              {
+                repairItem: takenHomeRepairItem,
+                sessionId: SAMPLE_SESSION.id,
+                sessionName: SAMPLE_SESSION.name,
+                sessionDate: SAMPLE_SESSION.date,
+                sessionStatus: SAMPLE_SESSION.status,
+                isTestSession: false,
+              },
+            ]}
+            volunteers={[SAMPLE_VOLUNTEER]}
+            loading={false}
+            // Pass organiser email and required callbacks
+            organizerEmail={MOCK_ADMIN_USER.email}
+            onRefresh={vi.fn()}
+            onOpenPhotoViewer={vi.fn()}
+            onModalOpenChange={vi.fn()}
+          />
+        </UnsavedWorkProvider>
+      );
+    });
+
+    // Audit the cross-session Taken Home table view
+    const tableViolations = await runAxeWcagAudit(container);
+    expect(tableViolations).toEqual([]);
+
+    // Open the Organiser Taken-Home Repair Modal and audit the modal dialog
+    const openModalBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Complete / Update')
+    );
+    expect(openModalBtn).toBeDefined();
+    await act(async () => {
+      openModalBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    // Verify modal dialog passes axe-core WCAG 2.2 Level AA audit
+    const modalViolations = await runAxeWcagAudit(container);
+    expect(modalViolations).toEqual([]);
   });
 });

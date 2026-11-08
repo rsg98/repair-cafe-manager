@@ -6,7 +6,16 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SessionAnalytics, ItemStatus, RepairItem, RepairOutcome } from '../src/types';
+import { deleteField } from 'firebase/firestore';
+import {
+  SessionAnalytics,
+  ItemStatus,
+  RepairItem,
+  RepairOutcome,
+  Volunteer,
+  Session,
+  TakenHomeRepairEntry,
+} from '../src/types';
 import { exportAnalyticsToCsv } from '../src/services/analyticsService';
 import { 
   removeUndefined, 
@@ -33,7 +42,15 @@ import {
   requiresTakeHomeConfirmation,
   calculateNextStatusOnRepair,
   REPAIR_ITEM_LOOKUP_INPUT_PROPS,
-  isSafeFromCreditCardAutofill
+  isSafeFromCreditCardAutofill,
+  isUnresolvedTakenHomeItem,
+  isResolvedTakenHomeItem,
+  isCustomerPiiRedacted,
+  calculateNextStatusOnOrganiserTakenHomeUpdate,
+  buildOrganiserTakenHomeUpdatePayload,
+  matchVolunteerByFixerName,
+  mergeActiveSessionTakenHomeEntries,
+  sortAndFilterTakenHomeEntries,
 } from '../src/services/repairService';
 import { resolvePinKeyInput } from '../src/components/common/PinModal';
 
@@ -1192,6 +1209,365 @@ describe('Terminal Status and Card Assignment Rules (Issue #5 & Issue #12)', () 
       expect(findExcludedItemMatch('Electric Toothbrush')).toBeNull();
       expect(findExcludedItemMatch('Electric')).toBeNull();
       expect(findExcludedItemMatch('')).toBeNull();
+    });
+  });
+
+  // Verify Organiser Taken Home Management, Deferred GDPR Redaction predicates, and helper logic
+  describe('Organiser Taken Home Management & Deferred GDPR Helpers', () => {
+    it('preserves Firestore FieldValue sentinels (deleteField) inside removeUndefined', () => {
+      // Ensure deleteField() sentinel retains its prototype and _methodName after sanitization
+      const sentinel = deleteField();
+      const cleaned = removeUndefined({
+        status: 'COMPLETED',
+        'item.weightKg': sentinel,
+        nested: {
+          optionalField: undefined,
+          clearedField: sentinel,
+        },
+      });
+
+      // Verify undefined is stripped while the FieldValue sentinel reference is untouched
+      expect(cleaned['item.weightKg']).toBe(sentinel);
+      expect(cleaned.nested.clearedField).toBe(sentinel);
+      expect('optionalField' in cleaned.nested).toBe(false);
+    });
+
+    it('identifies unresolved vs resolved taken-home items and customer PII redaction status accurately', () => {
+      // Unresolved item currently in TAKEN_HOME status
+      const unresolvedItem: RepairItem = {
+        id: 'rep-th-1',
+        sessionId: 'sess-1',
+        registrationId: 'reg-1',
+        referenceToken: 'REF-TH01',
+        status: 'TAKEN_HOME',
+        wasTakenHome: true,
+        // Sample 240V mains radio item
+        item: {
+          category: 'ELECTRICAL',
+          brandModel: 'Roberts Radio',
+          faultDescription: 'No FM reception',
+          powerType: 'MAINS_240V',
+        },
+        // Initial taken-home repair record
+        repair: {
+          fixerName: 'Alice Tester',
+          repairTimeMinutes: 30,
+          outcome: 'TAKEN_HOME',
+        },
+      };
+
+      // Resolved item that was previously taken home and later completed as FIXED
+      const resolvedItem: RepairItem = {
+        ...unresolvedItem,
+        id: 'rep-th-2',
+        status: 'COMPLETED',
+        wasTakenHome: true,
+        // Updated final repair record
+        repair: {
+          fixerName: 'Alice Tester',
+          repairTimeMinutes: 60,
+          outcome: 'FIXED',
+        },
+        // Populated TakenHomeMetadata with spec-compliant fields
+        takenHome: {
+          fixerName: 'Alice Tester',
+          takenHomeAt: 1000,
+          resolvedAt: 2000,
+          resolvedBy: 'info@suttonrepaircafe.org.uk',
+          finalOutcome: 'FIXED',
+        },
+      };
+
+      // Verify unresolved vs resolved predicates
+      expect(isUnresolvedTakenHomeItem(unresolvedItem)).toBe(true);
+      expect(isResolvedTakenHomeItem(unresolvedItem)).toBe(false);
+      expect(isUnresolvedTakenHomeItem(resolvedItem)).toBe(false);
+      expect(isResolvedTakenHomeItem(resolvedItem)).toBe(true);
+
+      // Verify filterRepairs supports the 'TAKEN_HOME' queue filter option
+      expect(filterRepairs([unresolvedItem, resolvedItem], '', 'TAKEN_HOME').map((r) => r.id)).toEqual([
+        'rep-th-1',
+      ]);
+
+      // Verify customer PII redaction predicate
+      expect(isCustomerPiiRedacted(null)).toBe(true);
+      expect(isCustomerPiiRedacted({ firstName: '[REDACTED]', redactedAt: 12345 })).toBe(true);
+      expect(isCustomerPiiRedacted({ firstName: 'Sarah', contactPhone: '07700900111' })).toBe(false);
+    });
+
+    it('routes organiser taken-home updates to TAKEN_HOME for interim saves and COMPLETED for final resolutions (including MAINS_240V)', () => {
+      // Interim progress note stays in TAKEN_HOME
+      expect(calculateNextStatusOnOrganiserTakenHomeUpdate('TAKEN_HOME')).toBe('TAKEN_HOME');
+
+      // All final resolutions transition directly to COMPLETED (bypassing WAITING_PAT2 even for MAINS_240V)
+      expect(calculateNextStatusOnOrganiserTakenHomeUpdate('FIXED')).toBe('COMPLETED');
+      expect(calculateNextStatusOnOrganiserTakenHomeUpdate('PARTIAL')).toBe('COMPLETED');
+      expect(calculateNextStatusOnOrganiserTakenHomeUpdate('ADVICE_GIVEN')).toBe('COMPLETED');
+      expect(calculateNextStatusOnOrganiserTakenHomeUpdate('UNFIXABLE')).toBe('COMPLETED');
+
+      // Build interim update payload (retains PII, does not set resolvedAt)
+      const interimResult = buildOrganiserTakenHomeUpdatePayload({
+        fixerName: 'Alice Tester',
+        outcome: 'TAKEN_HOME',
+        repairTimeMinutes: 45,
+        diagnosis: 'Waiting on replacement capacitor',
+        repairNotes: 'Ordered part from supplier; spoke to customer on Tuesday.',
+        // Provide parts, weight, photo count, and organiser email
+        partsUsed: '100uF capacitor',
+        weightKg: 1.8,
+        totalPhotoCount: 1,
+        organizerEmail: 'info@suttonrepaircafe.org.uk',
+        now: 1760000000000,
+      });
+
+      // Verify interim result keeps status TAKEN_HOME and does not redact customer PII
+      expect(interimResult.shouldRedactCustomerPii).toBe(false);
+      expect(interimResult.nextStatus).toBe('TAKEN_HOME');
+      const interimTakenHome = interimResult.repairUpdates.takenHome as RepairItem['takenHome'];
+      expect(interimTakenHome?.fixerName).toBe('Alice Tester');
+      expect(interimTakenHome?.takenHomeAt).toBe(1760000000000);
+      expect(interimTakenHome?.resolvedAt).toBeUndefined();
+      expect(interimResult.repairUpdates['item.weightKg']).toBe(1.8);
+
+      // Build final resolution payload with weightKg cleared (undefined -> deleteField())
+      const finalResult = buildOrganiserTakenHomeUpdatePayload({
+        fixerName: 'Alice Tester',
+        outcome: 'FIXED',
+        repairTimeMinutes: 60,
+        diagnosis: 'Replaced faulty capacitor',
+        repairNotes: 'Tested and returned to customer on Saturday.',
+        // Clear weightKg to verify deleteField() sentinel and pass existing takenHome metadata
+        partsUsed: '100uF capacitor',
+        weightKg: undefined,
+        totalPhotoCount: 1,
+        existingTakenHome: interimTakenHome,
+        organizerEmail: 'info@suttonrepaircafe.org.uk',
+        now: 1760500000000,
+      });
+
+      // Verify final resolution transitions to COMPLETED, redacts PII, and stamps audit fields
+      expect(finalResult.shouldRedactCustomerPii).toBe(true);
+      expect(finalResult.nextStatus).toBe('COMPLETED');
+      expect(finalResult.repairUpdates.customerName).toBe('[REDACTED]');
+      const finalTakenHome = finalResult.repairUpdates.takenHome as RepairItem['takenHome'];
+      expect(finalTakenHome?.takenHomeAt).toBe(1760000000000);
+      expect(finalTakenHome?.resolvedAt).toBe(1760500000000);
+      expect(finalTakenHome?.resolvedBy).toBe('info@suttonrepaircafe.org.uk');
+      expect(finalTakenHome?.finalOutcome).toBe('FIXED');
+      // Verify cleared weightKg uses Firestore deleteField() sentinel
+      expect(finalResult.repairUpdates['item.weightKg']).toEqual(deleteField());
+    });
+
+    it('matches volunteer contact profiles by exact name or compound fixer strings', () => {
+      // Sample volunteer register records with emergency contact fields
+      const volunteers: Volunteer[] = [
+        {
+          id: 'v-alice',
+          name: 'Alice Tester',
+          email: 'alice@example.org',
+          phone: '07700900111',
+          // Standard volunteer capabilities and emergency contact details
+          isOrganiser: false,
+          isPatTrained: true,
+          inducted: true,
+          emergencyContactName: 'Bob Tester',
+          emergencyContactPhone: '07700900222',
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+        {
+          id: 'v-bob',
+          name: 'Bob Builder',
+          email: 'bob@example.org',
+          // Second volunteer record for compound fixer name testing
+          isOrganiser: false,
+          isPatTrained: false,
+          inducted: true,
+          emergencyContactName: 'Wendy Builder',
+          emergencyContactPhone: '07700900333',
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      ];
+
+      // Exact case-insensitive match
+      expect(matchVolunteerByFixerName('alice tester', volunteers)?.id).toBe('v-alice');
+      // Compound fixer attribution ("Unknown Fixer & Bob Builder") falls back to matching Bob
+      expect(matchVolunteerByFixerName('Unknown Fixer & Bob Builder', volunteers)?.id).toBe('v-bob');
+      // Compound fixer attribution ("Alice Tester / Bob Builder") matches first listed volunteer Alice
+      expect(matchVolunteerByFixerName('Alice Tester / Bob Builder', volunteers)?.id).toBe('v-alice');
+      // Blank or unknown name returns null
+      expect(matchVolunteerByFixerName('', volunteers)).toBeNull();
+      expect(matchVolunteerByFixerName('Unknown Fixer', volunteers)).toBeNull();
+    });
+
+    it('merges active session live items and sorts/filters cross-session taken-home entries', () => {
+      // Past finalized session fixture
+      const pastSession: Session = {
+        id: 'sess-2026-09',
+        name: 'September 2026',
+        date: '2026-09-19',
+        status: 'FINALIZED',
+        volunteerPinHash: 'hash',
+        cardRangeStart: 1,
+        cardRangeEnd: 50,
+        createdAt: 1000,
+      };
+      // Active running session fixture
+      const activeSession: Session = {
+        id: 'sess-2026-10',
+        name: 'October 2026',
+        date: '2026-10-17',
+        status: 'ACTIVE',
+        volunteerPinHash: 'hash',
+        cardRangeStart: 1,
+        cardRangeEnd: 50,
+        createdAt: 2000,
+      };
+
+      // Persisted cross-session entries from the September session (1 unresolved, 1 resolved)
+      const persistedEntries: TakenHomeRepairEntry[] = [
+        {
+          sessionId: pastSession.id,
+          sessionName: pastSession.name,
+          sessionDate: pastSession.date,
+          sessionStatus: pastSession.status,
+          isTestSession: false,
+          // Older unresolved September item (takenHomeAt: 1000)
+          repairItem: {
+            id: 'rep-sep-unresolved',
+            sessionId: pastSession.id,
+            registrationId: 'reg-1',
+            referenceToken: 'REF-SEP1',
+            cardNumber: 12,
+            status: 'TAKEN_HOME',
+            wasTakenHome: true,
+            createdAt: 1000,
+            takenHome: {
+              fixerName: 'Alice Tester',
+              takenHomeAt: 1000,
+            },
+            // Item details for Sony Walkman
+            item: {
+              category: 'ELECTRICAL',
+              brandModel: 'Sony Walkman',
+              faultDescription: 'Belt snapped',
+              powerType: 'BATTERY_LOW_VOLTAGE',
+            },
+            // Fixer record for Sony Walkman
+            repair: {
+              fixerName: 'Alice Tester',
+              repairTimeMinutes: 30,
+              outcome: 'TAKEN_HOME',
+            },
+          },
+        },
+        {
+          sessionId: pastSession.id,
+          sessionName: pastSession.name,
+          sessionDate: pastSession.date,
+          sessionStatus: pastSession.status,
+          isTestSession: false,
+          // Resolved September item (resolvedAt: 1500)
+          repairItem: {
+            id: 'rep-sep-resolved',
+            sessionId: pastSession.id,
+            registrationId: 'reg-2',
+            referenceToken: 'REF-SEP2',
+            cardNumber: 15,
+            status: 'COMPLETED',
+            wasTakenHome: true,
+            createdAt: 1100,
+            takenHome: {
+              fixerName: 'Dave Clockmaker',
+              takenHomeAt: 1100,
+              resolvedAt: 1500,
+              finalOutcome: 'FIXED',
+            },
+            // Item details for Cuckoo Clock
+            item: {
+              category: 'MECHANICAL',
+              brandModel: 'Cuckoo Clock',
+              faultDescription: 'Bellows torn',
+              powerType: 'MECHANICAL',
+            },
+            // Fixer record for Cuckoo Clock
+            repair: {
+              fixerName: 'Dave Clockmaker',
+              repairTimeMinutes: 90,
+              outcome: 'FIXED',
+            },
+          },
+        },
+      ];
+
+      // Live active-session item taken home in October (takenHomeAt: 2000)
+      const liveActiveRepairs: RepairItem[] = [
+        {
+          id: 'rep-oct-live',
+          sessionId: activeSession.id,
+          registrationId: 'reg-3',
+          referenceToken: 'REF-OCT1',
+          cardNumber: 4,
+          status: 'TAKEN_HOME',
+          wasTakenHome: true,
+          createdAt: 2000,
+          takenHome: {
+            fixerName: 'Sarah Stitch',
+            takenHomeAt: 2000,
+          },
+          // Item details for Barbour Jacket
+          item: {
+            category: 'TEXTILES',
+            brandModel: 'Barbour Jacket',
+            faultDescription: 'Lining replacement',
+            powerType: 'NOT_APPLICABLE',
+          },
+          // Fixer record for Barbour Jacket
+          repair: {
+            fixerName: 'Sarah Stitch',
+            repairTimeMinutes: 45,
+            outcome: 'TAKEN_HOME',
+          },
+        },
+      ];
+
+      // Merge live active-session repairs with persisted cross-session entries
+      const merged = mergeActiveSessionTakenHomeEntries(
+        persistedEntries,
+        activeSession,
+        liveActiveRepairs
+      );
+      expect(merged).toHaveLength(3);
+
+      // Default view (includeResolved: false) returns only the 2 unresolved items sorted oldest-first (REF-SEP1 then REF-OCT1)
+      const unresolvedOnly = sortAndFilterTakenHomeEntries(merged, {
+        searchTerm: '',
+        includeResolved: false,
+      });
+      expect(unresolvedOnly.map((e) => e.repairItem.referenceToken)).toEqual([
+        'REF-SEP1',
+        'REF-OCT1',
+      ]);
+
+      // With includeResolved: true, unresolved items appear oldest-first followed by resolved history
+      const withHistory = sortAndFilterTakenHomeEntries(merged, {
+        searchTerm: '',
+        includeResolved: true,
+      });
+      expect(withHistory.map((e) => e.repairItem.referenceToken)).toEqual([
+        'REF-SEP1',
+        'REF-OCT1',
+        'REF-SEP2',
+      ]);
+
+      // Search filters by fixer name, brand/model, reference token, or session name
+      const searchDave = sortAndFilterTakenHomeEntries(merged, {
+        searchTerm: 'Clockmaker',
+        includeResolved: true,
+      });
+      expect(searchDave).toHaveLength(1);
+      expect(searchDave[0].repairItem.referenceToken).toBe('REF-SEP2');
     });
   });
 });

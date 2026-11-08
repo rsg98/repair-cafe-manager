@@ -24,8 +24,12 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { 
+  Session,
+  Volunteer,
   RepairItem, 
   RepairPhoto,
+  TakenHomeMetadata,
+  TakenHomeRepairEntry,
   MAX_PHOTOS_PER_REPAIR,
   PrivateCustomerData, 
   CustomerRegistrationSubmission, 
@@ -40,6 +44,7 @@ import {
 import { cafeConfig } from '../config/cafe.config';
 import { ITEM_TYPE_SUGGESTIONS, type ItemTypeSuggestion } from '../config/itemTypeSuggestions';
 import { validatePhotoDataUrl } from '../utils/imageCompression';
+import { recalculateSessionAnalytics } from './sessionService';
 
 export { ITEM_TYPE_SUGGESTIONS, type ItemTypeSuggestion };
 
@@ -70,6 +75,12 @@ export function removeUndefined<T>(obj: T): T {
   // Recursively sanitise array elements
   if (Array.isArray(obj)) {
     return obj.map(item => removeUndefined(item)) as unknown as T;
+  }
+
+  // Preserve non-plain objects such as Firestore FieldValue sentinels (e.g. deleteField())
+  const proto = Object.getPrototypeOf(obj);
+  if (proto !== null && proto !== Object.prototype) {
+    return obj;
   }
 
   // Copy only defined, non-NaN entries into a clean plain object
@@ -465,6 +476,312 @@ export function calculateNextStatusOnRepair(outcome: RepairOutcome, isMainsPower
  */
 export function requiresTakeHomeConfirmation(outcome: RepairOutcome): boolean {
   return outcome === 'TAKEN_HOME';
+}
+
+/**
+ * Determines whether a repair item is currently an unresolved `TAKEN_HOME` item
+ * (out with a volunteer fixer and awaiting off-site repair completion).
+ */
+export function isUnresolvedTakenHomeItem(
+  item: Pick<RepairItem, 'status' | 'repair'> | null | undefined
+): boolean {
+  if (!item) return false;
+  // Match items in TAKEN_HOME status or non-completed items whose logged outcome is TAKEN_HOME
+  return (
+    item.status === 'TAKEN_HOME' ||
+    (item.status !== 'COMPLETED' && item.repair?.outcome === 'TAKEN_HOME')
+  );
+}
+
+/**
+ * Determines whether a repair item was previously taken home by a volunteer fixer
+ * and has since been resolved (`status === 'COMPLETED'`).
+ */
+export function isResolvedTakenHomeItem(
+  item: Pick<RepairItem, 'status' | 'wasTakenHome' | 'takenHome' | 'repair'> | null | undefined
+): boolean {
+  if (!item || isUnresolvedTakenHomeItem(item)) return false;
+  // Identify resolved items via wasTakenHome flag or takenHome audit metadata
+  return Boolean(item.wasTakenHome) || Boolean(item.takenHome);
+}
+
+/**
+ * Determines whether a customer's `PrivateCustomerData` record is missing or has
+ * already been scrubbed to `[REDACTED]` under UK GDPR.
+ */
+export function isCustomerPiiRedacted(
+  pii: Pick<PrivateCustomerData, 'firstName' | 'redactedAt'> | null | undefined
+): boolean {
+  // Treat missing records, blank names, "[REDACTED]" placeholders, or stamped redactedAt as redacted
+  if (!pii || !pii.firstName) return true;
+  const trimmed = pii.firstName.trim();
+  return trimmed === '' || trimmed === '[REDACTED]' || Boolean(pii.redactedAt);
+}
+
+/**
+ * Calculates the next item lifecycle status when an organiser updates or completes
+ * a `TAKEN_HOME` repair record on the Front Desk (`/frontdesk`).
+ *
+ * Interim progress updates (`outcome === 'TAKEN_HOME'`) keep status as `'TAKEN_HOME'`.
+ * Final outcomes (`FIXED`, `PARTIAL`, `ADVICE_GIVEN`, `UNFIXABLE`) transition directly
+ * to `'COMPLETED'` because off-site repairs are returned under a private arrangement.
+ */
+export function calculateNextStatusOnOrganiserTakenHomeUpdate(outcome: RepairOutcome): ItemStatus {
+  return outcome === 'TAKEN_HOME' ? 'TAKEN_HOME' : 'COMPLETED';
+}
+
+/**
+ * Pure builder that constructs the Firestore update payload and GDPR redaction decision
+ * when an organiser updates or resolves a `TAKEN_HOME` item from the Front Desk.
+ */
+export function buildOrganiserTakenHomeUpdatePayload(params: {
+  /** Volunteer fixer name responsible for the off-site repair. */
+  fixerName: string;
+  /** Selected repair outcome ('TAKEN_HOME' for interim notes, or final outcome). */
+  outcome: RepairOutcome;
+  /** Cumulative repair time in minutes. */
+  repairTimeMinutes: number;
+  /** Root-cause diagnosis description. */
+  diagnosis: string;
+  /** Repair actions or interim progress notes. */
+  repairNotes: string;
+  /** Optional replacement parts or materials used. */
+  partsUsed?: string;
+  /** Optional item weight in kilograms for landfill diversion tracking. */
+  weightKg?: number;
+  /** Total count of attached item photos (0..MAX_PHOTOS_PER_REPAIR). */
+  totalPhotoCount: number;
+  /** Existing takenHome audit metadata if previously set. */
+  existingTakenHome?: TakenHomeMetadata;
+  /** Email of the organiser recording the update or resolution. */
+  organizerEmail?: string;
+  /** Optional epoch timestamp override for deterministic unit testing. */
+  now?: number;
+}): {
+  /** Next lifecycle status ('TAKEN_HOME' or 'COMPLETED'). */
+  nextStatus: ItemStatus;
+  /** Whether private/customer PII must be redacted in the same batch. */
+  shouldRedactCustomerPii: boolean;
+  /** Sanitised update payload for the parent repair document. */
+  repairUpdates: Record<string, unknown>;
+} {
+  // Resolve timestamp, trimmed fixer name, next status, and whether customer PII should be redacted
+  const timestamp = params.now ?? Date.now();
+  const trimmedFixer = params.fixerName.trim();
+  const nextStatus = calculateNextStatusOnOrganiserTakenHomeUpdate(params.outcome);
+  const shouldRedactCustomerPii = params.outcome !== 'TAKEN_HOME';
+  const originalTakenHomeAt = params.existingTakenHome?.takenHomeAt ?? timestamp;
+
+  // Build takenHome audit metadata for either interim progress or final resolution
+  let takenHomePayload: TakenHomeMetadata;
+  if (params.outcome === 'TAKEN_HOME') {
+    // Interim progress save preserves original takenHomeAt without stamping resolvedAt
+    takenHomePayload = {
+      fixerName: trimmedFixer,
+      takenHomeAt: originalTakenHomeAt,
+    };
+  } else {
+    // Final resolution stamps resolvedAt, resolvedBy organiser email, and finalOutcome
+    takenHomePayload = {
+      fixerName: trimmedFixer,
+      takenHomeAt: originalTakenHomeAt,
+      resolvedAt: timestamp,
+      resolvedBy: params.organizerEmail?.trim() || undefined,
+      finalOutcome: params.outcome,
+    };
+  }
+
+  // Assemble the parent repair document update payload
+  const rawUpdates: Record<string, unknown> = {
+    status: nextStatus,
+    wasTakenHome: true,
+    takenHome: takenHomePayload,
+    // Populate nested repair record with updated fixer notes, time, and photo count
+    repair: {
+      fixerName: trimmedFixer,
+      outcome: params.outcome,
+      repairTimeMinutes: params.repairTimeMinutes,
+      diagnosis: params.diagnosis.trim(),
+      // Trim notes, optional parts, and clamp photoCount to >= 0
+      repairNotes: params.repairNotes.trim(),
+      partsUsed: params.partsUsed?.trim() || undefined,
+      photoCount: Math.max(0, params.totalPhotoCount),
+      repairedAt: timestamp,
+    },
+    updatedAt: timestamp,
+  };
+
+  // Redact public customerName on the repair document when resolving the item
+  if (shouldRedactCustomerPii) {
+    rawUpdates.customerName = '[REDACTED]';
+  }
+
+  // Persist positive weightKg or clear previously saved weightKg if emptied
+  if (params.weightKg !== undefined && !Number.isNaN(params.weightKg) && params.weightKg > 0) {
+    rawUpdates['item.weightKg'] = params.weightKg;
+  } else {
+    rawUpdates['item.weightKg'] = deleteField();
+  }
+
+  // Return next status, PII redaction flag, and undefined-stripped repair update payload
+  return {
+    nextStatus,
+    shouldRedactCustomerPii,
+    repairUpdates: removeUndefined(rawUpdates),
+  };
+}
+
+/**
+ * Matches a repair item's `fixerName` against the Volunteer Register (`Volunteer[]`)
+ * using case-insensitive, whitespace-normalised matching, falling back to splitting
+ * compound fixer names (e.g. "Alice Tester & Bob Builder").
+ */
+export function matchVolunteerByFixerName(
+  fixerName: string | undefined | null,
+  volunteers: Volunteer[]
+): Volunteer | null {
+  // Normalise whitespace and casing before comparing volunteer names
+  const normalise = (val: string) => val.trim().toLowerCase().replace(/\s+/g, ' ');
+  const queryName = normalise(fixerName || '');
+  if (!queryName || !Array.isArray(volunteers) || volunteers.length === 0) {
+    return null;
+  }
+
+  // 1. Check for a direct whole-string match against registered volunteers
+  const exactMatch = volunteers.find((v) => normalise(v.name) === queryName);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  // 2. Fallback: split compound fixer strings ("Alice & Bob", "Alice / Bob") and match the first registered volunteer
+  const tokens = queryName
+    .split(/\s*(?:&|\/|,|\band\b)\s*/i)
+    .map(normalise)
+    .filter(Boolean);
+  // Iterate through each individual name token in order
+  for (const token of tokens) {
+    const tokenMatch = volunteers.find((v) => normalise(v.name) === token);
+    if (tokenMatch) {
+      return tokenMatch;
+    }
+  }
+
+  // Return null when no volunteer in the register matches
+  return null;
+}
+
+/**
+ * Overlays live active-session repairs (from `useRepairs`) onto cross-session
+ * `TakenHomeRepairEntry` records so any item marked `TAKEN_HOME` during an active
+ * session appears immediately on `/frontdesk` with zero extra Firestore reads.
+ */
+export function mergeActiveSessionTakenHomeEntries(
+  persistedEntries: TakenHomeRepairEntry[],
+  activeSession: Session | null,
+  activeRepairs: RepairItem[]
+): TakenHomeRepairEntry[] {
+  // Return persisted entries directly when no active session is running or if it is a test session
+  if (!activeSession || activeSession.isTest) {
+    return persistedEntries;
+  }
+
+  // Retain entries from all other sessions and replace active-session entries with live snapshot items
+  const otherSessionEntries = persistedEntries.filter(
+    (entry) => entry.sessionId !== activeSession.id
+  );
+  // Map live active-session repairs that are currently or previously taken home
+  const liveActiveEntries: TakenHomeRepairEntry[] = activeRepairs
+    .filter((r) => isUnresolvedTakenHomeItem(r) || isResolvedTakenHomeItem(r))
+    .map((repairItem) => ({
+      repairItem,
+      // Attach active session metadata to each live taken-home entry
+      sessionId: activeSession.id,
+      sessionName: activeSession.name,
+      sessionDate: activeSession.date,
+      sessionStatus: activeSession.status,
+      isTestSession: Boolean(activeSession.isTest),
+    }));
+
+  // Combine live active-session entries ahead of historical session entries
+  return [...liveActiveEntries, ...otherSessionEntries];
+}
+
+/**
+ * Filters and sorts `TakenHomeRepairEntry` records for the Front Desk Taken Home tab.
+ * Unresolved items are sorted oldest-first (longest out with a volunteer at the top),
+ * followed by resolved items sorted newest-first when `includeResolved` is enabled.
+ */
+export function sortAndFilterTakenHomeEntries(
+  entries: TakenHomeRepairEntry[],
+  options?: {
+    /** Optional search query matching item, token, card #, fixer, session, or customer. */
+    searchTerm?: string;
+    /** Whether to include resolved taken-home items (`wasTakenHome === true`). */
+    includeResolved?: boolean;
+    /** Map of hydrated PrivateCustomerData keyed by `${sessionId}/${repairId}`. */
+    customerPiiByRepairKey?: Record<string, PrivateCustomerData | null | undefined>;
+  }
+): TakenHomeRepairEntry[] {
+  // Normalise search term, card number query, and resolved history toggle
+  const term = (options?.searchTerm || '').trim().toLowerCase();
+  const cardTerm = term.replace(/^#/, '');
+  const includeResolved = Boolean(options?.includeResolved);
+  const piiMap = options?.customerPiiByRepairKey || {};
+
+  // Filter entries by resolution state and search term across item, fixer, session, and customer PII
+  const filtered = entries.filter((entry) => {
+    const r = entry.repairItem;
+    const isUnresolved = isUnresolvedTakenHomeItem(r);
+    const isResolved = isResolvedTakenHomeItem(r);
+    if (!isUnresolved && !(includeResolved && isResolved)) {
+      return false;
+    }
+    if (!term) return true;
+
+    // Resolve customer PII from the hydrated map if unredacted
+    const pii = piiMap[`${entry.sessionId}/${r.id}`];
+    const customerFirstName = !isCustomerPiiRedacted(pii) ? (pii?.firstName || '').toLowerCase() : '';
+    const customerPhone = !isCustomerPiiRedacted(pii) ? (pii?.contactPhone || '').toLowerCase() : '';
+    const fixerName = (r.repair?.fixerName || r.takenHome?.fixerName || '').toLowerCase();
+    const matchesCard = r.cardNumber != null && String(r.cardNumber) === cardTerm;
+
+    // Match against card #, item brand/model/fault, ref token, session metadata, fixer, or customer PII
+    return (
+      matchesCard ||
+      r.item.brandModel.toLowerCase().includes(term) ||
+      r.item.faultDescription.toLowerCase().includes(term) ||
+      r.referenceToken.toLowerCase().includes(term) ||
+      // Also match session name/date, volunteer fixer name, or retained customer contact details
+      entry.sessionName.toLowerCase().includes(term) ||
+      entry.sessionDate.toLowerCase().includes(term) ||
+      fixerName.includes(term) ||
+      customerFirstName.includes(term) ||
+      customerPhone.includes(term)
+    );
+  });
+
+  // Sort unresolved items first (oldest takenHomeAt ascending), then resolved items (newest resolvedAt descending)
+  return [...filtered].sort((a, b) => {
+    const unresolvedA = isUnresolvedTakenHomeItem(a.repairItem);
+    const unresolvedB = isUnresolvedTakenHomeItem(b.repairItem);
+    if (unresolvedA !== unresolvedB) {
+      return unresolvedA ? -1 : 1;
+    }
+
+    if (unresolvedA) {
+      // Oldest unresolved items appear first so organisers see long-running off-site repairs
+      const timeA = a.repairItem.takenHome?.takenHomeAt ?? getRegistrationTimestamp(a.repairItem) ?? 0;
+      const timeB = b.repairItem.takenHome?.takenHomeAt ?? getRegistrationTimestamp(b.repairItem) ?? 0;
+      if (timeA !== timeB) return timeA - timeB;
+    } else {
+      // Most recently resolved items appear first in the resolved history section
+      const resolvedA = a.repairItem.takenHome?.resolvedAt ?? a.repairItem.updatedAt ?? 0;
+      const resolvedB = b.repairItem.takenHome?.resolvedAt ?? b.repairItem.updatedAt ?? 0;
+      if (resolvedA !== resolvedB) return resolvedB - resolvedA;
+    }
+
+    return (a.repairItem.id || '').localeCompare(b.repairItem.id || '');
+  });
 }
 
 /**
@@ -1113,15 +1430,17 @@ export async function submitRepairRecord(params: {
   partsUsed?: string;
   weightKg?: number;
   isMainsPower: boolean;
+  existingTakenHome?: TakenHomeMetadata;
   newPhotos?: Array<Omit<RepairPhoto, 'id'>>;
   existingPhotoCount?: number;
 }): Promise<ItemStatus> {
-  // Unpack repair fields, weight, and optional photo attachments
+  // Unpack repair fields, weight, takenHome metadata, and optional photo attachments
   const {
     sessionId,
     repairId,
     isMainsPower,
     weightKg,
+    existingTakenHome,
     newPhotos = [],
     existingPhotoCount = 0,
     ...repairData
@@ -1154,12 +1473,24 @@ export async function submitRepairRecord(params: {
     repairedAt: now
   };
 
-  // Assemble document updates including optional landfill diversion weight
+  // Assemble document updates including takenHome lineage and optional landfill diversion weight
   const updates: Record<string, unknown> = {
     status: nextStatus,
     repair: repairPayload,
     updatedAt: now
   };
+  if (params.outcome === 'TAKEN_HOME') {
+    // Stamp wasTakenHome and preserve original takenHomeAt if re-editing during the active session
+    updates.wasTakenHome = true;
+    updates.takenHome = {
+      fixerName: params.fixerName.trim(),
+      takenHomeAt: existingTakenHome?.takenHomeAt ?? now
+    };
+  } else {
+    // Clear wasTakenHome and takenHome if a fixer changes away from TAKEN_HOME during the active session
+    updates.wasTakenHome = false;
+    updates.takenHome = deleteField();
+  }
   if (weightKg !== undefined && !Number.isNaN(weightKg)) {
     updates['item.weightKg'] = weightKg;
   }
@@ -1302,6 +1633,189 @@ export async function getPrivateCustomerData(
     console.error(`[getPrivateCustomerData] Failed to read private customer data for repair ${repairId}:`, err);
     return null;
   }
+}
+
+/**
+ * Fetches all taken-home repair items (both unresolved `status === 'TAKEN_HOME'`
+ * and resolved `wasTakenHome === true`) across non-test sessions using targeted
+ * single-field collection queries that require zero custom composite indexes.
+ */
+export async function listTakenHomeRepairs(options?: {
+  includeTestSessions?: boolean;
+}): Promise<TakenHomeRepairEntry[]> {
+  // Fetch all session documents and filter out test sessions unless explicitly included
+  const sessionsSnap = await getDocs(collection(db, 'sessions'));
+  const sessions = sessionsSnap.docs
+    .map((d) => ({ ...(d.data() as Session), id: d.id }))
+    .filter((s) => options?.includeTestSessions || !s.isTest);
+
+  // Query each session's repairs subcollection in parallel for TAKEN_HOME or wasTakenHome items
+  const perSessionResults = await Promise.all(
+    sessions.map(async (sessionDoc) => {
+      const repairsCol = collection(db, 'sessions', sessionDoc.id, 'repairs');
+      const [unresolvedSnap, flaggedSnap] = await Promise.all([
+        getDocs(query(repairsCol, where('status', '==', 'TAKEN_HOME'))),
+        getDocs(query(repairsCol, where('wasTakenHome', '==', true))),
+      ]);
+
+      // Deduplicate matching repair documents by id within the session
+      const seenById = new Map<string, RepairItem>();
+      for (const snap of [unresolvedSnap, flaggedSnap]) {
+        for (const docSnap of snap.docs) {
+          seenById.set(docSnap.id, { ...(docSnap.data() as RepairItem), id: docSnap.id });
+        }
+      }
+
+      // Wrap each matched RepairItem with its parent Session metadata
+      return Array.from(seenById.values()).map<TakenHomeRepairEntry>((repairItem) => ({
+        repairItem,
+        sessionId: sessionDoc.id,
+        sessionName: sessionDoc.name,
+        sessionDate: sessionDoc.date,
+        sessionStatus: sessionDoc.status,
+        isTestSession: Boolean(sessionDoc.isTest),
+      }));
+    })
+  );
+
+  // Flatten and sort entries (unresolved oldest-first, resolved newest-first)
+  return sortAndFilterTakenHomeEntries(perSessionResults.flat(), {
+    includeResolved: true,
+  });
+}
+
+/**
+ * Submits an organiser update or final resolution for a `TAKEN_HOME` item from
+ * the Front Desk (`/frontdesk`).
+ *
+ * - Interim updates (`outcome === 'TAKEN_HOME'`) preserve `status = 'TAKEN_HOME'` and retain `private/customer` PII.
+ * - Final outcomes (`FIXED`, `PARTIAL`, `ADVICE_GIVEN`, `UNFIXABLE`) transition `status` to `'COMPLETED'`,
+ *   atomically scrub `private/customer` PII to `[REDACTED]`, and recalculate `analytics/{sessionId}`.
+ *
+ * Architectural Note: Kept as a single cohesive function (>50 lines) so photo validation,
+ * repair update, and deferred UK GDPR PII redaction commit atomically in a single `writeBatch`.
+ */
+export async function submitOrganiserTakenHomeUpdate(params: {
+  /** Parent session document ID. */
+  sessionId: string;
+  /** Target repair document ID. */
+  repairId: string;
+  /** Volunteer fixer name. */
+  fixerName: string;
+  /** Selected repair outcome ('TAKEN_HOME' or final resolution outcome). */
+  outcome: RepairOutcome;
+  /** Total repair duration in minutes. */
+  repairTimeMinutes: number;
+  /** Root-cause diagnosis text. */
+  diagnosis: string;
+  /** Repair actions or interim progress notes. */
+  repairNotes: string;
+  /** Optional replacement parts or materials used. */
+  partsUsed?: string;
+  /** Optional item weight in kg for landfill diversion calculations. */
+  weightKg?: number;
+  /** Existing takenHome metadata object if present on the item. */
+  existingTakenHome?: TakenHomeMetadata;
+  /** Signed-in organiser email for resolution audit attribution. */
+  organizerEmail?: string;
+  /** Newly staged compressed item photos to persist in this batch. */
+  newPhotos?: Array<Omit<RepairPhoto, 'id'>>;
+  /** Count of existing saved photos already attached to the item. */
+  existingPhotoCount?: number;
+}): Promise<{ nextStatus: ItemStatus; piiRedacted: boolean }> {
+  // Enforce the maximum per-item photo limit (MAX_PHOTOS_PER_REPAIR = 2)
+  const newPhotos = params.newPhotos || [];
+  const baseCount = Math.max(0, params.existingPhotoCount ?? 0);
+  const totalPhotoCount = baseCount + newPhotos.length;
+  if (totalPhotoCount > MAX_PHOTOS_PER_REPAIR) {
+    throw new Error(`A maximum of ${MAX_PHOTOS_PER_REPAIR} photos can be attached to a repair item.`);
+  }
+
+  // Validate every newly staged photo against MIME type and 70,000-character Free Tier rules
+  for (const photo of newPhotos) {
+    const validation = validatePhotoDataUrl(photo.dataUrl);
+    if (!validation.valid) {
+      throw new Error(validation.error || 'Invalid compressed photo data.');
+    }
+  }
+
+  // Build the sanitised repair update payload and GDPR redaction decision
+  const now = Date.now();
+  const { nextStatus, shouldRedactCustomerPii, repairUpdates } =
+    buildOrganiserTakenHomeUpdatePayload({
+      fixerName: params.fixerName,
+      outcome: params.outcome,
+      repairTimeMinutes: params.repairTimeMinutes,
+      diagnosis: params.diagnosis,
+      repairNotes: params.repairNotes,
+      // Forward optional parts, weight, photo count, and organiser audit context
+      partsUsed: params.partsUsed,
+      weightKg: params.weightKg,
+      totalPhotoCount,
+      existingTakenHome: params.existingTakenHome,
+      organizerEmail: params.organizerEmail,
+      now,
+    });
+
+  // Queue new photos, parent repair update, and optional GDPR PII scrub in a single atomic batch
+  const batch = writeBatch(db);
+  const repairRef = doc(db, 'sessions', params.sessionId, 'repairs', params.repairId);
+  const photosCol = collection(db, 'sessions', params.sessionId, 'repairs', params.repairId, 'photos');
+
+  // Stage each newly compressed photo document inside the photos subcollection
+  for (const photo of newPhotos) {
+    const photoDocRef = doc(photosCol);
+    const photoDoc: RepairPhoto = {
+      id: photoDocRef.id,
+      dataUrl: photo.dataUrl,
+      mimeType: photo.mimeType,
+      width: Math.round(photo.width),
+      // Record dimensions, byte length, capture timestamp, and uploader attribution
+      height: Math.round(photo.height),
+      sizeBytes: photo.dataUrl.length,
+      capturedAt: photo.capturedAt || now,
+      uploadedBy: (photo.uploadedBy || params.fixerName || 'Organiser').trim().slice(0, 200),
+    };
+    batch.set(photoDocRef, removeUndefined(photoDoc));
+  }
+
+  // Queue the parent repair document update
+  batch.update(repairRef, repairUpdates);
+
+  // Immediately scrub visitor PII in private/customer when resolving with a final outcome
+  if (shouldRedactCustomerPii) {
+    const privateCustomerRef = doc(
+      db,
+      'sessions',
+      params.sessionId,
+      'repairs',
+      params.repairId,
+      'private',
+      'customer'
+    );
+    // Overwrite firstName with "[REDACTED]", delete contactPhone, and stamp redactedAt
+    batch.set(
+      privateCustomerRef,
+      {
+        firstName: '[REDACTED]',
+        contactPhone: deleteField(),
+        redactedAt: now,
+      },
+      { merge: true }
+    );
+  }
+
+  // Commit all photo writes, repair updates, and PII redaction atomically
+  await batch.commit();
+
+  // Recalculate analytics/{sessionId} if the parent session is already finalized
+  try {
+    await recalculateSessionAnalytics(params.sessionId);
+  } catch (err) {
+    console.warn('Could not recalculate session analytics after taken-home update:', err);
+  }
+
+  return { nextStatus, piiRedacted: shouldRedactCustomerPii };
 }
 
 /**

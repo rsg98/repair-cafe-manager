@@ -270,8 +270,44 @@ export interface RepairItem {
     certificateNotes?: string;
   };
 
+  // True if the item was taken home by a volunteer fixer (preserved after resolution to COMPLETED)
+  wasTakenHome?: boolean;
+  // Audit trail for taken-home custody release and subsequent organiser resolution
+  takenHome?: TakenHomeMetadata;
+
   createdAt?: number;
   updatedAt?: number;
+}
+
+/**
+ * Audit metadata tracking an item taken home by a volunteer fixer under a private arrangement
+ * and its subsequent resolution by a Repair Café organiser.
+ */
+export interface TakenHomeMetadata {
+  // Name of the volunteer fixer who took the item home
+  fixerName: string;
+  // Unix epoch timestamp (ms) when the item was first marked TAKEN_HOME
+  takenHomeAt: number;
+  // Unix epoch timestamp (ms) when an organiser completed and resolved the repair record
+  resolvedAt?: number;
+  // Email address of the organiser who resolved the taken-home item
+  resolvedBy?: string;
+  // Final repair outcome logged upon resolution (FIXED, PARTIAL, ADVICE_GIVEN, or UNFIXABLE)
+  finalOutcome?: Exclude<RepairOutcome, 'TAKEN_HOME'>;
+}
+
+/**
+ * Enriched taken-home repair record combining a RepairItem with its parent Session context
+ * for cross-session organiser display on the Front Desk (/frontdesk).
+ */
+export interface TakenHomeRepairEntry {
+  repairItem: RepairItem;
+  // Parent session metadata for cross-session sorting and display
+  sessionId: string;
+  sessionName: string;
+  sessionDate: string;
+  sessionStatus: 'ACTIVE' | 'FINALIZED';
+  isTestSession: boolean;
 }
 
 /**

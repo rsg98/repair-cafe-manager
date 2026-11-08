@@ -369,13 +369,15 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
         fixerName: fixerName.trim(),
         outcome,
         repairTimeMinutes,
+        // Forward diagnostic notes, parts, weight, photos, and existing takenHome metadata
         diagnosis: diagnosis.trim(),
         repairNotes: repairNotes.trim(),
         partsUsed: partsUsed.trim(),
         weightKg: parseFloat(weightKg) || undefined,
         isMainsPower: isMains,
         existingPhotoCount: existingPhotos.length,
-        newPhotos: stagedPhotos
+        newPhotos: stagedPhotos,
+        existingTakenHome: currentItem.takenHome
       });
 
       // Build confirmation banner explaining next station routing and saved photo count
@@ -1053,14 +1055,14 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                   Under Repair Café Terms &amp; Conditions (§6), taking an item off-site is a private arrangement between you and the visitor. It is no longer in Repair Café custody or covered by Repair Café insurance.
                 </p>
               </div>
-              {/* Checkpoint 2: Exchange contact details directly before GDPR session scrub */}
+              {/* Checkpoint 2: Exchange contact details directly & explain deferred organiser retention */}
               <div className="flex items-start gap-2.5">
                 <span className="h-5 w-5 rounded-full bg-amber-200 text-amber-900 font-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
                   2
                 </span>
                 <p>
                   <strong className="text-slate-900">Exchange Contact Details With the Visitor Now:</strong>{' '}
-                  Make sure you have taken down the visitor&apos;s phone number or email directly. All visitor contact details stored in this app are automatically scrubbed to <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-900">[REDACTED]</code> when today&apos;s session is closed (UK GDPR).
+                  Make sure you have taken down the visitor&apos;s phone number or email directly so you can coordinate return. For Taken Home items, Repair Café organisers also retain the visitor&apos;s contact details in restricted storage strictly to assist with status enquiries until the off-site repair is completed and resolved, at which point they are permanently scrubbed to <code className="font-mono bg-amber-100 px-1 py-0.5 rounded text-amber-900">[REDACTED]</code> (UK GDPR).
                 </p>
               </div>
               {/* Checkpoint 3: Return physical reusable card token to Front Desk */}

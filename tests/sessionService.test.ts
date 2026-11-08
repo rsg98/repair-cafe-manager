@@ -3,6 +3,7 @@ import { generateReferenceToken } from '../src/services/repairService';
 import {
   calculateSessionAnalytics,
   buildFinalizeSessionPrompt,
+  partitionRepairsForSessionRedaction,
 } from '../src/services/sessionService';
 import { filterAnalyticsForReporting, exportAnalyticsToCsv } from '../src/services/analyticsService';
 import { parseManageSessionsArgs } from '../src/utils/manageSessionsArgs';
@@ -419,6 +420,150 @@ describe('Finalize Session Prompt Builder (buildFinalizeSessionPrompt — Issue 
     const multiPhotoPrompt = buildFinalizeSessionPrompt('October 2026 - Seears Park', 4);
     expect(multiPhotoPrompt).toContain('4 item photos are attached to this session.');
     expect(multiPhotoPrompt).toContain('remain safely stored in Firebase after closing');
+  });
+
+  it('informs the organiser about deferred customer PII retention when unresolved TAKEN_HOME items exist', () => {
+    // Singular unresolved taken-home item notice
+    const singleTakenHomePrompt = buildFinalizeSessionPrompt('October 2026 - Seears Park', 0, 1);
+    expect(singleTakenHomePrompt).toContain('1 item is marked as Taken Home');
+    expect(singleTakenHomePrompt).toContain('in the organiser-only Taken Home tab');
+
+    // Plural unresolved taken-home items notice
+    const multiTakenHomePrompt = buildFinalizeSessionPrompt('October 2026 - Seears Park', 2, 3);
+    expect(multiTakenHomePrompt).toContain('3 items are marked as Taken Home');
+    expect(multiTakenHomePrompt).toContain('2 item photos are attached to this session.');
+  });
+});
+
+describe('Deferred GDPR Redaction Partitioning & Post-Session Analytics Recalculation', () => {
+  it('partitions session repairs into redactPrivateIds vs retainPrivateIds for unresolved TAKEN_HOME items', () => {
+    // Build sample repair list with 1 standard completed item, 1 unresolved taken-home item, and 1 resolved taken-home item
+    const items: Array<Pick<RepairItem, 'id' | 'status' | 'repair'>> = [
+      {
+        id: 'rep-standard',
+        status: 'COMPLETED',
+        repair: { fixerName: 'Alice', repairTimeMinutes: 30, outcome: 'FIXED' },
+      },
+      {
+        id: 'rep-taken-home-unresolved',
+        status: 'TAKEN_HOME',
+        repair: { fixerName: 'Bob', repairTimeMinutes: 45, outcome: 'TAKEN_HOME' },
+      },
+      {
+        id: 'rep-taken-home-already-resolved',
+        status: 'COMPLETED',
+        repair: { fixerName: 'Bob', repairTimeMinutes: 60, outcome: 'FIXED' },
+      },
+    ];
+
+    // Partition items and verify only the unresolved TAKEN_HOME item retains private/customer PII
+    const partitioned = partitionRepairsForSessionRedaction(items);
+    expect(partitioned).toEqual({
+      redactPrivateIds: ['rep-standard', 'rep-taken-home-already-resolved'],
+      retainPrivateIds: ['rep-taken-home-unresolved'],
+    });
+  });
+
+  it('recalculates SessionAnalytics accurately when an unresolved TAKEN_HOME item is resolved to FIXED', () => {
+    // Initial session state with 1 FIXED item and 1 unresolved TAKEN_HOME item
+    const initialRepairs: RepairItem[] = [
+      {
+        id: 'rep-1',
+        sessionId: 'sess-200',
+        registrationId: 'reg-1',
+        referenceToken: 'REF-AA11',
+        cardNumber: 1,
+        status: 'COMPLETED',
+        // 1.2kg mains electrical kettle
+        item: {
+          category: 'ELECTRICAL',
+          brandModel: 'Kettle',
+          faultDescription: 'Switch broken',
+          powerType: 'MAINS_240V',
+          weightKg: 1.2,
+        },
+        // Fixed in-session repair record
+        repair: {
+          fixerName: 'Alice',
+          repairTimeMinutes: 30,
+          outcome: 'FIXED',
+        },
+      },
+      {
+        id: 'rep-2',
+        sessionId: 'sess-200',
+        registrationId: 'reg-2',
+        referenceToken: 'REF-BB22',
+        cardNumber: 2,
+        status: 'TAKEN_HOME',
+        wasTakenHome: true,
+        // Mains electrical amplifier taken home for off-site repair
+        item: {
+          category: 'ELECTRICAL',
+          brandModel: 'Amplifier',
+          faultDescription: 'Blown output stage',
+          powerType: 'MAINS_240V',
+        },
+        // Unresolved taken-home repair record
+        repair: {
+          fixerName: 'Bob',
+          repairTimeMinutes: 30,
+          outcome: 'TAKEN_HOME',
+        },
+      },
+    ];
+
+    // Compute initial session analytics before taken-home resolution
+    const beforeResolution = calculateSessionAnalytics(
+      'sess-200',
+      'November 2026',
+      '2026-11-14',
+      initialRepairs,
+      1000,
+      10
+    );
+    // Verify 1 taken-home item, 1 repaired item, 50% success rate, and 1.2kg diverted weight
+    expect(beforeResolution.takenHomeCount).toBe(1);
+    expect(beforeResolution.repairedCount).toBe(1);
+    expect(beforeResolution.successRatePercent).toBe(50);
+    expect(beforeResolution.totalWeightDivertedKg).toBe(1.2);
+
+    // Organiser resolves rep-2 as FIXED with 60m repair time and 4.3kg diverted weight
+    const afterResolutionRepairs: RepairItem[] = [
+      initialRepairs[0],
+      {
+        ...initialRepairs[1],
+        status: 'COMPLETED',
+        // Record 4.3kg diverted weight on the resolved amplifier
+        item: {
+          ...initialRepairs[1].item,
+          weightKg: 4.3,
+        },
+        // Update repair outcome to FIXED and total time to 60 minutes
+        repair: {
+          fixerName: 'Bob',
+          repairTimeMinutes: 60,
+          outcome: 'FIXED',
+        },
+      },
+    ];
+
+    // Recompute session analytics after the taken-home item is resolved
+    const afterResolution = calculateSessionAnalytics(
+      'sess-200',
+      'November 2026',
+      '2026-11-14',
+      afterResolutionRepairs,
+      1000,
+      10
+    );
+    // Verify takenHomeCount drops to 0, repairedCount rises to 2, and weight/time update
+    expect(afterResolution.takenHomeCount).toBe(0);
+    expect(afterResolution.repairedCount).toBe(2);
+    expect(afterResolution.successRatePercent).toBe(100);
+    expect(afterResolution.totalWeightDivertedKg).toBe(5.5);
+    expect(afterResolution.totalRepairTimeMinutes).toBe(90);
+    expect(afterResolution.finalizedAt).toBe(1000);
   });
 });
 

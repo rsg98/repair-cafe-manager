@@ -12,7 +12,7 @@
  * wizard, and photo viewer modal).
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -31,9 +31,10 @@ import {
   Clock,
   Camera,
   Trash2,
-  FlaskConical
+  FlaskConical,
+  Home
 } from 'lucide-react';
-import { Session, RepairItem, Volunteer, SystemSettings } from '../types';
+import { Session, RepairItem, Volunteer, SystemSettings, TakenHomeRepairEntry } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useRepairs } from '../hooks/useRepairs';
 import { useRegisterUnsavedWork } from '../context/UnsavedWorkContext';
@@ -58,7 +59,10 @@ import {
   canAssignCard,
   formatWaitTime,
   WAIT_TIME_REFRESH_INTERVAL_MS,
-  REPAIR_ITEM_LOOKUP_INPUT_PROPS
+  REPAIR_ITEM_LOOKUP_INPUT_PROPS,
+  isUnresolvedTakenHomeItem,
+  listTakenHomeRepairs,
+  mergeActiveSessionTakenHomeEntries
 } from '../services/repairService';
 import {
   listVolunteers,
@@ -72,6 +76,7 @@ import { PoliciesModal } from '../components/common/PoliciesModal';
 import { PhotoViewerModal } from '../components/common/PhotoViewerModal';
 import { VolunteerRegisterPanel } from '../components/frontdesk/VolunteerRegisterPanel';
 import { SessionAttendanceBar } from '../components/frontdesk/SessionAttendanceBar';
+import { TakenHomeTabPanel } from '../components/frontdesk/TakenHomeTabPanel';
 import { cafeConfig } from '../config/cafe.config';
 import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap';
 
@@ -86,7 +91,7 @@ interface FrontDeskViewProps {
 }
 
 /** Sub-navigation tabs available on the Front Desk organiser screen. */
-type FrontDeskTab = 'QUEUE' | 'VOLUNTEERS' | 'POLICIES';
+type FrontDeskTab = 'QUEUE' | 'TAKEN_HOME' | 'VOLUNTEERS' | 'POLICIES';
 
 /**
  * Station 2: Front Desk Organiser View.
@@ -133,9 +138,16 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     contactPhone?: string;
   } | null>(null);
 
-  // On-demand item photo viewer modal state (point-fetches photos only when opened)
-  const [photoModalRepairId, setPhotoModalRepairId] = useState<string | null>(null);
-  const photoModalRepair = repairs.find((r) => r.id === photoModalRepairId) || null;
+  // On-demand item photo viewer modal state (supports both active queue and cross-session Taken Home items)
+  const [photoModalTarget, setPhotoModalTarget] = useState<{
+    sessionId: string;
+    repairItem: RepairItem;
+  } | null>(null);
+
+  // Taken Home cross-session repairs state and modal open flag
+  const [persistedTakenHomeEntries, setPersistedTakenHomeEntries] = useState<TakenHomeRepairEntry[]>([]);
+  const [loadingTakenHome, setLoadingTakenHome] = useState(false);
+  const [isTakenHomeModalOpen, setIsTakenHomeModalOpen] = useState(false);
 
   // Search and status filter state for the repairs queue
   const [searchTerm, setSearchTerm] = useState('');
@@ -150,7 +162,8 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     showNewSessionModal ||
     selectedRepairId !== null ||
     contactModalData !== null ||
-    photoModalRepairId !== null ||
+    photoModalTarget !== null ||
+    isTakenHomeModalOpen ||
     showPoliciesModal ||
     // Also treat active search queries or in-progress lifecycle mutations as unsaved work
     searchTerm.trim().length > 0 ||
@@ -225,6 +238,40 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       loadVolunteers();
     }
   }, [isAdmin, user, loadVolunteers]);
+
+  // Load cross-session taken-home items (unresolved and resolved history)
+  const loadTakenHomeRepairs = useCallback(async () => {
+    if (!isAdmin || !user) return;
+    setLoadingTakenHome(true);
+    try {
+      // Query all non-test sessions for unresolved and resolved taken-home items
+      const items = await listTakenHomeRepairs();
+      setPersistedTakenHomeEntries(items);
+    } catch (err) {
+      console.warn('Could not load taken-home repair items:', err);
+    } finally {
+      setLoadingTakenHome(false);
+    }
+  }, [isAdmin, user]);
+
+  // Trigger initial taken-home items load on admin sign-in
+  useEffect(() => {
+    if (isAdmin && user) {
+      void loadTakenHomeRepairs();
+    }
+  }, [isAdmin, user, loadTakenHomeRepairs]);
+
+  // Merge active session live snapshot items into cross-session taken-home entries
+  const effectiveTakenHomeEntries = useMemo(
+    () => mergeActiveSessionTakenHomeEntries(persistedTakenHomeEntries, session, repairs),
+    [persistedTakenHomeEntries, session, repairs]
+  );
+
+  // Count unresolved taken-home items across all sessions for the tab badge
+  const unresolvedTakenHomeCount = useMemo(
+    () => effectiveTakenHomeEntries.filter((e) => isUnresolvedTakenHomeItem(e.repairItem)).length,
+    [effectiveTakenHomeEntries]
+  );
 
   // Toggle selection of a volunteer in the "Start Today's Repair Café" modal
   const handleToggleNewSessionVolunteer = (volunteerId: string) => {
@@ -399,14 +446,15 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   // Close the active session, redact customer PII, and archive impact metrics
   const handleFinalizeSession = async () => {
     if (!session) return;
-    // Count attached session photos to inform the organiser about post-close UI access
+    // Count attached session photos and unresolved taken-home items for the confirmation prompt
     const totalSessionPhotos = repairs.reduce(
       (sum, r) => sum + (r.repair?.photoCount ?? 0),
       0
     );
+    const activeTakenHomeCount = repairs.filter((r) => isUnresolvedTakenHomeItem(r)).length;
 
     // Confirm destructive GDPR redaction and session archival with the organiser
-    if (confirm(buildFinalizeSessionPrompt(session.name, totalSessionPhotos))) {
+    if (confirm(buildFinalizeSessionPrompt(session.name, totalSessionPhotos, activeTakenHomeCount))) {
       setIsFinalizing(true);
       try {
         // Run Cloud Function finalization (with automatic client-side fallback)
@@ -455,9 +503,10 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     registered: repairs.filter((r) => r.status === 'REGISTERED').length,
     waitingPat1: repairs.filter((r) => r.status === 'WAITING_PAT1' || r.status === 'IN_PAT1').length,
     waitingRepair: repairs.filter((r) => r.status === 'WAITING_REPAIR' || r.status === 'IN_REPAIR').length,
-    // Count post-repair PAT 2, pickup-ready, and completed items
+    // Count post-repair PAT 2, pickup-ready, taken-home, and completed items
     waitingPat2: repairs.filter((r) => r.status === 'WAITING_PAT2' || r.status === 'IN_PAT2').length,
     ready: repairs.filter((r) => r.status === 'READY_FOR_COLLECTION').length,
+    takenHome: repairs.filter((r) => isUnresolvedTakenHomeItem(r)).length,
     completed: repairs.filter((r) => r.status === 'COMPLETED').length
   };
 
@@ -550,6 +599,21 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         >
           <ClipboardList className="h-4 w-4" />
           Session Queue {session ? `(${repairs.length})` : ''}
+        </button>
+        {/* Taken Home cross-session items sub-tab button */}
+        <button
+          type="button"
+          aria-pressed={activeTab === 'TAKEN_HOME'}
+          onClick={() => setActiveTab('TAKEN_HOME')}
+          // Apply active emerald fill when Taken Home tab is selected
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+            activeTab === 'TAKEN_HOME'
+              ? 'bg-emerald-800 text-white shadow-sm'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Home className="h-4 w-4" />
+          Taken Home ({unresolvedTakenHomeCount})
         </button>
         {/* Volunteer Register sub-tab button */}
         <button
@@ -687,10 +751,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   <option value="ALL">All Statuses ({repairs.length})</option>
                   <option value="REGISTERED">Needs Card (#) ({counts.registered})</option>
                   <option value="WAITING_PAT1">Waiting PAT 1 ({counts.waitingPat1})</option>
-                  {/* Repair, PAT 2, pickup, and completed filter options */}
+                  {/* Repair, PAT 2, pickup, taken-home, and completed filter options */}
                   <option value="WAITING_REPAIR">Waiting Repair ({counts.waitingRepair})</option>
                   <option value="WAITING_PAT2">Waiting PAT 2 ({counts.waitingPat2})</option>
                   <option value="READY_FOR_COLLECTION">Ready for Pickup ({counts.ready})</option>
+                  <option value="TAKEN_HOME">Taken Home ({counts.takenHome})</option>
                   <option value="COMPLETED">Completed ({counts.completed})</option>
                 </select>
               </div>
@@ -842,7 +907,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                                 {(r.repair?.photoCount ?? 0) > 0 && (
                                   <button
                                     type="button"
-                                    onClick={() => setPhotoModalRepairId(r.id)}
+                                    onClick={() => session && setPhotoModalTarget({ sessionId: session.id, repairItem: r })}
                                     title={`View or download ${r.repair?.photoCount} item photo${r.repair?.photoCount === 1 ? '' : 's'}`}
                                     aria-label={`View photos for ${r.item.brandModel}`}
                                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
@@ -888,7 +953,23 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         </>
       )}
 
-      {/* Tab 2: Volunteer Register Administration Panel */}
+      {/* Tab 2: Cross-Session Taken Home Items Organiser Panel */}
+      {activeTab === 'TAKEN_HOME' && (
+        <TakenHomeTabPanel
+          entries={effectiveTakenHomeEntries}
+          volunteers={volunteers}
+          loading={loadingTakenHome}
+          organizerEmail={user?.email}
+          // Wire refresh, shared photo viewer modal, and dirty-state tracking
+          onRefresh={loadTakenHomeRepairs}
+          onOpenPhotoViewer={(sessionId, repairItem) =>
+            setPhotoModalTarget({ sessionId, repairItem })
+          }
+          onModalOpenChange={setIsTakenHomeModalOpen}
+        />
+      )}
+
+      {/* Tab 3: Volunteer Register Administration Panel */}
       {activeTab === 'VOLUNTEERS' && (
         <VolunteerRegisterPanel
           volunteers={volunteers}
@@ -900,7 +981,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         />
       )}
 
-      {/* Tab 3: Inline Repair Café Policies Library */}
+      {/* Tab 4: Inline Repair Café Policies Library */}
       {activeTab === 'POLICIES' && (
         <PoliciesModal
           isOpen={true}
@@ -1281,12 +1362,42 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       )}
 
       {/* Modal: Item Photo Viewer & Downloader (loads photos on demand when clicked) */}
-      {session && photoModalRepair && (
+      {photoModalTarget && (
         <PhotoViewerModal
           isOpen={true}
-          onClose={() => setPhotoModalRepairId(null)}
-          sessionId={session.id}
-          repairItem={photoModalRepair}
+          onClose={() => setPhotoModalTarget(null)}
+          sessionId={photoModalTarget.sessionId}
+          // Prefer live snapshot item when viewing an active-session item, or fall back to target item
+          repairItem={
+            (session?.id === photoModalTarget.sessionId
+              ? repairs.find((r) => r.id === photoModalTarget.repairItem.id)
+              : undefined) ?? photoModalTarget.repairItem
+          }
+          onPhotosChange={(remainingCount) => {
+            // Keep cross-session taken-home entries in sync if an organiser deletes a photo
+            setPersistedTakenHomeEntries((prev) =>
+              prev.map((entry) => {
+                const isTargetMatch =
+                  entry.sessionId === photoModalTarget.sessionId &&
+                  entry.repairItem.id === photoModalTarget.repairItem.id &&
+                  Boolean(entry.repairItem.repair);
+                if (!isTargetMatch || !entry.repairItem.repair) {
+                  return entry;
+                }
+                // Update cached photoCount on the matching persisted taken-home entry
+                return {
+                  ...entry,
+                  repairItem: {
+                    ...entry.repairItem,
+                    repair: {
+                      ...entry.repairItem.repair,
+                      photoCount: remainingCount,
+                    },
+                  },
+                };
+              })
+            );
+          }}
         />
       )}
 

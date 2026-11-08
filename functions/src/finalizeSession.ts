@@ -28,6 +28,10 @@ const db = getFirestore();
 interface RedactionPair {
   repairRef: DocumentReference;
   privateRef: DocumentReference;
+  // True when an unresolved TAKEN_HOME item must retain organiser-only private/customer PII until resolved
+  retainPrivateCustomerPii: boolean;
+  // True when the item is an unresolved TAKEN_HOME item and should be stamped with wasTakenHome: true
+  markWasTakenHome: boolean;
 }
 
 /** Mutable counters accumulated across repair items during session finalization. */
@@ -149,31 +153,49 @@ function tallyRepairDoc(
     }
   }
 
+  // Determine whether this item is an unresolved TAKEN_HOME item requiring deferred private PII retention
+  const isUnresolvedTakenHome =
+    data.status === "TAKEN_HOME" ||
+    (data.status !== "COMPLETED" && data.repair?.outcome === "TAKEN_HOME");
+
   // Queue repair doc and private/customer doc for chunked GDPR PII redaction
   acc.redactionPairs.push({
     repairRef: docSnap.ref,
     privateRef: docSnap.ref.collection("private").doc("customer"),
+    retainPrivateCustomerPii: isUnresolvedTakenHome,
+    markWasTakenHome: isUnresolvedTakenHome,
   });
 }
 
 /**
  * Commits GDPR PII redaction across all repair items in chunks of 200 pairs
- * (400 operations per Firestore batch).
+ * (at most 400 operations per Firestore batch).
+ *
+ * Always redacts `customerName` on the public repair document, while deferring
+ * `private/customer` redaction for unresolved `TAKEN_HOME` items until an organiser resolves them.
  */
 async function commitRedactionPairsInChunks(pairs: RedactionPair[]): Promise<void> {
-  // Process 200 repair items (400 writes) per Firestore batch
+  // Process 200 repair items (at most 400 writes) per Firestore batch
   const CHUNK_SIZE = 200;
   for (let i = 0; i < pairs.length; i += CHUNK_SIZE) {
     const chunk = pairs.slice(i, i + CHUNK_SIZE);
     const batch = db.batch();
-    // Redact visitor name on repair doc and scrub private/customer subcollection
+    // Redact visitor name on repair doc and scrub private/customer for non-taken-home items
     for (const pair of chunk) {
-      batch.update(pair.repairRef, { customerName: "[REDACTED]" });
-      batch.update(pair.privateRef, {
-        firstName: "[REDACTED]",
-        contactPhone: FieldValue.delete(),
-        redactedAt: FieldValue.serverTimestamp(),
-      });
+      batch.update(
+        pair.repairRef,
+        pair.markWasTakenHome
+          ? { customerName: "[REDACTED]", wasTakenHome: true }
+          : { customerName: "[REDACTED]" }
+      );
+      // Defer private/customer scrubbing for unresolved TAKEN_HOME items until resolution
+      if (!pair.retainPrivateCustomerPii) {
+        batch.update(pair.privateRef, {
+          firstName: "[REDACTED]",
+          contactPhone: FieldValue.delete(),
+          redactedAt: FieldValue.serverTimestamp(),
+        });
+      }
     }
     await batch.commit();
   }

@@ -73,6 +73,7 @@ describe('WCAG 2.2 Level AA Static Source Guardrails', () => {
       'src/views/ReportsView.tsx',
       'src/components/frontdesk/VolunteerRegisterPanel.tsx',
       'src/components/frontdesk/SessionAttendanceBar.tsx',
+      'src/components/frontdesk/TakenHomeTabPanel.tsx',
       'src/components/pat/PatInstrumentModal.tsx',
       'src/components/common/PinModal.tsx',
       'src/components/common/PoliciesModal.tsx',
@@ -97,6 +98,7 @@ describe('WCAG 2.2 Level AA Static Source Guardrails', () => {
       'src/views/ReportsView.tsx',
       'src/views/FrontDeskView.tsx',
       'src/components/frontdesk/VolunteerRegisterPanel.tsx',
+      'src/components/frontdesk/TakenHomeTabPanel.tsx',
     ];
 
     for (const file of tableFiles) {
@@ -121,6 +123,7 @@ describe('WCAG 2.2 Level AA Static Source Guardrails', () => {
       'src/components/pat/PatInstrumentModal.tsx',
       'src/components/frontdesk/VolunteerRegisterPanel.tsx',
       'src/components/frontdesk/SessionAttendanceBar.tsx',
+      'src/components/frontdesk/TakenHomeTabPanel.tsx',
       'src/views/FrontDeskView.tsx',
       'src/views/FixerStationView.tsx',
     ];
