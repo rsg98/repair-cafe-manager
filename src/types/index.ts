@@ -119,6 +119,15 @@ export interface SessionVolunteerSummary {
 }
 
 /**
+ * Synchronisation state of a volunteer's membership in the Repair Café WhatsApp group (Issue #43).
+ */
+export type WhatsAppSyncStatus =
+  | 'NOT_APPLICABLE'
+  | 'PENDING_ADD'
+  | 'ADDED'
+  | 'PENDING_REMOVAL';
+
+/**
  * Full Volunteer Register record stored in `volunteers/{volunteerId}`.
  * Accessible only to authenticated organisers (`isAdmin()`).
  */
@@ -137,6 +146,11 @@ export interface Volunteer {
   inducted: boolean;
   inductedAt?: number;
   inductedBy?: string;
+  // WhatsApp group consent and membership sync state (Issue #43)
+  whatsappOptIn?: boolean;
+  whatsappStatus?: WhatsAppSyncStatus;
+  // One-way SHA-256 hash of normalised E.164 phone retained on archived records for CLI reconciliation
+  phoneHash?: string;
   // GDPR archival state for volunteers who no longer attend
   archived?: boolean;
   archivedAt?: number;

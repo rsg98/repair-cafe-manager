@@ -14,10 +14,14 @@ import {
   CheckCircle2,
   Archive,
   RotateCcw,
+  MessageCircle,
+  ExternalLink,
+  Copy,
 } from 'lucide-react';
-import { Volunteer } from '../../types';
+import { Volunteer, WhatsAppSyncStatus } from '../../types';
 import {
   VolunteerInput,
+  ArchiveWhatsAppDisposition,
   createVolunteer,
   updateVolunteer,
   deleteVolunteer,
@@ -27,6 +31,9 @@ import {
   formatArchivedVolunteerName,
   validateArchiveConfirmationName,
   canArchiveVolunteer,
+  requiresWhatsAppArchiveDecision,
+  formatWhatsAppDeepLink,
+  updateVolunteerWhatsAppStatus,
 } from '../../services/volunteerService';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
@@ -56,7 +63,13 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
   // Search and filter state for the volunteer table
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<
-    'ALL' | 'ORGANISER' | 'PAT_TRAINED' | 'UNINDUCTED' | 'ARCHIVED'
+    | 'ALL'
+    | 'ORGANISER'
+    | 'PAT_TRAINED'
+    | 'UNINDUCTED'
+    | 'WHATSAPP_ACTION'
+    | 'ALT_COMMS'
+    | 'ARCHIVED'
   >('ALL');
   const [showArchived, setShowArchived] = useState(false);
 
@@ -72,10 +85,13 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
   const [emergencyContactRelationship, setEmergencyContactRelationship] =
     useState('');
 
-  // Role and policy induction form state inside the Add / Edit modal
+  // Role, policy induction, and WhatsApp group state inside the Add / Edit modal
   const [isOrganiser, setIsOrganiser] = useState(false);
   const [isPatTrained, setIsPatTrained] = useState(false);
   const [inducted, setInducted] = useState(false);
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
+  const [markWhatsAppAddedImmediately, setMarkWhatsAppAddedImmediately] =
+    useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -84,6 +100,8 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
     null
   );
   const [archiveConfirmName, setArchiveConfirmName] = useState('');
+  const [archiveWhatsappDisposition, setArchiveWhatsappDisposition] =
+    useState<ArchiveWhatsAppDisposition | null>(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
 
@@ -91,17 +109,24 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
   const [selectedEmergencyVolunteer, setSelectedEmergencyVolunteer] =
     useState<Volunteer | null>(null);
 
-  // Prevent automatic PWA reload while adding/editing/archiving a volunteer or viewing emergency details
+  // Alternative Comms (Non-WhatsApp volunteers) broadcast helper modal state
+  const [showAltCommsModal, setShowAltCommsModal] = useState(false);
+  const [altCommsCopyFeedback, setAltCommsCopyFeedback] = useState<string | null>(
+    null
+  );
+
+  // Prevent automatic PWA reload while adding/editing/archiving a volunteer or viewing modals
   useRegisterUnsavedWork(
     showFormModal ||
       saving ||
       selectedEmergencyVolunteer !== null ||
       archivingVolunteer !== null ||
-      archiving,
+      archiving ||
+      showAltCommsModal,
     'volunteer-register-panel'
   );
 
-  // Focus trap and Escape key dismissal for Emergency Contact, Archive, and Add/Edit Volunteer modals
+  // Focus trap and Escape key dismissal for Emergency Contact, Archive, Alt Comms, and Add/Edit Volunteer modals
   const emergencyModalRef = useDialogFocusTrap({
     isOpen: Boolean(selectedEmergencyVolunteer),
     onClose: () => setSelectedEmergencyVolunteer(null),
@@ -119,8 +144,16 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
       if (!archiving) {
         setArchivingVolunteer(null);
         setArchiveConfirmName('');
+        setArchiveWhatsappDisposition(null);
         setArchiveError(null);
       }
+    },
+  });
+  const altCommsModalRef = useDialogFocusTrap({
+    isOpen: showAltCommsModal,
+    onClose: () => {
+      setShowAltCommsModal(false);
+      setAltCommsCopyFeedback(null);
     },
   });
 
@@ -138,6 +171,8 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
     setIsOrganiser(false);
     setIsPatTrained(false);
     setInducted(false);
+    setWhatsappOptIn(false);
+    setMarkWhatsAppAddedImmediately(false);
     setFormError(null);
     setShowFormModal(true);
   };
@@ -152,10 +187,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
     setEmergencyContactName(v.emergencyContactName);
     setEmergencyContactPhone(v.emergencyContactPhone);
     setEmergencyContactRelationship(v.emergencyContactRelationship || '');
-    // Populate role and induction flags from the selected volunteer record
+    // Populate role, induction, and WhatsApp flags from the selected volunteer record
     setIsOrganiser(Boolean(v.isOrganiser));
     setIsPatTrained(Boolean(v.isPatTrained));
     setInducted(Boolean(v.inducted));
+    setWhatsappOptIn(Boolean(v.whatsappOptIn));
+    setMarkWhatsAppAddedImmediately(v.whatsappStatus === 'ADDED');
     setFormError(null);
     setShowFormModal(true);
   };
@@ -170,10 +207,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
     setEmergencyContactName('');
     setEmergencyContactPhone('');
     setEmergencyContactRelationship('');
-    // Retain existing PAT-trained and induction status while requiring fresh contact details
+    // Retain existing PAT-trained, induction, and social WhatsApp status while requiring fresh contact details
     setIsOrganiser(false);
     setIsPatTrained(Boolean(v.isPatTrained));
     setInducted(Boolean(v.inducted));
+    setWhatsappOptIn(Boolean(v.whatsappOptIn));
+    setMarkWhatsAppAddedImmediately(v.whatsappStatus === 'ADDED');
     setFormError(null);
     setShowFormModal(true);
   };
@@ -182,10 +221,11 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
   const handleOpenArchiveModal = (v: Volunteer) => {
     setArchivingVolunteer(v);
     setArchiveConfirmName('');
+    setArchiveWhatsappDisposition(null);
     setArchiveError(null);
   };
 
-  // Confirm archival and GDPR redaction after verifying full-name entry
+  // Confirm archival and GDPR redaction after verifying full-name entry and WhatsApp disposition
   const handleConfirmArchive = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!archivingVolunteer) return;
@@ -196,11 +236,15 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
       await archiveVolunteer(
         archivingVolunteer.id,
         archiveConfirmName,
-        activeSessionId
+        activeSessionId,
+        requiresWhatsAppArchiveDecision(archivingVolunteer)
+          ? { whatsappDisposition: archiveWhatsappDisposition ?? undefined }
+          : undefined
       );
       await onRefresh();
       setArchivingVolunteer(null);
       setArchiveConfirmName('');
+      setArchiveWhatsappDisposition(null);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Failed to archive volunteer.';
@@ -228,6 +272,10 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
       isPatTrained,
       inducted,
       inductedBy: inducted ? currentUserEmail || 'Organiser' : undefined,
+      whatsappOptIn,
+      markWhatsAppAddedImmediately: whatsappOptIn
+        ? markWhatsAppAddedImmediately
+        : false,
     };
 
     try {
@@ -269,6 +317,36 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
     }
   };
 
+  // One-click WhatsApp group status transition directly from the register row ("Mark Added" or "Confirm Removed")
+  const handleQuickWhatsAppStatus = async (
+    volunteer: Volunteer,
+    nextStatus: WhatsAppSyncStatus
+  ) => {
+    try {
+      await updateVolunteerWhatsAppStatus(volunteer.id, nextStatus);
+      await onRefresh();
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Failed to update WhatsApp status.';
+      alert(msg);
+    }
+  };
+
+  // Copy comma-separated list of emails or SMS numbers for non-WhatsApp volunteers to clipboard
+  const handleCopyAltCommsList = async (textToCopy: string, label: string) => {
+    if (!textToCopy.trim()) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+        setAltCommsCopyFeedback(`Copied ${label} to clipboard.`);
+      }
+    } catch {
+      setAltCommsCopyFeedback(`Could not copy ${label} automatically.`);
+    }
+  };
+
   // Remove a volunteer record after organiser confirmation and clean up active session attendance
   const handleDeleteVolunteer = async (volunteer: Volunteer) => {
     if (
@@ -293,7 +371,26 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
   const activeVolunteers = volunteers.filter((v) => !v.archived);
   const archivedVolunteers = volunteers.filter((v) => Boolean(v.archived));
 
-  // Filter volunteers by archived visibility, search query, and role/induction filter
+  // Derive WhatsApp and Alt-Channel counts for active volunteers
+  const whatsappAddedCount = activeVolunteers.filter(
+    (v) => v.whatsappStatus === 'ADDED'
+  ).length;
+  const whatsappActionCount = activeVolunteers.filter(
+    (v) =>
+      v.whatsappStatus === 'PENDING_ADD' ||
+      v.whatsappStatus === 'PENDING_REMOVAL'
+  ).length;
+  const nonWhatsAppVolunteers = activeVolunteers.filter(
+    (v) => !v.whatsappOptIn && v.whatsappStatus !== 'PENDING_REMOVAL'
+  );
+  const nonWhatsAppEmails = nonWhatsAppVolunteers
+    .map((v) => v.email?.trim())
+    .filter((e): e is string => Boolean(e));
+  const nonWhatsAppPhones = nonWhatsAppVolunteers
+    .map((v) => v.phone?.trim())
+    .filter((p): p is string => Boolean(p));
+
+  // Filter volunteers by archived visibility, search query, and role/induction/comms filter
   const filteredVolunteers = volunteers.filter((v) => {
     // Filter out archived users by default unless "ARCHIVED" filter or "Show Archived" toggle is active
     if (roleFilter === 'ARCHIVED') {
@@ -311,11 +408,25 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
       (v.phone && v.phone.toLowerCase().includes(q)) ||
       v.emergencyContactName.toLowerCase().includes(q);
 
-    // Apply role and induction status dropdown filter
+    // Apply role, induction, and WhatsApp/alt-comms dropdown filter
     if (!matchesSearch) return false;
     if (roleFilter === 'ORGANISER') return v.isOrganiser && !v.archived;
     if (roleFilter === 'PAT_TRAINED') return v.isPatTrained && !v.archived;
     if (roleFilter === 'UNINDUCTED') return !v.inducted && !v.archived;
+    if (roleFilter === 'WHATSAPP_ACTION') {
+      return (
+        !v.archived &&
+        (v.whatsappStatus === 'PENDING_ADD' ||
+          v.whatsappStatus === 'PENDING_REMOVAL')
+      );
+    }
+    if (roleFilter === 'ALT_COMMS') {
+      return (
+        !v.archived &&
+        !v.whatsappOptIn &&
+        v.whatsappStatus !== 'PENDING_REMOVAL'
+      );
+    }
     return true;
   });
 
@@ -326,8 +437,8 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Summary metrics cards for active, inducted, PAT-qualified, and organiser volunteers */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Summary metrics cards for active, inducted, PAT-qualified, organiser, and WhatsApp comms */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {/* Card 1: Total active registered volunteers */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <span className="text-xs font-semibold text-slate-500 uppercase">
@@ -369,6 +480,20 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
             {organiserCount}
           </p>
         </div>
+        {/* Card 5: WhatsApp Group & Alt-Channel Comms summary */}
+        <div className="bg-teal-50 p-4 rounded-2xl border border-teal-200 shadow-sm col-span-2 sm:col-span-1">
+          <span className="text-xs font-semibold text-teal-900 uppercase">
+            In WhatsApp
+          </span>
+          <p className="text-2xl font-black text-teal-950 mt-1">
+            {whatsappAddedCount} / {activeVolunteers.length}
+          </p>
+          <span className="text-[11px] font-semibold text-teal-900 block mt-0.5">
+            {whatsappActionCount > 0
+              ? `${whatsappActionCount} pending sync`
+              : `${nonWhatsAppVolunteers.length} alt channel`}
+          </span>
+        </div>
       </div>
 
       {/* Search, filter, and Add Volunteer toolbar */}
@@ -387,7 +512,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
             />
           </div>
 
-          {/* Role, induction, and archived status filter dropdown */}
+          {/* Role, induction, WhatsApp, and archived status filter dropdown */}
           <select
             aria-label="Filter volunteers by role or induction status"
             value={roleFilter}
@@ -398,6 +523,8 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                   | 'ORGANISER'
                   | 'PAT_TRAINED'
                   | 'UNINDUCTED'
+                  | 'WHATSAPP_ACTION'
+                  | 'ALT_COMMS'
                   | 'ARCHIVED'
               )
             }
@@ -409,6 +536,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
             <option value="UNINDUCTED">
               Needs Policy Induction ({activeVolunteers.length - inductedCount})
             </option>
+            <option value="WHATSAPP_ACTION">
+              WhatsApp Action Needed ({whatsappActionCount})
+            </option>
+            <option value="ALT_COMMS">
+              Non-WhatsApp / Alt Channel ({nonWhatsAppVolunteers.length})
+            </option>
             <option value="PAT_TRAINED">PAT Trained ({patTrainedCount})</option>
             <option value="ORGANISER">Organisers ({organiserCount})</option>
             <option value="ARCHIVED">
@@ -417,8 +550,22 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
           </select>
         </div>
 
-        {/* Action buttons: Show Archived toggle, View Policies, and Add Volunteer */}
+        {/* Action buttons: Alt-Channel Comms, Show Archived toggle, View Policies, and Add Volunteer */}
         <div className="flex flex-wrap items-center gap-2">
+          {nonWhatsAppVolunteers.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setAltCommsCopyFeedback(null);
+                setShowAltCommsModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 font-bold text-xs hover:bg-slate-50 shadow-sm"
+            >
+              <Mail className="h-4 w-4 text-blue-700" />
+              Alt-Channel Comms ({nonWhatsAppVolunteers.length})
+            </button>
+          )}
+
           {archivedVolunteers.length > 0 && (
             <button
               type="button"
@@ -518,12 +665,20 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                       </div>
                     </td>
 
-                    {/* Contact Phone & Email column */}
-                    <td className="py-3.5 px-4 text-xs text-slate-600 space-y-1">
+                    {/* Contact Phone, Email & WhatsApp / Alt-Comms Status column */}
+                    <td className="py-3.5 px-4 text-xs text-slate-600 space-y-1.5">
                       {v.archived ? (
-                        <span className="italic text-slate-600">
-                          Removed (GDPR Archived)
-                        </span>
+                        <div className="space-y-1">
+                          <span className="italic text-slate-600 block">
+                            Removed (GDPR Archived)
+                          </span>
+                          {v.whatsappStatus === 'ADDED' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-100 text-teal-950">
+                              <MessageCircle className="h-3 w-3 text-teal-800" />
+                              WhatsApp (Social Member)
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <>
                           {v.phone ? (
@@ -545,8 +700,93 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                             </div>
                           ) : null}
                           {!v.phone && !v.email && (
-                            <span className="italic text-slate-600">Not provided</span>
+                            <span className="italic text-slate-600 block">
+                              Not provided
+                            </span>
                           )}
+
+                          {/* WhatsApp Group Sync & Alternative Channel status badges */}
+                          <div className="pt-0.5 flex flex-wrap items-center gap-1.5">
+                            {v.whatsappStatus === 'ADDED' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900">
+                                <MessageCircle className="h-3 w-3 text-emerald-700" />
+                                In WhatsApp
+                              </span>
+                            ) : v.whatsappStatus === 'PENDING_ADD' ? (
+                              <>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  <AlertTriangle className="h-3 w-3 text-amber-700" />
+                                  WhatsApp: Needs Adding
+                                </span>
+                                {formatWhatsAppDeepLink({
+                                  phone: v.phone,
+                                  volunteerName: v.name,
+                                }) && (
+                                  <a
+                                    href={
+                                      formatWhatsAppDeepLink({
+                                        phone: v.phone,
+                                        volunteerName: v.name,
+                                      })!
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-700 text-white text-[11px] font-bold hover:bg-teal-800 shadow-sm"
+                                    title={`Open 1-to-1 WhatsApp chat with ${v.name}`}
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    Message (wa.me)
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleQuickWhatsAppStatus(v, 'ADDED')
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-700 text-white text-[11px] font-bold hover:bg-emerald-800 shadow-sm"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Mark Added
+                                </button>
+                              </>
+                            ) : v.whatsappStatus === 'PENDING_REMOVAL' ? (
+                              <>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-900 border border-rose-300">
+                                  <AlertTriangle className="h-3 w-3 text-rose-700" />
+                                  Remove from WhatsApp
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleQuickWhatsAppStatus(
+                                      v,
+                                      'NOT_APPLICABLE'
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-700 text-white text-[11px] font-bold hover:bg-rose-800 shadow-sm"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Confirm Removed
+                                </button>
+                              </>
+                            ) : v.email || v.phone ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-900 border border-blue-200">
+                                <Mail className="h-3 w-3 text-blue-700" />
+                                Alt Comms (
+                                {v.email && v.phone
+                                  ? 'Email / SMS'
+                                  : v.email
+                                    ? 'Email Only'
+                                    : 'SMS Only'}
+                                )
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                <AlertTriangle className="h-3 w-3 text-amber-700" />
+                                Alt Comms: No Contact Info
+                              </span>
+                            )}
+                          </div>
                         </>
                       )}
                     </td>
@@ -835,10 +1075,86 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                     </li>
                     <li>
                       <strong>Contact details removed:</strong>{' '}
-                      Email address and phone number will be permanently deleted from the database.
+                      Email address and phone number will be permanently deleted from the database (a one-way SHA-256 phone hash is retained so CLI WhatsApp reconciliation can still recognise archived records).
                     </li>
                   </ul>
                 </div>
+
+                {/* Mandatory WhatsApp group disposition choice if the volunteer was in/opted into WhatsApp */}
+                {requiresWhatsAppArchiveDecision(archivingVolunteer) && (
+                  <div className="p-4 rounded-2xl bg-teal-50/80 border border-teal-200 text-xs space-y-2.5">
+                    <div className="font-bold text-teal-950 flex items-center gap-1.5">
+                      <MessageCircle className="h-4 w-4 text-teal-800 flex-shrink-0" />
+                      WhatsApp Group Membership Confirmation{' '}
+                      <span className="text-rose-600">*</span>
+                    </div>
+                    <p className="text-slate-700 leading-relaxed">
+                      Because archiving permanently deletes{' '}
+                      <strong>{archivingVolunteer.name}</strong>&apos;s phone
+                      number (
+                      <span className="font-mono font-bold text-slate-900">
+                        {archivingVolunteer.phone || 'not recorded'}
+                      </span>
+                      ) from the register, please confirm their WhatsApp group
+                      status:
+                    </p>
+                    <div className="space-y-2 pt-1">
+                      <label
+                        htmlFor="archive-whatsapp-removed"
+                        className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white border border-teal-200 cursor-pointer hover:bg-teal-50/50"
+                      >
+                        <input
+                          id="archive-whatsapp-removed"
+                          type="radio"
+                          name="archive-whatsapp-disposition"
+                          checked={archiveWhatsappDisposition === 'REMOVED'}
+                          onChange={() =>
+                            setArchiveWhatsappDisposition('REMOVED')
+                          }
+                          className="mt-0.5 h-4 w-4 text-teal-700 border-slate-300 focus:ring-teal-600"
+                        />
+                        <div>
+                          <span className="font-bold text-slate-900 block">
+                            I have removed {archivingVolunteer.name} (
+                            {archivingVolunteer.phone || 'no phone'}) from the
+                            WhatsApp group
+                          </span>
+                          <span className="text-slate-600">
+                            Clears their WhatsApp group membership status on the
+                            archived record.
+                          </span>
+                        </div>
+                      </label>
+
+                      <label
+                        htmlFor="archive-whatsapp-keep-social"
+                        className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white border border-teal-200 cursor-pointer hover:bg-teal-50/50"
+                      >
+                        <input
+                          id="archive-whatsapp-keep-social"
+                          type="radio"
+                          name="archive-whatsapp-disposition"
+                          checked={archiveWhatsappDisposition === 'KEEP_SOCIAL'}
+                          onChange={() =>
+                            setArchiveWhatsappDisposition('KEEP_SOCIAL')
+                          }
+                          className="mt-0.5 h-4 w-4 text-teal-700 border-slate-300 focus:ring-teal-600"
+                        />
+                        <div>
+                          <span className="font-bold text-slate-900 block">
+                            {archivingVolunteer.name} is remaining in the
+                            WhatsApp group for social reasons
+                          </span>
+                          <span className="text-slate-600">
+                            Marks them as a social WhatsApp member and retains a
+                            one-way SHA-256 phone hash so CLI reconciliation
+                            does not flag their number as unknown.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 {archiveError && (
                   <div
@@ -879,6 +1195,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                     onClick={() => {
                       setArchivingVolunteer(null);
                       setArchiveConfirmName('');
+                      setArchiveWhatsappDisposition(null);
                       setArchiveError(null);
                     }}
                     className="flex-1 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -892,7 +1209,9 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                       !validateArchiveConfirmationName(
                         archivingVolunteer.name,
                         archiveConfirmName
-                      )
+                      ) ||
+                      (requiresWhatsAppArchiveDecision(archivingVolunteer) &&
+                        !archiveWhatsappDisposition)
                     }
                     className="flex-1 py-2.5 rounded-xl bg-amber-700 text-sm font-bold text-white hover:bg-amber-800 disabled:opacity-50 shadow-sm"
                   >
@@ -962,17 +1281,25 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
               {/* Optional Phone & Conditional Email inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Volunteer optional phone number */}
+                {/* Volunteer phone number (mandatory when WhatsApp Opt-In is checked) */}
                 <div>
                   <label
                     htmlFor="volunteer-form-phone"
                     className="block text-xs font-bold text-slate-700 mb-1"
                   >
-                    Contact Phone (Optional)
+                    Contact Phone{' '}
+                    {whatsappOptIn ? (
+                      <span className="text-rose-600">
+                        * (Required for WhatsApp)
+                      </span>
+                    ) : (
+                      '(Optional)'
+                    )}
                   </label>
                   <input
                     id="volunteer-form-phone"
                     type="tel"
+                    required={whatsappOptIn}
                     placeholder="e.g. 07700 900123"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
@@ -1154,6 +1481,64 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                     Read Policies
                   </button>
                 </div>
+
+                {/* WhatsApp Group Opt-In & Membership Sync Checkboxes (Issue #43) */}
+                <div className="p-2.5 rounded-xl border border-teal-200 bg-teal-50/50 space-y-2">
+                  <label
+                    htmlFor="volunteer-form-whatsapp-opt-in"
+                    className="flex items-start gap-2.5 cursor-pointer"
+                  >
+                    <input
+                      id="volunteer-form-whatsapp-opt-in"
+                      type="checkbox"
+                      checked={whatsappOptIn}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setWhatsappOptIn(checked);
+                        if (!checked) {
+                          setMarkWhatsAppAddedImmediately(false);
+                        }
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-teal-950 block">
+                        Opted into Volunteer WhatsApp Group
+                      </span>
+                      <span className="text-slate-600">
+                        Requires a contact phone number. Leave unticked to flag
+                        this volunteer for alternative communications
+                        (email/SMS).
+                      </span>
+                    </div>
+                  </label>
+
+                  {whatsappOptIn && (
+                    <label
+                      htmlFor="volunteer-form-whatsapp-added"
+                      className="flex items-start gap-2.5 pl-6 pt-1 cursor-pointer"
+                    >
+                      <input
+                        id="volunteer-form-whatsapp-added"
+                        type="checkbox"
+                        checked={markWhatsAppAddedImmediately}
+                        onChange={(e) =>
+                          setMarkWhatsAppAddedImmediately(e.target.checked)
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
+                      />
+                      <div className="text-xs">
+                        <span className="font-bold text-slate-900 block">
+                          Already added to the WhatsApp group
+                        </span>
+                        <span className="text-slate-600">
+                          Tick if this volunteer is already in the group; leave
+                          unticked to flag as &ldquo;Needs Adding&rdquo;.
+                        </span>
+                      </div>
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* UK GDPR Privacy Notice for volunteer and emergency contact PII */}
@@ -1193,6 +1578,139 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Alternative Channel Communications for Non-WhatsApp Volunteers (Approach C) */}
+      {showAltCommsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div
+            ref={altCommsModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="alt-comms-modal-title"
+            tabIndex={-1}
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8"
+          >
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
+                <Mail className="h-5 w-5" />
+              </div>
+              <div>
+                <h3
+                  id="alt-comms-modal-title"
+                  className="text-lg font-black text-slate-900"
+                >
+                  Alternative Channel Communications ({nonWhatsAppVolunteers.length})
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Active volunteers who have not opted into the WhatsApp group
+                  and need key updates via email or SMS.
+                </p>
+              </div>
+            </div>
+
+            {altCommsCopyFeedback && (
+              <div
+                role="status"
+                className="mt-3 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold"
+              >
+                {altCommsCopyFeedback}
+              </div>
+            )}
+
+            {/* Quick broadcast actions: BCC email and copy email/SMS lists */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {nonWhatsAppEmails.length > 0 && (
+                <>
+                  <a
+                    href={`mailto:?bcc=${encodeURIComponent(nonWhatsAppEmails.join(','))}`}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-sm"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    Email All via BCC ({nonWhatsAppEmails.length})
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCopyAltCommsList(
+                        nonWhatsAppEmails.join(', '),
+                        `${nonWhatsAppEmails.length} email address(es)`
+                      )
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-800 text-xs font-bold hover:bg-slate-50"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-slate-600" />
+                    Copy Emails ({nonWhatsAppEmails.length})
+                  </button>
+                </>
+              )}
+
+              {nonWhatsAppPhones.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCopyAltCommsList(
+                      nonWhatsAppPhones.join(', '),
+                      `${nonWhatsAppPhones.length} SMS phone number(s)`
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-800 text-xs font-bold hover:bg-slate-50"
+                >
+                  <Copy className="h-3.5 w-3.5 text-slate-600" />
+                  Copy SMS Numbers ({nonWhatsAppPhones.length})
+                </button>
+              )}
+            </div>
+
+            {/* List of non-WhatsApp volunteers and their available channels */}
+            <div className="mt-4 max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-2xl">
+              {nonWhatsAppVolunteers.map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
+                >
+                  <div>
+                    <span className="font-bold text-slate-900 block">
+                      {v.name}
+                    </span>
+                    <div className="text-slate-600 space-x-2 mt-0.5">
+                      {v.email && <span>Email: {v.email}</span>}
+                      {v.phone && <span>SMS: {v.phone}</span>}
+                      {!v.email && !v.phone && (
+                        <span className="text-amber-900 font-bold">
+                          No email or phone recorded
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAltCommsModal(false);
+                      handleOpenEditModal(v);
+                    }}
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 text-slate-700 font-bold hover:bg-slate-50"
+                  >
+                    Edit
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAltCommsModal(false);
+                  setAltCommsCopyFeedback(null);
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-800 text-xs font-bold text-white hover:bg-slate-900"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

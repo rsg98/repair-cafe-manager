@@ -38,6 +38,11 @@ export interface CafeConfig {
    */
   organizerEmails: string[];
   /**
+   * Optional WhatsApp group invite URL (e.g. "https://chat.whatsapp.com/...")
+   * included in pre-filled 1-to-1 `wa.me` welcome messages when onboarding opted-in volunteers (Issue #43).
+   */
+  whatsappGroupInviteUrl?: string;
+  /**
    * Maps each allowed hostname to the ordered list of station views enabled on that host.
    * - The first view in the array becomes the default "/" landing route.
    * - Any production hostname not listed here will display an unconfigured hostname error.

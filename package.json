@@ -14,7 +14,8 @@
     "test:wcag": "vitest run tests/wcagStaticGuardrails.test.ts tests/wcagAxeAudit.test.tsx tests/wcagKeyboardAndFocus.test.tsx",
     "manage-sessions": "npm --prefix functions run build && node functions/lib/scripts/manageSessions.js",
     "ingest-history": "npm --prefix functions run build && node functions/lib/scripts/ingestHistoricalData.js",
-    "merge-volunteers": "npm --prefix functions run build && node functions/lib/scripts/mergeVolunteers.js"
+    "merge-volunteers": "npm --prefix functions run build && node functions/lib/scripts/mergeVolunteers.js",
+    "whatsapp-reconcile": "npm --prefix functions run build && node functions/lib/scripts/reconcileWhatsApp.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.6",

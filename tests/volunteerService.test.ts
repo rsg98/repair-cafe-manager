@@ -10,6 +10,12 @@ import {
   validateArchiveConfirmationName,
   buildArchivedVolunteerRecord,
   filterActiveVolunteers,
+  normalizeUkPhoneNumber,
+  sha256Hex,
+  hashNormalizedPhone,
+  resolveWhatsAppStatusOnSave,
+  formatWhatsAppDeepLink,
+  requiresWhatsAppArchiveDecision,
 } from '../src/services/volunteerService';
 import { Volunteer, SessionVolunteerSummary } from '../src/types';
 
@@ -87,6 +93,34 @@ describe('Volunteer Service Validation & Pure Helpers', () => {
         email: 'organiser@suttonrepaircafe.org.uk',
       });
       expect(withEmail.valid).toBe(true);
+    });
+
+    it('requires a valid phone number when whatsappOptIn is true, and allows missing phone/email when opted out (Issue #43)', () => {
+      // Opted-in without phone fails validation
+      const optedInNoPhone = validateVolunteerInput({
+        ...validInput,
+        phone: '',
+        whatsappOptIn: true,
+      });
+      expect(optedInNoPhone.valid).toBe(false);
+      expect(optedInNoPhone.error).toContain('WhatsApp');
+
+      // Opted-in with valid phone succeeds
+      const optedInWithPhone = validateVolunteerInput({
+        ...validInput,
+        phone: '07700 900123',
+        whatsappOptIn: true,
+      });
+      expect(optedInWithPhone.valid).toBe(true);
+
+      // Opted-out with neither phone nor email succeeds (flagged in UI as Alt Comms: No Contact Info)
+      const optedOutNoContact = validateVolunteerInput({
+        ...validInput,
+        phone: '',
+        email: '',
+        whatsappOptIn: false,
+      });
+      expect(optedOutNoContact.valid).toBe(true);
     });
   });
 
@@ -288,6 +322,29 @@ describe('Volunteer Service Validation & Pure Helpers', () => {
         expect(archived.emergencyContactName).toBe('');
         expect(archived.emergencyContactPhone).toBe('');
         expect(archived.emergencyContactRelationship).toBeUndefined();
+        // Verify one-way SHA-256 phoneHash is retained for CLI WhatsApp reconciliation
+        expect(archived.phoneHash).toBe(hashNormalizedPhone('07700 900123'));
+        expect(archived.whatsappOptIn).toBe(false);
+        expect(archived.whatsappStatus).toBe('NOT_APPLICABLE');
+      });
+
+      it('preserves social WhatsApp membership (ADDED) and phoneHash when whatsappDisposition is KEEP_SOCIAL (Issue #43)', () => {
+        const archivedSocial = buildArchivedVolunteerRecord(
+          {
+            ...sampleVolunteer,
+            whatsappOptIn: true,
+            whatsappStatus: 'ADDED',
+          },
+          1715000000000,
+          { whatsappDisposition: 'KEEP_SOCIAL' }
+        );
+
+        expect(archivedSocial.phone).toBeUndefined();
+        expect(archivedSocial.phoneHash).toBe(
+          hashNormalizedPhone('+44 7700 900123')
+        );
+        expect(archivedSocial.whatsappOptIn).toBe(true);
+        expect(archivedSocial.whatsappStatus).toBe('ADDED');
       });
 
       it('throws if attempting to archive a volunteer who still has the organiser flag enabled', () => {
@@ -316,6 +373,87 @@ describe('Volunteer Service Validation & Pure Helpers', () => {
 
         const active = filterActiveVolunteers(list);
         expect(active.map((v) => v.id)).toEqual(['vol-1', 'vol-3']);
+      });
+    });
+
+    describe('WhatsApp Phone Normalisation, Deep-Links & Sync State Machine (Issue #43)', () => {
+      it('normalises UK domestic and international phone formats to E.164', () => {
+        expect(normalizeUkPhoneNumber('07700 900123')).toBe('+447700900123');
+        expect(normalizeUkPhoneNumber('+44 (0) 7700-900123')).toBe('+447700900123');
+        expect(normalizeUkPhoneNumber('0044 7700 900123')).toBe('+447700900123');
+        expect(normalizeUkPhoneNumber('447700900123')).toBe('+447700900123');
+        expect(normalizeUkPhoneNumber('not-a-phone')).toBeNull();
+      });
+
+      it('computes deterministic FIPS 180-4 SHA-256 digests and phone hashes', () => {
+        // Known NIST SHA-256 vector for "abc"
+        expect(sha256Hex('abc')).toBe(
+          'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+        );
+        expect(hashNormalizedPhone('07700 900123')).toBe(
+          hashNormalizedPhone('+44 7700 900123')
+        );
+      });
+
+      it('transitions WhatsApp status accurately when opting in or out', () => {
+        expect(resolveWhatsAppStatusOnSave({ whatsappOptIn: true })).toBe(
+          'PENDING_ADD'
+        );
+        expect(
+          resolveWhatsAppStatusOnSave({
+            whatsappOptIn: true,
+            markAddedImmediately: true,
+          })
+        ).toBe('ADDED');
+        expect(
+          resolveWhatsAppStatusOnSave({
+            whatsappOptIn: true,
+            currentStatus: 'ADDED',
+          })
+        ).toBe('ADDED');
+        // Opting out after being ADDED flags PENDING_REMOVAL
+        expect(
+          resolveWhatsAppStatusOnSave({
+            whatsappOptIn: false,
+            currentStatus: 'ADDED',
+          })
+        ).toBe('PENDING_REMOVAL');
+        // Opting out while still PENDING_ADD returns to NOT_APPLICABLE
+        expect(
+          resolveWhatsAppStatusOnSave({
+            whatsappOptIn: false,
+            currentStatus: 'PENDING_ADD',
+          })
+        ).toBe('NOT_APPLICABLE');
+      });
+
+      it('builds 1-to-1 wa.me deep-links with welcome message and optional group invite URL', () => {
+        const link = formatWhatsAppDeepLink({
+          phone: '07700 900123',
+          volunteerName: 'Alice Smith',
+          cafeName: 'Sutton Repair Café',
+          groupInviteUrl: 'https://chat.whatsapp.com/ABC123XYZ',
+        });
+        expect(link).toContain('https://wa.me/447700900123?text=');
+        expect(decodeURIComponent(link!)).toContain('Hi Alice');
+        expect(decodeURIComponent(link!)).toContain(
+          'https://chat.whatsapp.com/ABC123XYZ'
+        );
+      });
+
+      it('identifies when archiving a volunteer requires a WhatsApp group disposition choice', () => {
+        expect(
+          requiresWhatsAppArchiveDecision({
+            whatsappOptIn: false,
+            whatsappStatus: 'NOT_APPLICABLE',
+          })
+        ).toBe(false);
+        expect(
+          requiresWhatsAppArchiveDecision({
+            whatsappOptIn: true,
+            whatsappStatus: 'ADDED',
+          })
+        ).toBe(true);
       });
     });
   });

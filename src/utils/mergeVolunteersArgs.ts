@@ -302,6 +302,15 @@ export function buildVolunteerMergePlan(params: {
     inducted: Boolean(target.inducted || source.inducted),
     inductedAt: target.inductedAt ?? source.inductedAt,
     inductedBy: target.inductedBy || source.inductedBy,
+    whatsappOptIn:
+      target.whatsappOptIn !== undefined || source.whatsappOptIn !== undefined
+        ? Boolean(target.whatsappOptIn || source.whatsappOptIn)
+        : undefined,
+    whatsappStatus:
+      target.whatsappStatus === 'ADDED' || source.whatsappStatus === 'ADDED'
+        ? 'ADDED'
+        : target.whatsappStatus || source.whatsappStatus,
+    phoneHash: target.phoneHash || source.phoneHash,
     updatedAt: now,
   });
 

@@ -67,6 +67,12 @@ export interface SessionVolunteerSummary {
   inducted: boolean;
 }
 
+export type WhatsAppSyncStatus =
+  | 'NOT_APPLICABLE'
+  | 'PENDING_ADD'
+  | 'ADDED'
+  | 'PENDING_REMOVAL';
+
 export interface Volunteer {
   id: string;
   name: string;
@@ -80,6 +86,9 @@ export interface Volunteer {
   inducted: boolean;
   inductedAt?: number;
   inductedBy?: string;
+  whatsappOptIn?: boolean;
+  whatsappStatus?: WhatsAppSyncStatus;
+  phoneHash?: string;
   archived?: boolean;
   archivedAt?: number;
   createdAt: number;

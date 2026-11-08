@@ -38,8 +38,13 @@ The **Front Desk** is the operational control centre of the Repair Café. From t
      * **Session Organiser:** Tick if this volunteer should be able to sign into `/frontdesk` with their Google account.
      * **PAT Tester Qualified:** Tick if this volunteer is trained and authorised to operate the PAT Electrical Safety Station (`/pat`).
      * **Policy Inducted:** Tick once you have briefed the volunteer on the Health & Safety, Safeguarding, and Whistleblowing policies.
+     * **Opted into Volunteer WhatsApp Group:** Tick if the volunteer has consented to join the Repair Café WhatsApp group (requires a contact phone number). Leave unticked to flag them for **Alternative Channel Communications** (email/SMS).
 3. Click **Save Volunteer**.
 4. **Inducting an Existing Volunteer:** If a volunteer is marked `Pending Induction`, click **View Policies** (or switch to the **Repair Café Policies** tab) to walk them through the policies, then click the green **Confirm Induction** button next to their name.
+5. **Managing WhatsApp Group Onboarding & Alt-Channel Comms:**
+   * Volunteers who opt into WhatsApp appear with an amber **WhatsApp: Needs Adding** badge, a 1-click **Message (wa.me)** link to open a pre-filled 1-to-1 WhatsApp chat, and a **Mark Added** button once they are in the group.
+   * Volunteers who have **not** opted into WhatsApp display an **Alt Comms** badge. Click the **Alt-Channel Comms** button in the toolbar at any time to email all non-WhatsApp volunteers via BCC (`mailto:`) or copy their email addresses and SMS phone numbers.
+   * To reconcile the entire register against a WhatsApp group participant list from the terminal, see [`docs/WHATSAPP_RECONCILE_CLI.md`](../WHATSAPP_RECONCILE_CLI.md).
 
 ---
 
