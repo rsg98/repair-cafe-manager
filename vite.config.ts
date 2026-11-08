@@ -110,7 +110,8 @@ export default defineConfig({
         theme_color: '#15803d',
         background_color: '#f8fafc',
         display: 'standalone',
-        orientation: 'portrait',
+        // Allow both portrait and landscape orientations to respect device preferences (Issue #41, WCAG 1.3.4)
+        orientation: 'any',
         icons: [
           {
             src: 'pwa-192x192.png',

@@ -45,6 +45,14 @@ describe('WCAG 2.2 Level AA Static Source Guardrails', () => {
     expect(html).not.toMatch(/maximum-scale\s*=\s*1(\.0)?\b/i);
   });
 
+  it('allows unrestricted portrait and landscape orientation in PWA manifest in vite.config.ts (Issue #41, WCAG 1.3.4)', async () => {
+    // Ensure VitePWA manifest sets orientation to "any" rather than locking to portrait or landscape
+    const viteConfig = await readRepoFile('vite.config.ts');
+    expect(viteConfig).toMatch(/orientation:\s*'any'/);
+    expect(viteConfig).not.toMatch(/orientation:\s*'portrait'/);
+    expect(viteConfig).not.toMatch(/orientation:\s*'landscape'/);
+  });
+
   it('defines touch-action: manipulation, prefers-reduced-motion, and :focus-visible rules in src/index.css (WCAG 2.3.3, 2.4.7)', async () => {
     const css = await readRepoFile('src/index.css');
     expect(css).toContain('touch-action: manipulation');
