@@ -494,34 +494,42 @@ export function toSessionVolunteerSummary(
 }
 
 /**
- * Merges static `cafeConfig.organizerEmails` with the email addresses of all active volunteers
- * who have `isOrganiser: true`, returning a deduplicated, normalized array.
+ * Resolves the organiser email list from the Volunteer Register (`isOrganiser: true`),
+ * overwriting `bootstrapEmails` once at least one active organiser volunteer exists.
+ * Falls back to `bootstrapEmails` (`cafeConfig.organizerEmails`) only when no active
+ * volunteer in the register has `isOrganiser: true` yet (initial Day-1 bootstrap).
  */
 export function mergeOrganiserEmails(
-  staticEmails: string[],
+  bootstrapEmails: string[],
   volunteers: Array<Pick<Volunteer, 'isOrganiser' | 'email'> & { archived?: boolean }>
 ): string[] {
-  const emailSet = new Set<string>();
+  const registerEmailSet = new Set<string>();
 
-  // Seed with static bootstrap organiser emails and domain rules from cafeConfig
-  for (const entry of staticEmails) {
-    const cleaned = entry.trim().toLowerCase();
-    if (cleaned) {
-      emailSet.add(cleaned);
-    }
-  }
-
-  // Add normalized emails for all active volunteers currently marked as organisers
+  // Collect normalized emails for all active volunteers marked as organisers
   for (const volunteer of volunteers) {
     if (volunteer.isOrganiser && !volunteer.archived && volunteer.email) {
       const cleaned = volunteer.email.trim().toLowerCase();
       if (cleaned) {
-        emailSet.add(cleaned);
+        registerEmailSet.add(cleaned);
       }
     }
   }
 
-  return Array.from(emailSet);
+  // Overwrite bootstrap config once the Volunteer Register defines active organisers
+  if (registerEmailSet.size > 0) {
+    return Array.from(registerEmailSet);
+  }
+
+  // Bootstrap fallback before any active volunteer is marked isOrganiser (prevents Day-1 lockout)
+  const fallbackSet = new Set<string>();
+  for (const entry of bootstrapEmails) {
+    const cleaned = entry.trim().toLowerCase();
+    if (cleaned) {
+      fallbackSet.add(cleaned);
+    }
+  }
+
+  return Array.from(fallbackSet);
 }
 
 /**

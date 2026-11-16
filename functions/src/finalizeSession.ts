@@ -15,7 +15,10 @@ import {
   DocumentData,
 } from "firebase-admin/firestore";
 import { defaultOrganizerEmails, defaultSessionDurationHours } from "./config";
-import { isAuthorizedOrganizer } from "./authUtils";
+import {
+  isAuthorizedOrganizer,
+  resolveEffectiveOrganizerEmails,
+} from "./authUtils";
 
 // Initialize the default Firebase Admin app if not already initialized
 if (!getApps().length) {
@@ -64,15 +67,11 @@ async function verifyOrganizerCaller(request: CallableRequest): Promise<void> {
     );
   }
 
-  // Extract client-supplied and environment-configured organiser email patterns
-  const clientEmails = Array.isArray(request.data?.organizerEmails)
-    ? (request.data.organizerEmails as unknown[])
-        .filter((e): e is string => typeof e === "string")
-        .map((e) => e.trim().toLowerCase())
-    : [];
+  // Extract optional bootstrap organiser email patterns from environment and local config
   const envEmails = process.env.ORGANIZER_EMAILS
     ? process.env.ORGANIZER_EMAILS.split(",").map((e) => e.trim()).filter(Boolean)
     : [];
+  const bootstrapPatterns = [...envEmails, ...defaultOrganizerEmails];
 
   // Read dynamically configured organiser emails from Firestore settings/system
   let firestoreAllowed: string[] = [];
@@ -86,10 +85,12 @@ async function verifyOrganizerCaller(request: CallableRequest): Promise<void> {
     console.warn("Could not read organizerEmails from settings/system:", err);
   }
 
-  // Combine configured email patterns or fall back to static defaultOrganizerEmails
-  const explicitlyConfigured = [...firestoreAllowed, ...clientEmails, ...envEmails];
-  const allowedPatterns =
-    explicitlyConfigured.length > 0 ? explicitlyConfigured : defaultOrganizerEmails;
+  // Prefer dynamic Volunteer Register organiser emails in settings/system once populated;
+  // fall back to bootstrap config only before settings/system.organizerEmails exists (fails closed if empty)
+  const allowedPatterns = resolveEffectiveOrganizerEmails(
+    bootstrapPatterns,
+    firestoreAllowed
+  );
   const callerEmail = request.auth.token.email;
   const isAuthorized =
     Boolean(request.auth.token.admin) ||

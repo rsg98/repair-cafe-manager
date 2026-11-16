@@ -31,7 +31,10 @@ import {
   SessionVolunteerSummary,
 } from '../types';
 import { cafeConfig } from '../config/cafe.config';
-import { isAuthorizedOrganizer } from '../utils/authUtils';
+import {
+  isAuthorizedOrganizer,
+  resolveEffectiveOrganizerEmails,
+} from '../utils/authUtils';
 import { removeUndefined, isUnresolvedTakenHomeItem } from './repairService';
 import {
   APP_BUILD_TIMESTAMP,
@@ -53,17 +56,21 @@ async function getSystemSettingsWithEmails(): Promise<{
     const snap = await getDoc(settingsRef);
     if (snap.exists()) {
       const data = snap.data() as SystemSettings;
-      // Merge static config emails with dynamically configured organiser emails
-      const effectiveEmails = Array.isArray(data.organizerEmails)
-        ? Array.from(new Set([...cafeConfig.organizerEmails, ...data.organizerEmails]))
-        : [...cafeConfig.organizerEmails];
+      // Use dynamic settings/system.organizerEmails once populated, otherwise bootstrap cafeConfig.organizerEmails
+      const effectiveEmails = resolveEffectiveOrganizerEmails(
+        cafeConfig.organizerEmails,
+        data.organizerEmails
+      );
       return { effectiveEmails, settings: data };
     }
   } catch (err) {
     console.warn('Could not read existing organizerEmails from settings/system:', err);
   }
-  // Fall back to static cafeConfig organiser emails if settings/system is unreadable
-  return { effectiveEmails: [...cafeConfig.organizerEmails], settings: null };
+  // Fall back to bootstrap cafeConfig organiser emails if settings/system is unreadable
+  return {
+    effectiveEmails: resolveEffectiveOrganizerEmails(cafeConfig.organizerEmails, null),
+    settings: null,
+  };
 }
 
 /**
@@ -683,10 +690,10 @@ export async function finalizeSessionClient(sessionId: string): Promise<void> {
     try {
       // Invoke the backend finalizeSession Cloud Function
       const finalizeCallable = httpsCallable<
-        { sessionId: string; organizerEmails?: string[] },
+        { sessionId: string },
         { success: boolean; analyticsId: string }
       >(functions, 'finalizeSession');
-      await finalizeCallable({ sessionId, organizerEmails: effectiveEmails });
+      await finalizeCallable({ sessionId });
       finalized = true;
     } catch (err) {
       console.warn(

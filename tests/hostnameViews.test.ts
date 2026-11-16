@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { cafeConfig } from '../src/config/cafe.config';
+import { cafeUserConfig as exampleCafeUserConfig } from '../src/config/cafe.local.example';
 import { resolveHostnameViews, ALL_STATION_VIEWS } from '../src/utils/hostnameViews';
 
 describe('Hostname-to-Views Routing & Layout Resolution', () => {
-  describe('Production Configured Hostnames (cafeConfig.hostnameViews)', () => {
-    it('configures register.suttonrepaircafe.app with only the Register view and hides nav/auth chrome', () => {
-      const result = resolveHostnameViews('register.suttonrepaircafe.app');
+  describe('Reference Template Hostnames (cafe.local.example.ts)', () => {
+    const templateHostMap = exampleCafeUserConfig.hostnameViews;
+
+    it('configures register subdomain with only the Register view and hides nav/auth chrome', () => {
+      const result = resolveHostnameViews('register.repaircafe.example.org', templateHostMap);
 
       expect(result.isConfigured).toBe(true);
       expect(result.allowedViews).toEqual(['register']);
@@ -14,8 +17,8 @@ describe('Hostname-to-Views Routing & Layout Resolution', () => {
       expect(result.showAuthControls).toBe(false);
     });
 
-    it('configures fixer.suttonrepaircafe.app with only Fixer and PAT views, defaulting to /fixer', () => {
-      const result = resolveHostnameViews('fixer.suttonrepaircafe.app');
+    it('configures fixer subdomain with only Fixer and PAT views, defaulting to /fixer', () => {
+      const result = resolveHostnameViews('fixer.repaircafe.example.org', templateHostMap);
 
       expect(result.isConfigured).toBe(true);
       expect(result.allowedViews).toEqual(['fixer', 'pat']);
@@ -24,8 +27,8 @@ describe('Hostname-to-Views Routing & Layout Resolution', () => {
       expect(result.showAuthControls).toBe(true);
     });
 
-    it('configures manager.suttonrepaircafe.app with all five views', () => {
-      const result = resolveHostnameViews('manager.suttonrepaircafe.app');
+    it('configures manager subdomain with all five views', () => {
+      const result = resolveHostnameViews('manager.repaircafe.example.org', templateHostMap);
 
       expect(result.isConfigured).toBe(true);
       expect(result.allowedViews).toEqual([
@@ -41,11 +44,25 @@ describe('Hostname-to-Views Routing & Layout Resolution', () => {
     });
 
     it('matches configured hostnames case-insensitively', () => {
-      const result = resolveHostnameViews('FIXER.SuttonRepairCafe.App');
+      const result = resolveHostnameViews('FIXER.RepairCafe.Example.Org', templateHostMap);
 
       expect(result.isConfigured).toBe(true);
       expect(result.allowedViews).toEqual(['fixer', 'pat']);
       expect(result.defaultRoute).toBe('/fixer');
+    });
+  });
+
+  describe('Active cafeConfig.hostnameViews Resolution', () => {
+    it('resolves every hostname configured in the active cafeConfig cleanly', () => {
+      const configuredHosts = Object.keys(cafeConfig.hostnameViews);
+      expect(configuredHosts.length).toBeGreaterThanOrEqual(1);
+
+      for (const host of configuredHosts) {
+        const result = resolveHostnameViews(host);
+        expect(result.isConfigured).toBe(true);
+        expect(result.allowedViews.length).toBeGreaterThanOrEqual(1);
+        expect(result.defaultRoute).toBe(`/${result.allowedViews[0]}`);
+      }
     });
   });
 
@@ -105,7 +122,7 @@ describe('Hostname-to-Views Routing & Layout Resolution', () => {
   describe('Unconfigured Hostname Default Error Behaviour', () => {
     it('marks unknown hostnames as not configured with empty views and null defaultRoute', () => {
       for (const unknownHost of [
-        'suttonrepaircafe.app',
+        'unmapped-domain.invalid',
         'unknown.suttonrepaircafe.app',
         'repair-cafe.web.app',
         'example.com',
@@ -134,14 +151,6 @@ describe('Hostname-to-Views Routing & Layout Resolution', () => {
 
       const unconfigured = resolveHostnameViews('register.suttonrepaircafe.app', customMap);
       expect(unconfigured.isConfigured).toBe(false);
-    });
-
-    it('verifies cafeConfig.hostnameViews contains the three expected subdomains', () => {
-      expect(Object.keys(cafeConfig.hostnameViews)).toEqual([
-        'register.suttonrepaircafe.app',
-        'fixer.suttonrepaircafe.app',
-        'manager.suttonrepaircafe.app',
-      ]);
     });
   });
 });

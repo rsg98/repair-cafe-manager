@@ -294,15 +294,16 @@ analytics/{sessionId}
 6. Station stays authenticated for the duration of the event with zero account-creation friction.
 
 ### 7.3 Organiser Google Account & Group Authorisation Flow
-- **Configuration (`src/config/cafe.config.ts` & `functions/src/config.ts`):**
-  - `organizerEmails`: Array of named Google accounts (e.g. `coordinator@example.com`, `info@suttonrepaircafe.org.uk`) and domain groups (e.g. `@suttonrepaircafe.org.uk`).
-  - Supports environment variable `ORGANIZER_EMAILS` (comma-separated) in Cloud Functions.
-  - Dynamically supports `organizerEmails` in `settings/system` Firestore doc.
+- **Split Configuration (`src/config/` & `functions/src/config.*`):**
+  - Tracked schema/defaults/validation (`cafe.schema.ts`, `cafe.defaults.ts`, `cafe.validation.ts`, `cafe.config.ts`, `cafe.local.example.ts`; backend `config.schema.ts`, `config.defaults.ts`, `config.ts`, `config.local.example.ts`) are separated from gitignored local deployment files (`src/config/cafe.local.ts` and optional `functions/src/config.local.ts`) so `git pull` never overwrites local café settings.
+  - `organizerEmails`: Mandatory non-empty bootstrap list in `src/config/cafe.local.ts` (and optional bootstrap in `functions/src/config.local.ts` or `ORGANIZER_EMAILS` env var).
+  - Once active organisers (`isOrganiser: true`) are synced from the Volunteer Register to `settings/system.organizerEmails` in Firestore, `settings/system.organizerEmails` **overwrites** the initial bootstrap list on both frontend and backend (`resolveEffectiveOrganizerEmails`).
+  - **Fail-Closed Policy:** `isAuthorizedOrganizer` in both `src/utils/authUtils.ts` and `functions/src/authUtils.ts` returns `false` whenever `allowedPatterns` is empty.
 - **Frontend Authorisation (`useAuth.ts` & `FrontDeskView.tsx`):**
-  - `isAdmin`: evaluates `isAuthorizedOrganizer(user.email, cafeConfig.organizerEmails)`.
+  - `isAdmin`: evaluates `isAuthorizedOrganizer(user.email, resolveEffectiveOrganizerEmails(cafeConfig.organizerEmails, dynamicOrganizerEmails))`.
   - Non-authorised Google accounts are presented with a clear unauthorised screen showing their signed-in address and a switch-account button.
 - **Backend Cloud Function Authorisation (`finalizeSession.ts`):**
-  - Verifies caller has either `token.admin === true` or verified `token.email` matching authorised accounts or domain groups. Ensures closing and finalising sessions is strictly protected without rejecting named Google accounts.
+  - Verifies caller has either `token.admin === true` or verified `token.email` matching `resolveEffectiveOrganizerEmails(bootstrapPatterns, firestoreAllowed)` (failing closed if empty).
 
 ---
 

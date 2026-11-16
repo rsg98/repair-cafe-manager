@@ -519,11 +519,11 @@ Now connect the frontend code on your computer to your Firebase project:
 
 ### Step 6: Customize Your Café Settings
 
-1. Open [`src/config/cafe.config.ts`](src/config/cafe.config.ts) in your text editor:
-   * Update `cafeName`, `tagline`, `venueName`, `contactEmail`, and `websiteUrl`.
-   * Under `organizerEmails`, add your own Google email address (e.g., `'yourname@gmail.com'`) so you are authorised to log in to the Front Desk (`/frontdesk`).
+1. Copy [`src/config/cafe.local.example.ts`](src/config/cafe.local.example.ts) to `src/config/cafe.local.ts` (gitignored so `git pull` never overwrites your local settings) and open it in your text editor:
+   * Populate the mandatory fields: `cafeName`, `venueName`, `contactEmail`, `organizerEmails`, and `hostnameViews` (plus any optional overrides from [`src/config/cafe.defaults.ts`](src/config/cafe.defaults.ts) such as `tagline` or `websiteUrl`).
+   * Under `organizerEmails`, add your own Google email address (e.g., `'yourname@gmail.com'`) as your **bootstrap organiser** so you are authorised to log in to the Front Desk (`/frontdesk`) on Day 1 before adding organisers to the Volunteer Register.
    * **Important — Configure `hostnameViews` for your Firebase domain:**
-     By default, Firebase hosts your site at `YOUR_PROJECT_ID.web.app` and `YOUR_PROJECT_ID.firebaseapp.com`. Add those hostnames to `hostnameViews` in [`src/config/cafe.config.ts`](src/config/cafe.config.ts) so the app knows which views to show when you open your live URL:
+     By default, Firebase hosts your site at `YOUR_PROJECT_ID.web.app` and `YOUR_PROJECT_ID.firebaseapp.com`. Add those hostnames to `hostnameViews` in `src/config/cafe.local.ts` so the app knows which views to show when you open your live URL:
      ```ts
      hostnameViews: {
        'your-project-id.web.app': ['register', 'frontdesk', 'pat', 'fixer', 'reports'],
@@ -531,7 +531,7 @@ Now connect the frontend code on your computer to your Firebase project:
        // Plus any custom subdomains you plan to add later (see Section 4)
      }
      ```
-2. Open [`functions/src/config.ts`](functions/src/config.ts) and add your organiser Google email address to `DEFAULT_ORGANIZER_EMAILS` as well so the backend `finalizeSession` Cloud Function recognizes you.
+2. *(Optional)* Copy [`functions/src/config.local.example.ts`](functions/src/config.local.example.ts) to `functions/src/config.local.ts` (also gitignored) if you want bootstrap organiser emails compiled into Cloud Functions before `settings/system.organizerEmails` is populated by the Volunteer Register `isOrganiser` flag.
 
 ---
 
@@ -592,24 +592,28 @@ If your Repair Café owns a domain name (e.g. `suttonrepaircafe.app`), you can m
 
 ## 4. Configuration Options & Hostname View Filtering
 
-All single-tenant branding, operational rules, authorised organisers, and subdomain view filters live in a single strongly-typed configuration file: **[`src/config/cafe.config.ts`](src/config/cafe.config.ts)**.
+Configuration is split into git-tracked schema/default files ([`src/config/cafe.schema.ts`](src/config/cafe.schema.ts), [`src/config/cafe.defaults.ts`](src/config/cafe.defaults.ts), [`src/config/cafe.validation.ts`](src/config/cafe.validation.ts), [`src/config/cafe.config.ts`](src/config/cafe.config.ts)) and a gitignored local deployment file (`src/config/cafe.local.ts`, copied from [`src/config/cafe.local.example.ts`](src/config/cafe.local.example.ts)) so pulling upstream updates never overwrites your café's settings.
 
-### Complete Configuration Reference (`src/config/cafe.config.ts`)
+### Complete Configuration Reference (`src/config/cafe.local.ts`)
 
-| Option | Type | Default (Sutton Reference) | Description |
+| Option | Type | Requirement / Default | Description |
 | :--- | :--- | :--- | :--- |
-| `cafeName` | `string` | `'Sutton Repair Café'` | The primary display name of your Repair Café shown in the header, registration screen, terms modal, and exported reports. |
-| `tagline` | `string` | `'Toss it? No way! Community repair in the London Borough of Sutton'` | Subtitle displayed in the application header on desktop screens. |
-| `venueName` | `string` | `'Seears Park Community Hall, St Dunstans Hill, Sutton SM1 2SW'` | Physical venue name and address displayed on the registration view and session screens. |
+| `cafeName` | `string` | **Required (Blocking)** | The primary display name of your Repair Café shown in the header, registration screen, terms modal, and exported reports. |
+| `venueName` | `string` | **Required (Blocking)** | Physical venue name and address displayed on the registration view and session screens. |
+| `contactEmail` | `string` | **Required (Blocking)** | Public contact email displayed in legal notices and privacy references. |
+| `organizerEmails` | `string[]` | **Required (Blocking, Fail-Closed)** | Bootstrap Google email addresses or `@domain` suffixes for initial `/frontdesk` access; overwritten once active organisers (`isOrganiser: true`) are synced from the Volunteer Register (see [Organizer Authorization](#organizer-authorization-organizeremails)). |
+| `hostnameViews` | `Record<string, StationViewId[]>` | **Required (Blocking)** | Maps each hostname/subdomain to the ordered list of station views permitted on that host (see [Hostname Matching & View Filtering](#hostname-matching--view-filtering-hostnameviews)). |
+| `tagline` | `string` | `''` | Optional subtitle displayed in the application header on desktop screens. |
 | `logoUrl` | `string` | `'/logo.svg'` | Path (inside `public/`) or external URL to your Repair Café logo icon. |
-| `contactEmail` | `string` | `'info@suttonrepaircafe.org.uk'` | Public contact email displayed in legal notices and privacy references. |
-| `websiteUrl` | `string` | `'https://suttonrepaircafe.org.uk'` | External link to your main community website. |
+| `websiteUrl` | `string` | `''` | Optional external link to your main community website. |
 | `defaultCardRange` | `{ start: number; end: number }` | `{ start: 1, end: 100 }` | Defines the valid range of physical numbered tokens (`#1` to `#100`) used at the Front Desk, PAT Station, and Fixer Station. |
-| `allowMultiItemRegistration` | `boolean` | `false` | Controls whether a visitor can register multiple items in a single check-in. When `false`, visitors are limited to **1 item per registration** (enforcing a fair 1-item-per-turn queue). When `true`, an *"Add Another Item"* button appears on `/register`, allowing up to **4 items** per registration. |
-| `termsVersion` | `string` | `'2026-04-v1'` | Version identifier recorded alongside the visitor's consent timestamp in `private/customer.termsVersion` for GDPR and liability auditability. Update this string whenever you materially revise `/terms.md`. |
-| `termsAndConditions` | `string` | `'/terms.md'` | Path or URL to the Markdown file containing your House Rules, Liability Disclaimer, and GDPR Privacy Notice fetched by the Terms modal on `/register`. |
-| `organizerEmails` | `string[]` | `['@suttonrepaircafe.org.uk', ...]` | List of authorised Google email addresses or domain suffixes allowed to access `/frontdesk` and finalize sessions (see [Organizer Authorization](#organizer-authorization-organizeremails)). |
-| `hostnameViews` | `Record<string, StationViewId[]>` | *(See below)* | Maps each hostname/subdomain to the ordered list of station views permitted on that host (see [Hostname Matching & View Filtering](#hostname-matching--view-filtering-hostnameviews)). |
+| `defaultSessionDurationHours` | `number` | `3` | Default session length in hours pre-populated when launching a session and used for legacy volunteer-hour backfills. |
+| `allowMultiItemRegistration` | `boolean` | `false` | Controls whether a visitor can register multiple items (up to 4) in a single check-in. |
+| `excludedItems` | `string[]` | `['Microwave', 'Petrol-Driven Item', 'Electric Bike', 'Electric Scooter']` | Item types that trigger an advisory warning on `/register`. |
+| `patTesterServiceIntervalMonths` | `number` | `12` | Calibration interval in months before PAT instruments display a service reminder. |
+| `termsVersion` | `string` | `'1.0'` | Version identifier recorded alongside visitor consent in `private/customer.termsVersion`. |
+| `termsAndConditions` | `string` | `'/terms.md'` | Path or URL to the Markdown file containing your House Rules, Liability Disclaimer, and GDPR Privacy Notice. |
+| `whatsappGroupInviteUrl` | `string?` | `undefined` | Optional `https://chat.whatsapp.com/...` invite URL included in 1-to-1 volunteer onboarding messages. |
 
 ---
 
@@ -630,9 +634,9 @@ Visitor terms and operational safety policies are managed using Markdown files s
 
 ### Organizer Authorization (`organizerEmails`)
 
-Access to the Front Desk (`/frontdesk`) and the backend `finalizeSession` Cloud Function is restricted to authorised organisers using Google Sign-In. Authorization is evaluated in three places:
+Access to the Front Desk (`/frontdesk`) and the backend `finalizeSession` Cloud Function is restricted to authorised organisers using Google Sign-In. **Authorisation fails closed** whenever the allowed organiser list is empty.
 
-1. **Frontend Configuration (`cafeConfig.organizerEmails` in [`src/config/cafe.config.ts`](src/config/cafe.config.ts)):**
+1. **Day-1 Bootstrap Configuration (`src/config/cafe.local.ts` & optional `functions/src/config.local.ts` / `ORGANIZER_EMAILS`):**
    * Supports both **exact email addresses** (case-insensitive) and **Google Workspace domain suffixes** starting with `@`:
      ```ts
      organizerEmails: [
@@ -640,10 +644,9 @@ Access to the Front Desk (`/frontdesk`) and the backend `finalizeSession` Cloud 
        'coordinator@example.com',       // A specific personal Gmail / Google account
      ],
      ```
-2. **Dynamic Volunteer Register Sync (`settings/system.organizerEmails`):**
-   * Whenever an existing organiser adds a volunteer in the Front Desk **Volunteer Register** tab and checks the **Organiser (`isOrganiser`)** box alongside their Google email address, the app automatically syncs that email to `settings/system.organizerEmails` in Firestore—granting them organiser access without needing to redeploy the code.
-3. **Backend Cloud Function Configuration ([`functions/src/config.ts`](functions/src/config.ts)):**
-   * When finalizing a session, `finalizeSession` checks `settings/system.organizerEmails`, the `ORGANIZER_EMAILS` environment variable (comma-separated, if set on the Cloud Function), and `DEFAULT_ORGANIZER_EMAILS` in `functions/src/config.ts`.
+   * Used only as the initial bootstrap configuration before `settings/system.organizerEmails` is populated by the Volunteer Register.
+2. **Authoritative Volunteer Register Sync (`settings/system.organizerEmails`):**
+   * Once at least one active volunteer in the Front Desk **Volunteer Register** tab has the **Organiser (`isOrganiser`)** checkbox enabled alongside their Google email address, the app syncs those emails to `settings/system.organizerEmails` in Firestore—**overwriting** the initial bootstrap list on both the frontend and `finalizeSession` Cloud Function so organiser access can be granted and revoked dynamically without redeploying code.
 
 ---
 

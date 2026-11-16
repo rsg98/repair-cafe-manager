@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isAuthorizedOrganizer,
+  resolveEffectiveOrganizerEmails,
   isStationUnlocked,
   shouldFallbackToRedirect,
   isBenignPopupCancel,
@@ -49,9 +50,10 @@ describe('Organizer Authentication & Group Authorization (isAuthorizedOrganizer)
     expect(isAuthorizedOrganizer('attacker@notsuttonrepaircafe.org.uk', allowedList)).toBe(false);
   });
 
-  it('permits all authenticated emails when allowed list is empty (default open policy)', () => {
-    expect(isAuthorizedOrganizer('anyuser@example.com', [])).toBe(true);
-    expect(isAuthorizedOrganizer('anyuser@example.com', undefined)).toBe(true);
+  it('fails closed and rejects all emails when allowed list is empty or undefined', () => {
+    expect(isAuthorizedOrganizer('anyuser@example.com', [])).toBe(false);
+    expect(isAuthorizedOrganizer('anyuser@example.com', undefined)).toBe(false);
+    expect(isAuthorizedOrganizer('anyuser@example.com', ['   '])).toBe(false);
   });
 
   it('rejects null, undefined, or empty email addresses', () => {
@@ -59,6 +61,34 @@ describe('Organizer Authentication & Group Authorization (isAuthorizedOrganizer)
     expect(isAuthorizedOrganizer(undefined, allowedList)).toBe(false);
     expect(isAuthorizedOrganizer('', allowedList)).toBe(false);
     expect(isAuthorizedOrganizer('   ', allowedList)).toBe(false);
+  });
+});
+
+describe('Bootstrap vs Volunteer Register Organiser Resolution (resolveEffectiveOrganizerEmails)', () => {
+  it('uses bootstrap organiser emails when dynamic settings/system.organizerEmails is empty or absent', () => {
+    const bootstrap = ['Founder@Example.org ', '@suttonrepaircafe.org.uk'];
+    expect(resolveEffectiveOrganizerEmails(bootstrap, undefined)).toEqual([
+      'founder@example.org',
+      '@suttonrepaircafe.org.uk',
+    ]);
+    expect(resolveEffectiveOrganizerEmails(bootstrap, null)).toEqual([
+      'founder@example.org',
+      '@suttonrepaircafe.org.uk',
+    ]);
+    expect(resolveEffectiveOrganizerEmails(bootstrap, [])).toEqual([
+      'founder@example.org',
+      '@suttonrepaircafe.org.uk',
+    ]);
+  });
+
+  it('overwrites bootstrap emails once Volunteer Register dynamic emails are populated', () => {
+    const bootstrap = ['retired.founder@example.org', '@olddomain.org'];
+    const dynamicFromRegister = ['ActiveOrg@gmail.com ', 'SecondOrg@example.org'];
+    const effective = resolveEffectiveOrganizerEmails(bootstrap, dynamicFromRegister);
+
+    expect(effective).toEqual(['activeorg@gmail.com', 'secondorg@example.org']);
+    expect(isAuthorizedOrganizer('activeorg@gmail.com', effective)).toBe(true);
+    expect(isAuthorizedOrganizer('retired.founder@example.org', effective)).toBe(false);
   });
 });
 

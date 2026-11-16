@@ -9,7 +9,7 @@
  * - Exact email match (case-insensitive): "admin@example.com"
  * - Domain wildcard group (case-insensitive): "@example.com" or "example.com"
  *
- * If allowedPatterns is empty, it returns true for any valid email (default open policy).
+ * Fails closed: if `allowedPatterns` is empty, returns `false`.
  *
  * @param email The user's email address from Google Auth.
  * @param allowedPatterns Array of allowed emails or domain groups.
@@ -28,9 +28,9 @@ export function isAuthorizedOrganizer(
     return false;
   }
 
-  // If no restrictions are configured, any authenticated email is allowed
+  // Fail closed when no organiser email patterns are configured
   if (!allowedPatterns || allowedPatterns.length === 0) {
-    return true;
+    return false;
   }
 
   return allowedPatterns.some((pattern) => {
@@ -54,4 +54,39 @@ export function isAuthorizedOrganizer(
 
     return normalizedEmail === norm;
   });
+}
+
+/**
+ * Resolves the effective organiser email/domain list for Cloud Functions:
+ * - Once `dynamicEmails` (`settings/system.organizerEmails`, synced from the Volunteer Register
+ *   `isOrganiser` flag) contains at least one entry, it overwrites `bootstrapEmails`.
+ * - Before `settings/system.organizerEmails` is populated, falls back to `bootstrapEmails`.
+ */
+export function resolveEffectiveOrganizerEmails(
+  bootstrapEmails: string[] = [],
+  dynamicEmails?: string[] | null
+): string[] {
+  const normalizedDynamic = Array.isArray(dynamicEmails)
+    ? Array.from(
+        new Set(
+          dynamicEmails
+            .filter((entry): entry is string => typeof entry === 'string')
+            .map((entry) => entry.trim().toLowerCase())
+            .filter(Boolean)
+        )
+      )
+    : [];
+
+  if (normalizedDynamic.length > 0) {
+    return normalizedDynamic;
+  }
+
+  return Array.from(
+    new Set(
+      bootstrapEmails
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
 }

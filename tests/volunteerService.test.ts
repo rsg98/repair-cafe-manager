@@ -187,25 +187,40 @@ describe('Volunteer Service Validation & Pure Helpers', () => {
   });
 
   describe('mergeOrganiserEmails', () => {
-    it('merges static config emails with active organiser volunteer emails and deduplicates while ignoring archived volunteers', () => {
-      // Static config entries and volunteer records
-      const staticEmails = ['Admin@Example.com', '@suttonrepaircafe.org.uk'];
+    it('overwrites bootstrap config emails with active isOrganiser volunteer emails while ignoring archived and regular volunteers', () => {
+      // Bootstrap config entries and Volunteer Register records
+      const bootstrapEmails = ['RetiredBootstrap@Example.com', '@suttonrepaircafe.org.uk'];
       const volunteers: Array<Pick<Volunteer, 'isOrganiser' | 'email' | 'archived'>> = [
         { isOrganiser: true, email: 'NewOrg@gmail.com ' },
-        { isOrganiser: true, email: 'admin@example.com' },
+        { isOrganiser: true, email: 'neworg@gmail.com' },
+        { isOrganiser: true, email: 'SecondOrg@Example.com' },
         { isOrganiser: false, email: 'regular.fixer@gmail.com' },
         { isOrganiser: true, email: 'archived.org@gmail.com', archived: true },
       ];
 
-      // Merge and normalize
-      const merged = mergeOrganiserEmails(staticEmails, volunteers);
-      expect(merged).toEqual([
-        'admin@example.com',
+      // Active Volunteer Register organisers overwrite bootstrap config
+      const resolved = mergeOrganiserEmails(bootstrapEmails, volunteers);
+      expect(resolved).toEqual(['neworg@gmail.com', 'secondorg@example.com']);
+      expect(resolved).not.toContain('retiredbootstrap@example.com');
+      expect(resolved).not.toContain('regular.fixer@gmail.com');
+      expect(resolved).not.toContain('archived.org@gmail.com');
+    });
+
+    it('falls back to bootstrap config emails when no active volunteer is marked isOrganiser yet (Day-1 bootstrap)', () => {
+      const bootstrapEmails = ['Founder@Example.com ', '@suttonrepaircafe.org.uk'];
+      const noActiveOrganisers: Array<Pick<Volunteer, 'isOrganiser' | 'email' | 'archived'>> = [
+        { isOrganiser: false, email: 'fixer@gmail.com' },
+        { isOrganiser: true, email: 'archived.org@gmail.com', archived: true },
+      ];
+
+      expect(mergeOrganiserEmails(bootstrapEmails, [])).toEqual([
+        'founder@example.com',
         '@suttonrepaircafe.org.uk',
-        'neworg@gmail.com',
       ]);
-      expect(merged).not.toContain('regular.fixer@gmail.com');
-      expect(merged).not.toContain('archived.org@gmail.com');
+      expect(mergeOrganiserEmails(bootstrapEmails, noActiveOrganisers)).toEqual([
+        'founder@example.com',
+        '@suttonrepaircafe.org.uk',
+      ]);
     });
   });
 

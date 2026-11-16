@@ -9,7 +9,11 @@ import { Navigation } from './components/layout/Navigation';
 import { OfflineNotice } from './components/common/OfflineNotice';
 import { UpdateBanner } from './components/common/UpdateBanner';
 import { ChunkErrorBoundary } from './components/common/ChunkErrorBoundary';
-import { cafeConfig } from './config/cafe.config';
+import {
+  cafeConfig,
+  cafeConfigStatus,
+  CafeConfigValidationStatus,
+} from './config/cafe.config';
 import { resolveHostnameViews } from './utils/hostnameViews';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
@@ -51,10 +55,11 @@ export const RouteTitleSynchronizer: React.FC = () => {
   const location = useLocation();
 
   useEffect(() => {
+    const brandTitle = cafeConfig.cafeName || 'Repair Café';
     const stationTitle = ROUTE_TITLES[location.pathname];
     document.title = stationTitle
-      ? `${stationTitle} | ${cafeConfig.cafeName}`
-      : cafeConfig.cafeName;
+      ? `${stationTitle} | ${brandTitle}`
+      : brandTitle;
   }, [location.pathname]);
 
   return null;
@@ -67,6 +72,57 @@ const StationLoadingFallback: React.FC<{ label?: string }> = ({
   <div className="max-w-md mx-auto my-20 p-8 text-center text-slate-600" role="status" aria-live="polite">
     <div className="h-8 w-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" aria-hidden="true" />
     <p className="text-sm font-semibold">{label}</p>
+  </div>
+);
+
+// Blocking notice displayed when src/config/cafe.local.ts is missing or fails validation
+const ConfigurationErrorNotice: React.FC<{ status: CafeConfigValidationStatus }> = ({
+  status,
+}) => (
+  <div className="max-w-xl mx-auto my-16 px-4">
+    <div
+      className="p-8 bg-white rounded-2xl shadow-sm border border-rose-200 text-left"
+      role="alert"
+    >
+      <div className="h-14 w-14 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mx-auto mb-4">
+        <AlertTriangle className="h-8 w-8" aria-hidden="true" />
+      </div>
+      <h2 className="text-2xl font-bold text-slate-900 text-center">
+        {status.missingLocalConfig
+          ? 'Local Café Configuration Missing'
+          : 'Invalid Café Configuration'}
+      </h2>
+      <p className="mt-2 text-sm text-slate-700 text-center">
+        {status.missingLocalConfig ? (
+          <>
+            Copy{' '}
+            <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800">
+              src/config/cafe.local.example.ts
+            </code>{' '}
+            to{' '}
+            <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800">
+              src/config/cafe.local.ts
+            </code>{' '}
+            and set mandatory Repair Café values.
+          </>
+        ) : (
+          <>
+            One or more mandatory settings in{' '}
+            <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800">
+              src/config/cafe.local.ts
+            </code>{' '}
+            are missing or invalid:
+          </>
+        )}
+      </p>
+      {status.errors.length > 0 && (
+        <ul className="mt-4 space-y-2 rounded-xl bg-rose-50 border border-rose-200 p-4 text-xs text-rose-900 list-disc list-inside">
+          {status.errors.map((err, idx) => (
+            <li key={idx}>{err}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   </div>
 );
 
@@ -146,11 +202,18 @@ const AppShell: React.FC = () => {
           }}
           onDismiss={dismissBanner}
         />
-        <Header session={session} showAuthControls={hostConfig.showAuthControls} />
-        {hostConfig.showNavigation && <Navigation allowedViews={allowedViews} />}
+        <Header
+          session={session}
+          showAuthControls={cafeConfigStatus.valid && hostConfig.showAuthControls}
+        />
+        {cafeConfigStatus.valid && hostConfig.showNavigation && (
+          <Navigation allowedViews={allowedViews} />
+        )}
 
         <main id="main-content" tabIndex={-1} className="flex-1 pb-16 outline-none">
-          {!hostConfig.isConfigured || !defaultRoute ? (
+          {!cafeConfigStatus.valid ? (
+            <ConfigurationErrorNotice status={cafeConfigStatus} />
+          ) : !hostConfig.isConfigured || !defaultRoute ? (
             <UnconfiguredHostnameNotice hostname={hostConfig.hostname} />
           ) : loading ? (
             <StationLoadingFallback label="Connecting to Repair Café..." />
@@ -197,7 +260,8 @@ const AppShell: React.FC = () => {
         <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-600">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>
-              {cafeConfig.cafeName} • {cafeConfig.venueName}
+              {(cafeConfig.cafeName || 'Repair Café')}
+              {cafeConfig.venueName ? ` • ${cafeConfig.venueName}` : ''}
             </span>
             <span className="inline-flex items-center gap-2">
               <a

@@ -12,6 +12,7 @@ import { auth, db, googleAuthProvider } from '../services/firebase';
 import { cafeConfig } from '../config/cafe.config';
 import { 
   isAuthorizedOrganizer, 
+  resolveEffectiveOrganizerEmails,
   shouldFallbackToRedirect, 
   isBenignPopupCancel,
   isPinVolunteerUser
@@ -99,9 +100,11 @@ export function useAuth() {
     }
   };
 
-  // Combine static config emails with dynamic organiser emails stored in settings/system
-  const allowedOrganizers = Array.from(
-    new Set([...cafeConfig.organizerEmails, ...dynamicOrganizerEmails])
+  // Prefer dynamic organiser emails synced from Volunteer Register (isOrganiser),
+  // falling back to bootstrap cafeConfig.organizerEmails only before Firestore is populated
+  const allowedOrganizers = resolveEffectiveOrganizerEmails(
+    cafeConfig.organizerEmails,
+    dynamicOrganizerEmails
   );
   const isAdmin = !!(user && user.email && isAuthorizedOrganizer(user.email, allowedOrganizers));
   const isVolunteer = isPinVolunteerUser(user);

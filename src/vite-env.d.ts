@@ -19,6 +19,7 @@ interface ImportMeta {
 // Compile-time application version and build timestamp injected by vite.config.ts
 declare const __APP_VERSION__: string;
 declare const __APP_BUILD_TIMESTAMP__: number;
+declare const __ALLOW_EXAMPLE_CAFE_CONFIG__: boolean;
 
 // Type declarations for vite-plugin-pwa virtual registration module
 declare module 'virtual:pwa-register' {

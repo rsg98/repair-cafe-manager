@@ -11,6 +11,12 @@ functions/lib/
 .env.*
 !.env.example
 
+# Local Repair Café instance configuration (keep schema, defaults, and *.example.ts tracked)
+src/config/cafe.local.ts
+!src/config/cafe.local.example.ts
+functions/src/config.local.ts
+!functions/src/config.local.example.ts
+
 # Firebase & logs
 .firebase/
 firebase-debug.log*

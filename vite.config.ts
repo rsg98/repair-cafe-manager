@@ -1,9 +1,11 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolveCafeConfig, validateCafeConfig } from './src/config/cafe.validation';
+import type { CafeConfig } from './src/config/cafe.schema';
 
 // Read semantic version from package.json for compile-time version stamping
 const pkgJson = JSON.parse(
@@ -27,6 +29,54 @@ function resolveGitShortSha(): string {
 // Construct full semantic + git build version and numeric epoch timestamp
 const appVersion = `${pkgJson.version ?? '0.1.0'}+${resolveGitShortSha()}`;
 const appBuildTimestamp = Date.now();
+const isCI = Boolean(process.env.CI);
+
+/**
+ * Vite build guard that blocks local production builds (`npm run build`) when
+ * `src/config/cafe.local.ts` is missing or fails mandatory schema validation.
+ * Automated CI workflows (`CI=true`) are permitted to build against `cafe.local.example.ts`.
+ */
+function cafeConfigGuardPlugin(): Plugin {
+  let isBuildCommand = false;
+  return {
+    name: 'repair-cafe-config-guard',
+    configResolved(resolved) {
+      isBuildCommand = resolved.command === 'build';
+    },
+    async buildStart() {
+      if (!isBuildCommand || isCI) {
+        return;
+      }
+
+      const localConfigUrl = new URL('./src/config/cafe.local.ts', import.meta.url);
+      if (!existsSync(localConfigUrl)) {
+        throw new Error(
+          [
+            '[cafe-config] Missing local Repair Café configuration: src/config/cafe.local.ts',
+            'Copy src/config/cafe.local.example.ts to src/config/cafe.local.ts and populate mandatory fields before building.',
+          ].join('\n')
+        );
+      }
+
+      const loaded = (await import(/* @vite-ignore */ localConfigUrl.href)) as {
+        cafeUserConfig?: Partial<CafeConfig>;
+      };
+      const resolvedConfig = resolveCafeConfig(loaded.cafeUserConfig);
+      const errors = validateCafeConfig(resolvedConfig, {
+        rejectExamplePlaceholders: true,
+      });
+
+      if (errors.length > 0) {
+        throw new Error(
+          [
+            '[cafe-config] Invalid configuration in src/config/cafe.local.ts:',
+            ...errors.map((err) => `  - ${err}`),
+          ].join('\n')
+        );
+      }
+    },
+  };
+}
 
 // Shared HTTP response headers allowing Firebase Auth Google OAuth popups to check window.closed
 const coopHeaders = {
@@ -38,6 +88,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
     __APP_BUILD_TIMESTAMP__: JSON.stringify(appBuildTimestamp),
+    __ALLOW_EXAMPLE_CAFE_CONFIG__: JSON.stringify(isCI),
   },
   // Apply COOP header in local development and preview servers to prevent browser COOP warnings
   server: {
@@ -89,6 +140,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    cafeConfigGuardPlugin(),
     tailwindcss(),
     react(),
     // Configure Progressive Web App service worker and manifest for offline community hall usage

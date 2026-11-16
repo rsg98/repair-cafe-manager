@@ -33,11 +33,13 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Cafe title and desktop tagline */}
           <div>
             <h1 className="text-lg font-bold tracking-tight text-white leading-tight">
-              {cafeConfig.cafeName}
+              {cafeConfig.cafeName || 'Repair Café'}
             </h1>
-            <p className="text-xs text-brand-200 hidden sm:block">
-              {cafeConfig.tagline}
-            </p>
+            {cafeConfig.tagline && (
+              <p className="text-xs text-brand-200 hidden sm:block">
+                {cafeConfig.tagline}
+              </p>
+            )}
           </div>
         </div>
 
