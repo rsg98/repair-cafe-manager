@@ -14,7 +14,7 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
 } from "firebase-admin/firestore";
-import { defaultOrganizerEmails } from "./config";
+import { defaultOrganizerEmails, defaultSessionDurationHours } from "./config";
 import { isAuthorizedOrganizer } from "./authUtils";
 
 // Initialize the default Firebase Admin app if not already initialized
@@ -220,12 +220,19 @@ function buildAnalyticsSummaryDoc(
   const patFailureRatePercent =
     acc.patTestedCount > 0 ? Math.round((acc.patFailedCount / acc.patTestedCount) * 100) : 0;
 
-  // Count attending volunteers recorded on the session document
+  // Count attending volunteers and compute total volunteer hours (volunteerCount × sessionDurationHours)
   const volunteerCount = Array.isArray(sessionData.attendingVolunteers)
     ? sessionData.attendingVolunteers.length
     : Array.isArray(sessionData.attendingVolunteerIds)
       ? sessionData.attendingVolunteerIds.length
       : 0;
+  const rawDuration = sessionData.sessionDurationHours;
+  const sessionDurationHours =
+    typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration > 0
+      ? Math.round(rawDuration * 100) / 100
+      : defaultSessionDurationHours;
+  const totalVolunteerHours =
+    Math.round(Math.max(0, volunteerCount) * sessionDurationHours * 10) / 10;
 
   // Return the structured session analytics summary payload
   return {
@@ -245,11 +252,13 @@ function buildAnalyticsSummaryDoc(
     successRatePercent,
     totalWeightDivertedKg: Math.round(acc.totalWeightKg * 10) / 10,
     categoryBreakdown: acc.categoryBreakdown,
-    // Populate electrical PAT safety counters, volunteer count, and server finalization timestamp
+    // Populate electrical PAT safety counters, volunteer hours, and server finalization timestamp
     mainsItemsCount: acc.mainsCount,
     patTestedCount: acc.patTestedCount,
     patFailureRatePercent,
     volunteerCount,
+    sessionDurationHours,
+    totalVolunteerHours,
     finalizedAt: FieldValue.serverTimestamp(),
   };
 }

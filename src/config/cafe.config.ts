@@ -13,6 +13,11 @@ export interface CafeConfig {
     start: number;
     end: number;
   };
+  /**
+   * Default Repair Café session length in hours pre-populated when starting a new session
+   * and used as the fallback duration for legacy sessions without an explicit length (Issue #42).
+   */
+  defaultSessionDurationHours: number;
   allowMultiItemRegistration: boolean;
   /**
    * List of item type labels (matching `ITEM_TYPE_SUGGESTIONS` labels or custom terms)
@@ -64,6 +69,8 @@ export const cafeConfig: CafeConfig = {
     start: 1,
     end: 100
   },
+  // Default session length in hours when launching a new Repair Café session (Issue #42)
+  defaultSessionDurationHours: 3,
   // Set to false for Sutton Repair Cafe to ensure equitable queuing across visitors.
   // Other repair cafes deploying this software can set this to true if multi-item check-in is permitted.
   allowMultiItemRegistration: false,

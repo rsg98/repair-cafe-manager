@@ -184,6 +184,8 @@ export interface Session {
   status: 'ACTIVE' | 'FINALIZED';
   // Optional flag indicating a rehearsal/training session excluded from public impact reports (Issue #24)
   isTest?: boolean;
+  // Length of the Repair Café session in hours (defaults to cafeConfig.defaultSessionDurationHours, Issue #42)
+  sessionDurationHours?: number;
   // SHA-256 hash of daily 4-digit volunteer PIN and physical card range
   volunteerPinHash: string;
   cardRangeStart: number;
@@ -426,5 +428,8 @@ export interface SessionAnalytics {
   patTestedCount: number;
   patFailureRatePercent: number;
   volunteerCount?: number;
+  // Session length in hours and total volunteer hours (attending volunteers × session length, Issue #42)
+  sessionDurationHours?: number;
+  totalVolunteerHours?: number;
   finalizedAt?: number;
 }

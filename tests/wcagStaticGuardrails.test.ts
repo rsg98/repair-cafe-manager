@@ -149,6 +149,40 @@ describe('WCAG 2.2 Level AA Static Source Guardrails', () => {
     }
   });
 
+  it('enforces mobile-safe scrollable ModalBackdrop across all modal dialogs without unsafe flex items-center top clipping (Issue #45, WCAG 1.3.4, 1.4.4, 1.4.10)', async () => {
+    const backdropSource = await readRepoFile('src/components/common/ModalBackdrop.tsx');
+    expect(backdropSource).toContain('data-modal-scroll-container="true"');
+    expect(backdropSource).toContain('overflow-y-auto');
+    expect(backdropSource).toContain('overscroll-contain');
+    expect(backdropSource).toContain('min-h-full');
+    expect(backdropSource).toContain('items-start');
+    // Guard against reintroducing unsafe vertical flex centering on the scroll container
+    expect(backdropSource).not.toContain('items-center');
+
+    const modalFiles = [
+      'src/components/common/PinModal.tsx',
+      'src/components/common/TermsModal.tsx',
+      'src/components/common/PoliciesModal.tsx',
+      'src/components/common/PhotoViewerModal.tsx',
+      'src/components/pat/PatInstrumentModal.tsx',
+      'src/components/frontdesk/VolunteerRegisterPanel.tsx',
+      'src/components/frontdesk/SessionAttendanceBar.tsx',
+      'src/components/frontdesk/TakenHomeTabPanel.tsx',
+      'src/views/FrontDeskView.tsx',
+      'src/views/FixerStationView.tsx',
+    ];
+
+    for (const file of modalFiles) {
+      const source = await readRepoFile(file);
+      expect(source, `${file} must use shared ModalBackdrop`).toContain('ModalBackdrop');
+      expect(source, `${file} must use my-auto for safe vertical centring`).toContain('my-auto');
+      expect(
+        source,
+        `${file} must not define raw fixed inset-0 overlays outside ModalBackdrop`
+      ).not.toContain('fixed inset-0');
+    }
+  });
+
   it('verifies colour token pairs meet WCAG 1.4.3 minimum 4.5:1 normal text contrast ratio', async () => {
     // slate-600 (#475569) on white (#ffffff) and slate-50 (#f8fafc)
     expect(contrastRatio('#475569', '#ffffff')).toBeGreaterThanOrEqual(4.5);

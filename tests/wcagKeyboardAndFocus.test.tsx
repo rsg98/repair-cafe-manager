@@ -147,9 +147,11 @@ describe('WCAG 2.2 Level AA Keyboard, Focus Trap & Route Title Behaviour', () =>
     expect(document.activeElement).toBe(trigger);
 
     // Open the modal dialog
+    expect(document.body.style.overflow).toBe('');
     await act(async () => {
       trigger.click();
     });
+    expect(document.body.style.overflow).toBe('hidden');
 
     const firstInput = container.querySelector<HTMLInputElement>('#dialog-first-input')!;
     const lastBtn = container.querySelector<HTMLButtonElement>('#dialog-last-btn')!;
@@ -173,13 +175,14 @@ describe('WCAG 2.2 Level AA Keyboard, Focus Trap & Route Title Behaviour', () =>
     });
     expect(document.activeElement).toBe(firstInput);
 
-    // Pressing Escape closes the dialog and restores focus to the trigger button
+    // Pressing Escape closes the dialog, unlocks body scroll, and restores focus to the trigger button
     await act(async () => {
       document.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
       );
     });
     expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.style.overflow).toBe('');
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -203,7 +206,8 @@ describe('WCAG 2.2 Level AA Keyboard, Focus Trap & Route Title Behaviour', () =>
     });
     expect(document.activeElement).toBe(childBtn2);
 
-    // Escape closes only the child dialog while keeping the parent dialog open and focused
+    // Escape closes only the child dialog while keeping the parent dialog open, body scroll locked, and parent focused
+    expect(document.body.style.overflow).toBe('hidden');
     await act(async () => {
       document.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
@@ -211,6 +215,7 @@ describe('WCAG 2.2 Level AA Keyboard, Focus Trap & Route Title Behaviour', () =>
     });
     expect(container.querySelector('#child-dialog')).toBeNull();
     expect(container.querySelector('#parent-dialog')).not.toBeNull();
+    expect(document.body.style.overflow).toBe('hidden');
     expect(document.activeElement).toBe(parentBtn);
   });
 

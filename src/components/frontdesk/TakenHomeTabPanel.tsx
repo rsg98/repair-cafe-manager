@@ -63,6 +63,7 @@ import {
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { CardToken } from '../common/CardToken';
 import { StatusBadge } from '../common/StatusBadge';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 /**
  * Props accepted by the {@link TakenHomeTabPanel} component.
@@ -802,7 +803,7 @@ export const TakenHomeTabPanel: React.FC<TakenHomeTabPanelProps> = ({
 
       {/* Organiser Taken-Home Repair Completion / Interim Update Modal */}
       {editingEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <ModalBackdrop>
           {/* Focus-trapped modal dialog container */}
           <div
             ref={modalRef}
@@ -810,7 +811,7 @@ export const TakenHomeTabPanel: React.FC<TakenHomeTabPanelProps> = ({
             aria-modal="true"
             aria-labelledby="organiser-taken-home-modal-title"
             tabIndex={-1}
-            className="w-full max-w-2xl rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-200 my-8 space-y-5 max-h-[90vh] overflow-y-auto"
+            className="my-auto w-full max-w-2xl rounded-3xl bg-white p-5 sm:p-8 shadow-2xl border border-slate-200 space-y-5"
           >
             {/* Modal Header */}
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-200">
@@ -1283,7 +1284,7 @@ export const TakenHomeTabPanel: React.FC<TakenHomeTabPanelProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
     </div>
   );

@@ -11,3 +11,9 @@ export const defaultOrganizerEmails: string[] = [
   "info@suttonrepaircafe.org.uk",
   "@suttonrepaircafe.org.uk"
 ];
+
+/**
+ * Default Repair Café session length in hours used when a session document
+ * does not explicitly specify `sessionDurationHours` (Issue #42).
+ */
+export const defaultSessionDurationHours = 3;

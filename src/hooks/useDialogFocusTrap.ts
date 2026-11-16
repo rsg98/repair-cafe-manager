@@ -31,10 +31,25 @@ const FOCUSABLE_SELECTOR = [
 const activeDialogStack: HTMLElement[] = [];
 
 /**
- * Clears the module-level active dialog stack between unit tests.
+ * Saved `document.body.style.overflow` value captured before the first modal opens so
+ * background page scrolling is locked on mobile/iOS while any dialog is active and cleanly
+ * restored once the last dialog closes.
+ */
+let savedBodyOverflow: string | null = null;
+
+/**
+ * Clears the module-level active dialog stack and restores body overflow between unit tests.
  */
 export function resetDialogStackForTesting(): void {
   activeDialogStack.length = 0;
+  if (
+    savedBodyOverflow !== null &&
+    typeof document !== 'undefined' &&
+    document.body
+  ) {
+    document.body.style.overflow = savedBodyOverflow;
+    savedBodyOverflow = null;
+  }
 }
 
 /**
@@ -89,6 +104,14 @@ export function useDialogFocusTrap(
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     if (!activeDialogStack.includes(dialogEl)) {
+      if (
+        activeDialogStack.length === 0 &&
+        typeof document !== 'undefined' &&
+        document.body
+      ) {
+        savedBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+      }
       activeDialogStack.push(dialogEl);
     }
 
@@ -182,6 +205,14 @@ export function useDialogFocusTrap(
       }
 
       if (activeDialogStack.length === 0) {
+        if (
+          savedBodyOverflow !== null &&
+          typeof document !== 'undefined' &&
+          document.body
+        ) {
+          document.body.style.overflow = savedBodyOverflow;
+          savedBodyOverflow = null;
+        }
         if (previousActiveElement && document.body.contains(previousActiveElement)) {
           previousActiveElement.focus();
         }

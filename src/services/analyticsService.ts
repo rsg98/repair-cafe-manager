@@ -8,6 +8,104 @@
 import { collection, getDocs, doc, getDoc, query, orderBy } from 'firebase/firestore';
 import { db } from './firebase';
 import { SessionAnalytics } from '../types';
+import { cafeConfig } from '../config/cafe.config';
+
+/** Aggregated totals computed across official finalised Repair Café sessions. */
+export interface OfficialImpactTotals {
+  totalItems: number;
+  repairedCount: number;
+  weightKg: number;
+  repairMinutes: number;
+  repairHours: number;
+  patTested: number;
+  totalVolunteers: number;
+  totalVolunteerHours: number;
+  categories: Record<string, number>;
+}
+
+/**
+ * Resolves the effective session length in hours for an analytics or session record,
+ * falling back to `cafeConfig.defaultSessionDurationHours` for legacy sessions (Issue #42).
+ */
+export function resolveSessionDurationHours(
+  durationHours?: number,
+  fallbackHours: number = cafeConfig.defaultSessionDurationHours
+): number {
+  if (typeof durationHours === 'number' && Number.isFinite(durationHours) && durationHours > 0) {
+    return Math.round(durationHours * 100) / 100;
+  }
+  return Math.round(fallbackHours * 100) / 100;
+}
+
+/**
+ * Resolves the total attendee volunteer hours (`volunteerCount × sessionDurationHours`)
+ * for a single session analytics record, computing the fallback product when legacy
+ * finalized sessions omit `totalVolunteerHours` (Issue #42).
+ */
+export function resolveSessionVolunteerHours(
+  analytics: Pick<SessionAnalytics, 'volunteerCount' | 'sessionDurationHours' | 'totalVolunteerHours'>,
+  fallbackHours: number = cafeConfig.defaultSessionDurationHours
+): number {
+  if (
+    typeof analytics.totalVolunteerHours === 'number' &&
+    Number.isFinite(analytics.totalVolunteerHours) &&
+    analytics.totalVolunteerHours >= 0
+  ) {
+    return Math.round(analytics.totalVolunteerHours * 10) / 10;
+  }
+  const count = Math.max(0, analytics.volunteerCount ?? 0);
+  const duration = resolveSessionDurationHours(analytics.sessionDurationHours, fallbackHours);
+  return Math.round(count * duration * 10) / 10;
+}
+
+/**
+ * Pure helper that aggregates cumulative community impact metrics — including both
+ * active bench `repairHours` and attendee `totalVolunteerHours` — across official sessions.
+ */
+export function computeOfficialImpactTotals(
+  officialAnalytics: SessionAnalytics[],
+  fallbackHours: number = cafeConfig.defaultSessionDurationHours
+): OfficialImpactTotals {
+  // Sum item counts, weights, bench repair minutes, attendee volunteer hours, and categories
+  const raw = officialAnalytics.reduce<OfficialImpactTotals>(
+    (acc, curr) => {
+      acc.totalItems += curr.totalItems || 0;
+      acc.repairedCount += curr.repairedCount || 0;
+      acc.weightKg += curr.totalWeightDivertedKg || 0;
+      acc.repairMinutes += curr.totalRepairTimeMinutes || 0;
+      acc.patTested += curr.patTestedCount || 0;
+      acc.totalVolunteers += curr.volunteerCount || 0;
+      acc.totalVolunteerHours += resolveSessionVolunteerHours(curr, fallbackHours);
+
+      // Aggregate item counts by category across all official finalised sessions
+      if (curr.categoryBreakdown) {
+        for (const [cat, count] of Object.entries(curr.categoryBreakdown)) {
+          acc.categories[cat] = (acc.categories[cat] || 0) + count;
+        }
+      }
+      return acc;
+    },
+    {
+      totalItems: 0,
+      repairedCount: 0,
+      weightKg: 0,
+      repairMinutes: 0,
+      repairHours: 0,
+      patTested: 0,
+      totalVolunteers: 0,
+      totalVolunteerHours: 0,
+      categories: {},
+    }
+  );
+
+  // Round floating-point sums cleanly to 1 decimal place
+  return {
+    ...raw,
+    weightKg: Math.round(raw.weightKg * 10) / 10,
+    repairHours: Math.round((raw.repairMinutes / 60) * 10) / 10,
+    totalVolunteerHours: Math.round(raw.totalVolunteerHours * 10) / 10,
+  };
+}
 
 /**
  * Fetch all session analytics summaries ordered by date descending.
@@ -69,6 +167,8 @@ export function exportAnalyticsToCsv(analyticsList: SessionAnalytics[]): string 
     'PAT Tested Count',
     'PAT Failure Rate (%)',
     'Attending Volunteers',
+    'Session Length (hrs)',
+    'Total Volunteer Hours',
   ];
 
   // Format each session analytics summary into a comma-separated row
@@ -91,6 +191,8 @@ export function exportAnalyticsToCsv(analyticsList: SessionAnalytics[]): string 
     a.patTestedCount,
     `${a.patFailureRatePercent}%`,
     a.volunteerCount ?? 0,
+    resolveSessionDurationHours(a.sessionDurationHours),
+    resolveSessionVolunteerHours(a),
   ]);
 
   // Join header row and data rows with newlines

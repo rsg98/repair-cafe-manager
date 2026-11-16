@@ -26,6 +26,9 @@ import type {
 export const HISTORICAL_DEFAULT_PIN_HASH =
   '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0';
 
+/** Default session duration in hours assigned to historical ingested sessions (Issue #42). */
+export const DEFAULT_HISTORICAL_SESSION_DURATION_HOURS = 3;
+
 /** Parsed CLI options for the `ingest-history` utility. */
 export interface IngestHistoricalCliOptions {
   command: 'ingest' | 'help';
@@ -1016,7 +1019,8 @@ export function computeHistoricalSessionAnalytics(
   repairs: RepairItem[],
   finalizedAt: number,
   volunteerCount: number,
-  isTest = false
+  isTest = false,
+  sessionDurationHours = DEFAULT_HISTORICAL_SESSION_DURATION_HOURS
 ): SessionAnalytics {
   let totalItems = 0;
   let repairedCount = 0;
@@ -1080,6 +1084,15 @@ export function computeHistoricalSessionAnalytics(
   const patFailureRatePercent =
     patTestedCount > 0 ? Math.round((patFailedCount / patTestedCount) * 100) : 0;
 
+  const resolvedDurationHours =
+    typeof sessionDurationHours === 'number' &&
+    Number.isFinite(sessionDurationHours) &&
+    sessionDurationHours > 0
+      ? Math.round(sessionDurationHours * 100) / 100
+      : DEFAULT_HISTORICAL_SESSION_DURATION_HOURS;
+  const totalVolunteerHours =
+    Math.round(Math.max(0, volunteerCount) * resolvedDurationHours * 10) / 10;
+
   return {
     sessionId,
     sessionName,
@@ -1100,6 +1113,8 @@ export function computeHistoricalSessionAnalytics(
     patTestedCount,
     patFailureRatePercent,
     volunteerCount,
+    sessionDurationHours: resolvedDurationHours,
+    totalVolunteerHours,
     finalizedAt,
   };
 }
@@ -1888,6 +1903,7 @@ export function buildHistoricalIngestionPlan(params: {
       date: sessionDate,
       status: 'FINALIZED',
       isTest: false,
+      sessionDurationHours: DEFAULT_HISTORICAL_SESSION_DURATION_HOURS,
       volunteerPinHash: HISTORICAL_DEFAULT_PIN_HASH,
       cardRangeStart,
       cardRangeEnd,
@@ -1905,7 +1921,8 @@ export function buildHistoricalIngestionPlan(params: {
         plannedRepairs.map((r) => r.repairItem),
         finalizedAt,
         attendingVolunteers.length,
-        false
+        false,
+        DEFAULT_HISTORICAL_SESSION_DURATION_HOURS
       )
     );
 

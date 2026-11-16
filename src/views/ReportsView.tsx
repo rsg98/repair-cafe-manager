@@ -13,6 +13,7 @@ import {
   Download,
   Leaf,
   Clock,
+  Users,
   CheckCircle2,
   Zap,
   Calendar,
@@ -24,58 +25,14 @@ import { SessionAnalytics } from '../types';
 import {
   listAllAnalytics,
   filterAnalyticsForReporting,
+  computeOfficialImpactTotals,
+  resolveSessionVolunteerHours,
   exportAnalyticsToCsv,
   triggerCsvDownload
 } from '../services/analyticsService';
 import { setSessionTestStatus } from '../services/sessionService';
 import { useAuth } from '../hooks/useAuth';
 import { cafeConfig } from '../config/cafe.config';
-
-/** Aggregated totals computed across official finalized sessions. */
-interface OfficialImpactTotals {
-  totalItems: number;
-  repairedCount: number;
-  weightKg: number;
-  repairMinutes: number;
-  patTested: number;
-  totalVolunteers: number;
-  categories: Record<string, number>;
-}
-
-/**
- * Pure helper that aggregates cumulative community impact metrics across official sessions.
- */
-function computeOfficialTotals(officialAnalytics: SessionAnalytics[]): OfficialImpactTotals {
-  // Sum item counts, weights, durations, PAT checks, and categories across official sessions
-  return officialAnalytics.reduce<OfficialImpactTotals>(
-    (acc, curr) => {
-      acc.totalItems += curr.totalItems || 0;
-      acc.repairedCount += curr.repairedCount || 0;
-      acc.weightKg += curr.totalWeightDivertedKg || 0;
-      acc.repairMinutes += curr.totalRepairTimeMinutes || 0;
-      acc.patTested += curr.patTestedCount || 0;
-      acc.totalVolunteers += curr.volunteerCount || 0;
-
-      // Aggregate item counts by category across all official finalized sessions
-      if (curr.categoryBreakdown) {
-        for (const [cat, count] of Object.entries(curr.categoryBreakdown)) {
-          acc.categories[cat] = (acc.categories[cat] || 0) + count;
-        }
-      }
-      return acc;
-    },
-    {
-      // Initial accumulator values for official community impact metrics
-      totalItems: 0,
-      repairedCount: 0,
-      weightKg: 0,
-      repairMinutes: 0,
-      patTested: 0,
-      totalVolunteers: 0,
-      categories: {}
-    }
-  );
-}
 
 /** Props for a single metric card in the cumulative impact summary grid. */
 interface KpiMetricCardProps {
@@ -89,7 +46,7 @@ interface KpiMetricCardProps {
 }
 
 /**
- * Renders a single KPI metric card in the top 4-card summary grid.
+ * Renders a single KPI metric card in the top 5-card summary grid.
  */
 const KpiMetricCard: React.FC<KpiMetricCardProps> = ({
   label,
@@ -101,18 +58,18 @@ const KpiMetricCard: React.FC<KpiMetricCardProps> = ({
   caption
 }) => (
   // Card container with rounded border and subtle shadow
-  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-    <div className="flex items-center justify-between">
+  <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
+    <div className="flex items-center justify-between gap-2">
       <span className={`text-xs font-bold uppercase tracking-wider ${labelColorClass}`}>
         {label}
       </span>
       {/* Icon badge */}
-      <div className={`p-2 rounded-xl ${iconBgClass}`}>{icon}</div>
+      <div className={`p-2 rounded-xl flex-shrink-0 ${iconBgClass}`}>{icon}</div>
     </div>
     {/* Primary metric value and unit label */}
-    <div className="mt-4 flex items-baseline gap-2">
+    <div className="mt-4 flex items-baseline gap-2 flex-wrap">
       <span className="text-3xl font-black text-slate-900 font-mono">{primaryValue}</span>
-      <span className="text-sm font-bold text-slate-500">{unitLabel}</span>
+      <span className="text-sm font-bold text-slate-600">{unitLabel}</span>
     </div>
     <p className="text-xs text-slate-600 mt-2">{caption}</p>
   </div>
@@ -139,7 +96,7 @@ const SessionArchiveRow: React.FC<SessionArchiveRowProps> = ({
   <tr
     className={`transition-colors ${
       item.isTest
-        ? 'bg-amber-50/40 text-slate-500 hover:bg-amber-50/70'
+        ? 'bg-amber-50/40 text-slate-600 hover:bg-amber-50/70'
         : 'hover:bg-slate-50'
     }`}
   >
@@ -158,9 +115,12 @@ const SessionArchiveRow: React.FC<SessionArchiveRowProps> = ({
     <td className="py-3.5 px-4 text-emerald-700 font-bold">{item.repairedCount}</td>
     <td className="py-3.5 px-4 font-bold">{item.successRatePercent}%</td>
     <td className="py-3.5 px-4 font-mono">{item.totalWeightDivertedKg} kg</td>
-    {/* Volunteer hours, attending volunteer count, and PAT failure rate */}
+    {/* Logged repair hours, total volunteer hours (attendees × session length), attendance, and PAT fail rate */}
     <td className="py-3.5 px-4 font-mono">
       {Math.round(((item.totalRepairTimeMinutes || 0) / 60) * 10) / 10} hrs
+    </td>
+    <td className="py-3.5 px-4 font-mono font-bold text-indigo-800">
+      {resolveSessionVolunteerHours(item)} hrs
     </td>
     <td className="py-3.5 px-4 font-mono">{item.volunteerCount ?? 0}</td>
     <td className="py-3.5 px-4 text-xs font-mono">
@@ -223,9 +183,10 @@ export const ReportsView: React.FC = () => {
   const testSessionCount = analyticsList.filter((a) => Boolean(a.isTest)).length;
 
   // Compute cumulative community impact metrics strictly across official sessions
-  const totals = computeOfficialTotals(officialAnalytics);
+  const totals = computeOfficialImpactTotals(officialAnalytics);
   const overallSuccessRate =
     totals.totalItems > 0 ? Math.round((totals.repairedCount / totals.totalItems) * 100) : 0;
+  const sessionWord = officialAnalytics.length === 1 ? 'session' : 'sessions';
 
   // Export strictly official session analytics to a grant-ready CSV download
   const handleExportCsv = () => {
@@ -277,7 +238,7 @@ export const ReportsView: React.FC = () => {
             <BarChart3 className="h-7 w-7 text-emerald-700" />
             Community Impact &amp; Repair Reports
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-600">
             Real-time reporting and environmental metrics for {cafeConfig.cafeName}
           </p>
         </div>
@@ -293,13 +254,13 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* Cumulative Impact Cards (strictly official sessions) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiMetricCard
           label="Landfill Diverted"
           labelColorClass="text-emerald-800"
           iconBgClass="bg-emerald-50 text-emerald-700"
-          icon={<Leaf className="h-5 w-5" />}
-          primaryValue={Math.round(totals.weightKg * 10) / 10}
+          icon={<Leaf className="h-5 w-5" aria-hidden="true" />}
+          primaryValue={totals.weightKg}
           unitLabel="kg e-waste"
           caption="Estimated electronic & mechanical waste saved from landfill"
         />
@@ -308,27 +269,37 @@ export const ReportsView: React.FC = () => {
           label="Success Rate"
           labelColorClass="text-blue-800"
           iconBgClass="bg-blue-50 text-blue-700"
-          icon={<CheckCircle2 className="h-5 w-5" />}
+          icon={<CheckCircle2 className="h-5 w-5" aria-hidden="true" />}
           primaryValue={`${overallSuccessRate}%`}
           unitLabel={`(${totals.repairedCount} / ${totals.totalItems} items)`}
           caption="Items restored to working order or given partial repair"
         />
-        {/* Volunteer Time Invested Card */}
+        {/* Total Attendee Volunteer Hours Card (Issue #42) */}
         <KpiMetricCard
-          label="Volunteer Effort"
+          label="Total Volunteer Hours"
+          labelColorClass="text-indigo-800"
+          iconBgClass="bg-indigo-50 text-indigo-700"
+          icon={<Users className="h-5 w-5" aria-hidden="true" />}
+          primaryValue={totals.totalVolunteerHours}
+          unitLabel="hours"
+          caption={`Attending volunteers × session length across ${officialAnalytics.length} ${sessionWord}`}
+        />
+        {/* Active Bench Repair Hours Card (Issue #42) */}
+        <KpiMetricCard
+          label="Repair Hours"
           labelColorClass="text-purple-800"
           iconBgClass="bg-purple-50 text-purple-700"
-          icon={<Clock className="h-5 w-5" />}
-          primaryValue={Math.round((totals.repairMinutes / 60) * 10) / 10}
+          icon={<Clock className="h-5 w-5" aria-hidden="true" />}
+          primaryValue={totals.repairHours}
           unitLabel="hours"
-          caption={`Dedicated by volunteer fixers across ${officialAnalytics.length} sessions`}
+          caption={`Logged bench repair time across ${officialAnalytics.length} ${sessionWord}`}
         />
         {/* Electrical Safety Screenings Card */}
         <KpiMetricCard
           label="PAT Screenings"
           labelColorClass="text-amber-800"
           iconBgClass="bg-amber-50 text-amber-700"
-          icon={<Zap className="h-5 w-5" />}
+          icon={<Zap className="h-5 w-5" aria-hidden="true" />}
           primaryValue={totals.patTested}
           unitLabel="appliances"
           caption="Class I & II 240V mains safety checks completed"
@@ -431,7 +402,8 @@ export const ReportsView: React.FC = () => {
                   <th scope="col" className="py-3 px-4">Repaired</th>
                   <th scope="col" className="py-3 px-4">Success Rate</th>
                   <th scope="col" className="py-3 px-4">Weight Diverted</th>
-                  <th scope="col" className="py-3 px-4">Volunteer Hours</th>
+                  <th scope="col" className="py-3 px-4">Repair Hours</th>
+                  <th scope="col" className="py-3 px-4">Total Volunteer Hours</th>
                   {/* Additional column headers for attendance, PAT failure rate, and admin actions */}
                   <th scope="col" className="py-3 px-4">Attending Volunteers</th>
                   <th scope="col" className="py-3 px-4">PAT Fail Rate</th>

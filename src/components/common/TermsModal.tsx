@@ -3,6 +3,7 @@ import { X, ShieldCheck, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { cafeConfig } from '../../config/cafe.config';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { MarkdownViewer } from './MarkdownViewer';
+import { ModalBackdrop } from './ModalBackdrop';
 
 interface TermsModalProps {
   isOpen: boolean;
@@ -75,14 +76,14 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose, onAccep
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <ModalBackdrop>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="terms-modal-title"
         tabIndex={-1}
-        className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]"
+        className="my-auto w-full max-w-2xl rounded-2xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[calc(100dvh-2.5rem)] sm:max-h-[90dvh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-200">
@@ -170,6 +171,6 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose, onAccep
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };

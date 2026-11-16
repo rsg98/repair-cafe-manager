@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { RepairItem, RepairPhoto } from '../../types';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
+import { ModalBackdrop } from './ModalBackdrop';
 import { fetchRepairPhotos, deleteRepairPhoto } from '../../services/repairService';
 import {
   formatPhotoSizeKb,
@@ -150,16 +151,16 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
   };
 
   return (
-    <div
-      ref={dialogRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="photo-viewer-modal-title"
-      tabIndex={-1}
-    >
+    <ModalBackdrop backdropClassName="bg-black/70 backdrop-blur-sm">
       {/* Modal card container */}
-      <div className="w-full max-w-xl rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200 my-8">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="photo-viewer-modal-title"
+        tabIndex={-1}
+        className="my-auto w-full max-w-xl rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200"
+      >
         {/* Header with item details and close button */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -362,6 +363,6 @@ export const PhotoViewerModal: React.FC<PhotoViewerModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };

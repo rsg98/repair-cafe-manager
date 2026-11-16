@@ -57,6 +57,7 @@ import {
 import { CardToken } from '../components/common/CardToken';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { SafetyBanner } from '../components/common/SafetyBanner';
+import { ModalBackdrop } from '../components/common/ModalBackdrop';
 import { PinModal } from '../components/common/PinModal';
 import { PoliciesModal } from '../components/common/PoliciesModal';
 import { PhotoViewerModal } from '../components/common/PhotoViewerModal';
@@ -1016,9 +1017,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
 
       {/* Pre-Submit Confirmation Modal when Outcome === 'TAKEN_HOME' */}
       {showTakeHomeModal && currentItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-        >
+        <ModalBackdrop>
           {/* Taken Home custody, insurance, and GDPR contact warning card */}
           <div
             ref={takeHomeModalRef}
@@ -1026,21 +1025,32 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             aria-modal="true"
             aria-labelledby="take-home-modal-title"
             tabIndex={-1}
-            className="w-full max-w-lg rounded-3xl bg-white p-6 sm:p-7 shadow-2xl border-2 border-amber-300 space-y-5"
+            className="my-auto w-full max-w-lg rounded-3xl bg-white p-5 sm:p-7 shadow-2xl border-2 border-amber-300 space-y-5"
           >
-            {/* Warning modal header and icon */}
-            <div className="flex items-start gap-3.5">
-              <div className="h-12 w-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0">
-                <ShieldAlert className="h-6 w-6 text-amber-700" />
+            {/* Warning modal header, icon, and top-right close button */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3.5">
+                <div className="h-12 w-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0">
+                  <ShieldAlert className="h-6 w-6 text-amber-700" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3 id="take-home-modal-title" className="text-lg font-black text-slate-900">
+                    Confirm Taking Item Home (Card #{currentItem.cardNumber})
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Please confirm you have completed these steps with the visitor before submitting:
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 id="take-home-modal-title" className="text-lg font-black text-slate-900">
-                  Confirm Taking Item Home (Card #{currentItem.cardNumber})
-                </h3>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  Please confirm you have completed these steps with the visitor before submitting:
-                </p>
-              </div>
+              <button
+                type="button"
+                disabled={submittingRepair}
+                onClick={() => setShowTakeHomeModal(false)}
+                aria-label="Close take home confirmation"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
             </div>
 
             {/* Three mandatory operational and legal checkpoints */}
@@ -1098,14 +1108,12 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Lightbox Modal for Previewing an Unsaved Staged Photo */}
       {previewStagedPhoto && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-        >
+        <ModalBackdrop backdropClassName="bg-black/70 backdrop-blur-sm">
           {/* Staged photo preview modal container */}
           <div
             ref={stagedPhotoModalRef}
@@ -1113,7 +1121,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
             aria-modal="true"
             aria-labelledby="staged-photo-preview-title"
             tabIndex={-1}
-            className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4"
+            className="my-auto w-full max-w-lg rounded-3xl bg-white p-5 shadow-2xl border border-slate-200 space-y-4"
           >
             {/* Header with dimensions and close button */}
             <div className="flex items-center justify-between">
@@ -1124,9 +1132,9 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
                 type="button"
                 onClick={() => setPreviewStagedPhoto(null)}
                 aria-label="Close staged photo preview"
-                className="p-1.5 rounded-xl text-slate-500 hover:bg-slate-100 cursor-pointer"
+                className="p-1.5 rounded-xl text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
             {/* Full-size staged image container */}
@@ -1148,7 +1156,7 @@ export const FixerStationView: React.FC<FixerStationViewProps> = ({ session }) =
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Saved Subcollection Photo Viewer / Downloader / Two-Step Delete Modal */}

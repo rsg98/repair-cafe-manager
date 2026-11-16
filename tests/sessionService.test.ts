@@ -4,8 +4,18 @@ import {
   calculateSessionAnalytics,
   buildFinalizeSessionPrompt,
   partitionRepairsForSessionRedaction,
+  normalizeSessionDurationHours,
+  MIN_SESSION_DURATION_HOURS,
+  MAX_SESSION_DURATION_HOURS,
 } from '../src/services/sessionService';
-import { filterAnalyticsForReporting, exportAnalyticsToCsv } from '../src/services/analyticsService';
+import {
+  filterAnalyticsForReporting,
+  exportAnalyticsToCsv,
+  resolveSessionDurationHours,
+  resolveSessionVolunteerHours,
+  computeOfficialImpactTotals,
+} from '../src/services/analyticsService';
+import { cafeConfig } from '../src/config/cafe.config';
 import { parseManageSessionsArgs } from '../src/utils/manageSessionsArgs';
 import { RepairItem, SessionAnalytics } from '../src/types';
 
@@ -566,5 +576,136 @@ describe('Deferred GDPR Redaction Partitioning & Post-Session Analytics Recalcul
     expect(afterResolution.finalizedAt).toBe(1000);
   });
 });
+
+describe('Configurable Session Length & Total Volunteer Hours vs Repair Hours (Issue #42)', () => {
+  it('configures defaultSessionDurationHours to 3 hours in cafeConfig', () => {
+    expect(cafeConfig.defaultSessionDurationHours).toBe(3);
+  });
+
+  it('normalizes omitted session length to 3 hours, accepts 0.5h..24h overrides, and rejects invalid durations', () => {
+    expect(normalizeSessionDurationHours(undefined)).toBe(3);
+    expect(normalizeSessionDurationHours(2.5)).toBe(2.5);
+    expect(normalizeSessionDurationHours(4)).toBe(4);
+    expect(normalizeSessionDurationHours(MIN_SESSION_DURATION_HOURS)).toBe(0.5);
+    expect(normalizeSessionDurationHours(MAX_SESSION_DURATION_HOURS)).toBe(24);
+
+    expect(() => normalizeSessionDurationHours(0)).toThrow(/between 0.5 and 24 hours/);
+    expect(() => normalizeSessionDurationHours(-2)).toThrow(/between 0.5 and 24 hours/);
+    expect(() => normalizeSessionDurationHours(25)).toThrow(/between 0.5 and 24 hours/);
+    expect(() => normalizeSessionDurationHours(Number.NaN)).toThrow(/between 0.5 and 24 hours/);
+  });
+
+  it('calculates per-session totalVolunteerHours = volunteerCount × sessionDurationHours independently of bench repair time', () => {
+    // 9 attending volunteers × default 3 hours = 27 total volunteer hours
+    const defaultLengthAnalytics = calculateSessionAnalytics(
+      'sess-default-len',
+      'October 2026',
+      '2026-10-17',
+      [],
+      1000,
+      9
+    );
+    expect(defaultLengthAnalytics.sessionDurationHours).toBe(3);
+    expect(defaultLengthAnalytics.totalVolunteerHours).toBe(27);
+
+    // 11 attending volunteers × custom 2.5-hour session = 27.5 total volunteer hours
+    const customLengthAnalytics = calculateSessionAnalytics(
+      'sess-custom-len',
+      'November 2026',
+      '2026-11-21',
+      [],
+      2000,
+      11,
+      false,
+      2.5
+    );
+    expect(customLengthAnalytics.sessionDurationHours).toBe(2.5);
+    expect(customLengthAnalytics.totalVolunteerHours).toBe(27.5);
+  });
+
+  it('falls back to cafeConfig.defaultSessionDurationHours (3h) for legacy finalized analytics lacking sessionDurationHours', () => {
+    const legacyRecord: Pick<
+      SessionAnalytics,
+      'volunteerCount' | 'sessionDurationHours' | 'totalVolunteerHours'
+    > = {
+      volunteerCount: 14,
+      sessionDurationHours: undefined,
+      totalVolunteerHours: undefined,
+    };
+    expect(resolveSessionDurationHours(legacyRecord.sessionDurationHours)).toBe(3);
+    expect(resolveSessionVolunteerHours(legacyRecord)).toBe(42);
+  });
+
+  it('aggregates both cumulative Total Volunteer Hours and Repair Hours across multiple official sessions', () => {
+    // 3 uniform 3-hour sessions with 10 volunteers each -> 3 * (10 * 3) = 90 volunteer hours
+    const uniformSessions: SessionAnalytics[] = [1, 2, 3].map((idx) => ({
+      ...calculateSessionAnalytics(
+        `sess-u-${idx}`,
+        `Session ${idx}`,
+        `2026-0${idx}-15`,
+        [],
+        idx * 1000,
+        10,
+        false,
+        3
+      ),
+      totalRepairTimeMinutes: 180, // 3 repair hours per session -> 9 repair hours total
+    }));
+
+    const uniformTotals = computeOfficialImpactTotals(uniformSessions);
+    expect(uniformTotals.totalVolunteerHours).toBe(90);
+    expect(uniformTotals.repairHours).toBe(9);
+
+    // Mixed session lengths (3h × 12 = 36h, 4h × 8 = 32h, legacy undefined -> 3h × 10 = 30h => 98h total)
+    const legacySession = calculateSessionAnalytics(
+      'sess-legacy',
+      'Legacy Session',
+      '2025-12-13',
+      [],
+      500,
+      10
+    );
+    delete legacySession.sessionDurationHours;
+    delete legacySession.totalVolunteerHours;
+    legacySession.totalRepairTimeMinutes = 150; // 2.5h
+
+    const customFourHourSession = {
+      ...calculateSessionAnalytics(
+        'sess-4h',
+        'Extended Repair Day',
+        '2026-04-18',
+        [],
+        1500,
+        8,
+        false,
+        4
+      ),
+      totalRepairTimeMinutes: 240, // 4.0h
+    };
+
+    const standardThreeHourSession = {
+      ...calculateSessionAnalytics(
+        'sess-3h',
+        'Standard Saturday',
+        '2026-05-16',
+        [],
+        2500,
+        12,
+        false,
+        3
+      ),
+      totalRepairTimeMinutes: 210, // 3.5h
+    };
+
+    const mixedTotals = computeOfficialImpactTotals([
+      legacySession,
+      customFourHourSession,
+      standardThreeHourSession,
+    ]);
+    expect(mixedTotals.totalVolunteerHours).toBe(98);
+    expect(mixedTotals.repairHours).toBe(10);
+  });
+});
+
 
 

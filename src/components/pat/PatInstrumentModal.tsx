@@ -9,6 +9,7 @@ import {
 import { PatInstrument, PatInstrumentInput } from '../../types';
 import { cafeConfig } from '../../config/cafe.config';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 import {
   createPatInstrument,
   updatePatInstrument,
@@ -167,16 +168,16 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
   };
 
   return (
-    <div
-      ref={dialogRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="pat-instrument-modal-title"
-      tabIndex={-1}
-    >
+    <ModalBackdrop backdropClassName="bg-slate-900/60 backdrop-blur-xs">
       {/* Modal Container */}
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 animate-fade-in my-8">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pat-instrument-modal-title"
+        tabIndex={-1}
+        className="my-auto bg-white rounded-3xl max-w-lg w-full p-5 sm:p-8 shadow-2xl border border-slate-200 animate-fade-in"
+      >
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -430,6 +431,6 @@ export const PatInstrumentModal: React.FC<PatInstrumentModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };

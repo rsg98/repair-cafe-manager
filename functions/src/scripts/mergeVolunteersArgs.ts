@@ -10,6 +10,7 @@
  */
 
 import {
+  DEFAULT_HISTORICAL_SESSION_DURATION_HOURS,
   removeUndefined,
   type RepairItem,
   type Session,
@@ -43,6 +44,7 @@ export interface VolunteerMergePlan {
   updatedAnalytics: Array<{
     sessionId: string;
     volunteerCount: number;
+    totalVolunteerHours: number;
   }>;
   updatedRepairs: Array<{
     sessionId: string;
@@ -385,9 +387,14 @@ export function buildVolunteerMergePlan(params: {
     const newVolunteerCount = mergedSummaries.length;
     const existingAnalytics = analyticsBySessionId.get(session.id);
     if (existingAnalytics && existingAnalytics.volunteerCount !== newVolunteerCount) {
+      const durationHours =
+        session.sessionDurationHours ??
+        existingAnalytics.sessionDurationHours ??
+        DEFAULT_HISTORICAL_SESSION_DURATION_HOURS;
       updatedAnalytics.push({
         sessionId: session.id,
         volunteerCount: newVolunteerCount,
+        totalVolunteerHours: Math.round(newVolunteerCount * durationHours * 10) / 10,
       });
     }
   }

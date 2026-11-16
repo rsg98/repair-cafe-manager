@@ -98,7 +98,7 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
 
 ### Station 2: Front Desk Operations (`/frontdesk`)
 - **Access:** Restricted to organisers via **Google Sign-In** (`request.auth.token.email != null`).
-- **Session Lifecycle:** Starts the monthly session, sets the 4-digit daily volunteer PIN, optionally marks the session as a **Test / Training Session** (`isTest: true`), and points `settings/system.activeSessionId`.
+- **Session Lifecycle:** Starts the monthly session, configures the session length in hours (`sessionDurationHours`, defaulting to `cafeConfig.defaultSessionDurationHours = 3`), sets the 4-digit daily volunteer PIN, optionally marks the session as a **Test / Training Session** (`isTest: true`), and points `settings/system.activeSessionId`.
 - **Card Token Assignment:** Maps customer reference tokens to physical numbered cards (#1..#N) that are reused every session.
   - Automatically routes `MAINS_240V` items to `WAITING_PAT1`.
   - Automatically routes other power types to `WAITING_REPAIR`.
@@ -145,7 +145,7 @@ Station 3: PAT Post-Repair (PAT 2)       READY_FOR_COLLECTION
 
 ### Station 5: Community Impact Reports (`/reports`)
 - **Access:** Organisers and public/volunteer viewing.
-- **Metrics Tracked:** Total items, repair success rate (%), landfill waste diverted (kg), volunteer hours invested, category distributions.
+- **Metrics Tracked:** Total items, repair success rate (%), landfill waste diverted (kg), **Total Volunteer Hours** (`attending volunteers × session length` summed across official sessions), **Repair Hours** (logged bench repair durations), PAT screenings, and category distributions.
 - **Test Session Isolation & Reclassification:** Sessions marked with `isTest: true` are automatically excluded from cumulative KPI cards, category breakdowns, the default archive table, and grant CSV exports. Authorised organisers (`isAdmin`) can toggle `Show Test Sessions (N)` and reclassify finalised sessions between Test and Official (`setSessionTestFlag`).
 - **Export:** Single-click CSV export formatted for local council and grant funder submissions.
 
@@ -227,6 +227,7 @@ sessions/{sessionId}
   ├── date: string (YYYY-MM-DD)
   ├── status: 'ACTIVE' | 'FINALIZED'
   ├── isTest?: boolean
+  ├── sessionDurationHours?: number (default 3)
   ├── volunteerPinHash: string (SHA-256)
   ├── cardRangeStart: number
   ├── cardRangeEnd: number
@@ -406,6 +407,7 @@ Because repair cafes operate with zero budget, the application is strictly desig
 │   │   │   ├── CardToken.tsx          # Card token badge (#1..#N)
 │   │   │   ├── StatusBadge.tsx        # High-contrast queue status badges
 │   │   │   ├── SafetyBanner.tsx       # Amber/Red hazard alerts for PAT 1 defects
+│   │   │   ├── ModalBackdrop.tsx      # Mobile-safe scrollable modal overlay & centring wrapper
 │   │   │   ├── PinModal.tsx           # 4-digit keypad & keyboard entry for volunteer PIN
 │   │   │   ├── TermsModal.tsx         # Scrollable Terms & Conditions modal
 │   │   │   ├── PoliciesModal.tsx      # Volunteer Induction & Policy Pack viewer modal

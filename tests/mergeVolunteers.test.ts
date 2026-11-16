@@ -265,7 +265,7 @@ describe('mergeVolunteersArgs — Credit Rewriting & Full Merge Plan', () => {
     expect(plan.updatedTarget.emergencyContactName).toBe('John Martin');
     expect(plan.deletedSourceId).toBe('vol-hist-rae-martin');
 
-    // Session attendance deduplicated from 3 -> 2
+    // Session attendance deduplicated from 3 -> 2 (with 2 × 3h = 6 total volunteer hours)
     expect(plan.updatedSessions).toHaveLength(1);
     expect(plan.updatedSessions[0].attendingVolunteerIds).toEqual([
       'vol-real-rae',
@@ -275,6 +275,7 @@ describe('mergeVolunteersArgs — Credit Rewriting & Full Merge Plan', () => {
       {
         sessionId: '20241109-yourspace',
         volunteerCount: 2,
+        totalVolunteerHours: 6,
       },
     ]);
 

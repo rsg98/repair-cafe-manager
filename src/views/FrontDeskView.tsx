@@ -32,7 +32,8 @@ import {
   Camera,
   Trash2,
   FlaskConical,
-  Home
+  Home,
+  X
 } from 'lucide-react';
 import { Session, RepairItem, Volunteer, SystemSettings, TakenHomeRepairEntry } from '../types';
 import { useAuth } from '../hooks/useAuth';
@@ -43,7 +44,9 @@ import {
   finalizeSessionClient,
   buildFinalizeSessionPrompt,
   purgeSessionCascading,
-  publishAppVersionToSystemSettings
+  publishAppVersionToSystemSettings,
+  MIN_SESSION_DURATION_HOURS,
+  MAX_SESSION_DURATION_HOURS
 } from '../services/sessionService';
 import {
   APP_VERSION,
@@ -72,6 +75,7 @@ import {
 } from '../services/volunteerService';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { CardToken } from '../components/common/CardToken';
+import { ModalBackdrop } from '../components/common/ModalBackdrop';
 import { PoliciesModal } from '../components/common/PoliciesModal';
 import { PhotoViewerModal } from '../components/common/PhotoViewerModal';
 import { VolunteerRegisterPanel } from '../components/frontdesk/VolunteerRegisterPanel';
@@ -119,6 +123,9 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [sessionName, setSessionName] = useState('');
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [sessionDurationInput, setSessionDurationInput] = useState<string>(
+    String(cafeConfig.defaultSessionDurationHours)
+  );
   const [volunteerPin, setVolunteerPin] = useState('');
   const [isTestSession, setIsTestSession] = useState(false);
   const [selectedNewSessionVolunteerIds, setSelectedNewSessionVolunteerIds] = useState<string[]>([]);
@@ -185,6 +192,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
     isOpen: showNewSessionModal,
     onClose: () => {
       setIsTestSession(false);
+      setSessionDurationInput(String(cafeConfig.defaultSessionDurationHours));
       setShowNewSessionModal(false);
     },
   });
@@ -341,6 +349,18 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       return;
     }
 
+    const parsedDurationHours = parseFloat(sessionDurationInput);
+    if (
+      !Number.isFinite(parsedDurationHours) ||
+      parsedDurationHours < MIN_SESSION_DURATION_HOURS ||
+      parsedDurationHours > MAX_SESSION_DURATION_HOURS
+    ) {
+      alert(
+        `Please enter a session length between ${MIN_SESSION_DURATION_HOURS} and ${MAX_SESSION_DURATION_HOURS} hours.`
+      );
+      return;
+    }
+
     setCreatingSession(true);
     try {
       // Build deterministic session ID and append -test suffix when flagged as a test session
@@ -362,6 +382,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
         volunteerPin: volunteerPin.trim(),
         cardRangeStart: cafeConfig.defaultCardRange.start,
         cardRangeEnd: cafeConfig.defaultCardRange.end,
+        sessionDurationHours: parsedDurationHours,
         attendingVolunteers: attendingSummaries,
         isTest: isTestSession
       });
@@ -369,6 +390,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
       // Reset modal form state after successful launch
       setShowNewSessionModal(false);
       setSessionName('');
+      setSessionDurationInput(String(cafeConfig.defaultSessionDurationHours));
       setVolunteerPin('');
       setIsTestSession(false);
       setSelectedNewSessionVolunteerIds([]);
@@ -519,10 +541,11 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
           <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
             Front Desk Operations
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-600">
             {session ? (
               <span>
-                Active Session: <strong>{session.name}</strong> ({session.date})
+                Active Session: <strong>{session.name}</strong> ({session.date} &middot;{' '}
+                {session.sessionDurationHours ?? cafeConfig.defaultSessionDurationHours}h)
                 {/* Amber indicator when the active session is flagged as a test/rehearsal session */}
                 {session.isTest && (
                   <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-[10px] uppercase tracking-wider">
@@ -546,6 +569,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               onClick={() => {
                 setSelectedNewSessionVolunteerIds([]);
                 setIsTestSession(false);
+                setSessionDurationInput(String(cafeConfig.defaultSessionDurationHours));
                 setShowNewSessionModal(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-sm hover:bg-brand-700 shadow-sm transition-colors"
@@ -992,7 +1016,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
 
       {/* Modal: Assign Physical Card Number */}
       {selectedRepairId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <ModalBackdrop>
           {/* Card assignment dialog box */}
           <div
             ref={assignCardModalRef}
@@ -1000,13 +1024,13 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             aria-modal="true"
             aria-labelledby="assign-card-modal-title"
             tabIndex={-1}
-            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200"
+            className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200"
           >
             <h3 id="assign-card-modal-title" className="text-lg font-bold text-slate-900 mb-1">
               Assign Physical Card
             </h3>
             {/* Instructions */}
-            <p className="text-xs text-slate-500 mb-3">
+            <p className="text-xs text-slate-600 mb-3">
               Enter the number on the reusable physical card handed to the customer.
             </p>
 
@@ -1056,12 +1080,12 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Modal: Customer PII Contact Card */}
       {contactModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <ModalBackdrop>
           {/* Contact card modal dialog container */}
           <div
             ref={customerPiiModalRef}
@@ -1069,13 +1093,13 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             aria-modal="true"
             aria-labelledby="customer-pii-modal-title"
             tabIndex={-1}
-            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 text-left"
+            className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 text-left"
           >
             <h3 id="customer-pii-modal-title" className="text-base font-bold text-slate-900 mb-1">
               Customer Contact Card
             </h3>
             {/* Item brand/model and card token subtitle */}
-            <p className="text-xs text-slate-500 mb-4">
+            <p className="text-xs text-slate-600 mb-4">
               Item: <strong>{contactModalData.brandModel}</strong>{' '}
               {contactModalData.cardNumber && `(Card #${contactModalData.cardNumber})`}
             </p>
@@ -1083,19 +1107,19 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             {/* Customer name and clickable telephone link */}
             <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm">
               <div>
-                <span className="text-xs text-slate-500 block">Customer Name</span>
+                <span className="text-xs text-slate-600 block">Customer Name</span>
                 <span className="font-bold text-slate-800">{contactModalData.firstName}</span>
               </div>
               {/* Customer phone number or fallback text */}
               <div>
-                <span className="text-xs text-slate-500 block">Phone Number</span>
+                <span className="text-xs text-slate-600 block">Phone Number</span>
                 {contactModalData.contactPhone ? (
                   /* Clickable telephone link for collection notification */
                   <a
                     href={`tel:${contactModalData.contactPhone}`}
                     className="font-bold text-emerald-700 underline flex items-center gap-1 mt-0.5"
                   >
-                    <Phone className="h-3.5 w-3.5" /> {contactModalData.contactPhone}
+                    <Phone className="h-3.5 w-3.5" aria-hidden="true" /> {contactModalData.contactPhone}
                   </a>
                 ) : (
                   <span className="text-xs italic text-slate-600">No phone provided</span>
@@ -1113,12 +1137,12 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               Close
             </button>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Modal: Start New Monthly Session (including attending volunteer multi-select) */}
       {showNewSessionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <ModalBackdrop>
           {/* New session configuration dialog */}
           <div
             ref={startSessionModalRef}
@@ -1126,19 +1150,36 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
             aria-modal="true"
             aria-labelledby="start-session-modal-title"
             tabIndex={-1}
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8"
+            className="my-auto w-full max-w-xl rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200"
           >
-            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              {/* Calendar icon badge */}
-              <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                <Calendar className="h-5 w-5" />
+            <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                {/* Calendar icon badge */}
+                <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3 id="start-session-modal-title" className="text-lg font-bold text-slate-900">
+                    Start Today&apos;s Repair Café
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Configure session length, volunteer PIN, and attending volunteers
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 id="start-session-modal-title" className="text-lg font-bold text-slate-900">
-                  Start Today&apos;s Repair Café
-                </h3>
-                <p className="text-xs text-slate-500">Configure the active session, PIN, and attending volunteers</p>
-              </div>
+              <button
+                type="button"
+                disabled={creatingSession}
+                onClick={() => {
+                  setIsTestSession(false);
+                  setSessionDurationInput(String(cafeConfig.defaultSessionDurationHours));
+                  setShowNewSessionModal(false);
+                }}
+                aria-label="Close start session dialog"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
             </div>
 
             {/* New session launch form */}
@@ -1162,8 +1203,8 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                 />
               </div>
 
-              {/* Date and 4-digit volunteer PIN inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Date, Session Length (hours), and 4-digit volunteer PIN inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label
                     htmlFor="start-session-date"
@@ -1178,7 +1219,29 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     required
                     value={sessionDate}
                     onChange={(e) => setSessionDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                {/* Configurable session duration in hours (defaults to cafeConfig.defaultSessionDurationHours) */}
+                <div>
+                  <label
+                    htmlFor="start-session-duration"
+                    className="block text-xs font-bold text-slate-700 mb-1"
+                  >
+                    Session Length (Hours)
+                  </label>
+                  <input
+                    id="start-session-duration"
+                    type="number"
+                    inputMode="decimal"
+                    required
+                    min={MIN_SESSION_DURATION_HOURS}
+                    max={MAX_SESSION_DURATION_HOURS}
+                    step={0.5}
+                    value={sessionDurationInput}
+                    onChange={(e) => setSessionDurationInput(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
 
@@ -1188,7 +1251,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     htmlFor="start-session-pin"
                     className="block text-xs font-bold text-slate-700 mb-1"
                   >
-                    Daily Volunteer 4-Digit PIN
+                    Volunteer 4-Digit PIN
                   </label>
                   {/* 4-character PIN input field */}
                   <input
@@ -1199,7 +1262,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                     placeholder="e.g. 4829"
                     value={volunteerPin}
                     onChange={(e) => setVolunteerPin(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-center tracking-widest text-base font-bold focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-center tracking-widest text-base font-bold focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
               </div>
@@ -1341,6 +1404,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
                   type="button"
                   onClick={() => {
                     setIsTestSession(false);
+                    setSessionDurationInput(String(cafeConfig.defaultSessionDurationHours));
                     setShowNewSessionModal(false);
                   }}
                   className="flex-1 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -1358,7 +1422,7 @@ export const FrontDeskView: React.FC<FrontDeskViewProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Modal: Item Photo Viewer & Downloader (loads photos on demand when clicked) */}

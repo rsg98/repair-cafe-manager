@@ -4,6 +4,7 @@ import { getPolicies } from '../../services/policyService';
 import { PolicyDocument } from '../../types';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { MarkdownViewer } from './MarkdownViewer';
+import { ModalBackdrop } from './ModalBackdrop';
 
 export interface PoliciesModalProps {
   isOpen: boolean;
@@ -52,7 +53,9 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
       aria-labelledby={inline ? undefined : 'policies-modal-title'}
       tabIndex={inline ? undefined : -1}
       className={`bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col ${
-        inline ? 'min-h-[540px]' : 'w-full max-w-5xl max-h-[88vh] shadow-2xl'
+        inline
+          ? 'min-h-[540px]'
+          : 'my-auto w-full max-w-5xl max-h-[calc(100dvh-2.5rem)] sm:max-h-[88dvh] shadow-2xl'
       }`}
     >
       {/* Header bar with title and optional modal close button */}
@@ -86,7 +89,7 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
       {/* Main split pane: Sidebar list of policies + Markdown document reader */}
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
         {/* Policy navigation sidebar */}
-        <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50/70 p-4 space-y-2 overflow-y-auto">
+        <div className="w-full md:w-72 max-h-44 md:max-h-none shrink-0 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50/70 p-4 space-y-2 overflow-y-auto">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 px-2 block">
             Active Policies ({policies.length})
           </span>
@@ -172,10 +175,6 @@ export const PoliciesModal: React.FC<PoliciesModalProps> = ({
     return viewerBody;
   }
 
-  // Wrap in a backdrop overlay when rendered as a modal dialog
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      {viewerBody}
-    </div>
-  );
+  // Wrap in a mobile-safe backdrop overlay when rendered as a modal dialog
+  return <ModalBackdrop>{viewerBody}</ModalBackdrop>;
 };

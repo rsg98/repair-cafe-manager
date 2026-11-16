@@ -224,6 +224,7 @@ import { PatStationView } from '../src/views/PatStationView';
 import { FixerStationView } from '../src/views/FixerStationView';
 import { ReportsView } from '../src/views/ReportsView';
 import { TakenHomeTabPanel } from '../src/components/frontdesk/TakenHomeTabPanel';
+import { VolunteerRegisterPanel } from '../src/components/frontdesk/VolunteerRegisterPanel';
 import { TermsModal } from '../src/components/common/TermsModal';
 import { PinModal } from '../src/components/common/PinModal';
 import { PoliciesModal } from '../src/components/common/PoliciesModal';
@@ -383,7 +384,7 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
     expect(excludedWarningViolations).toEqual([]);
   });
 
-  it('Station 2: FrontDeskView (active session board & attendance bar) passes axe WCAG 2.2 AA audit', async () => {
+  it('Station 2: FrontDeskView (active session board, attendance bar, and Start Session modal with default 3h length) passes axe WCAG 2.2 AA audit', async () => {
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={['/frontdesk']}>
@@ -399,6 +400,35 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
 
     const violations = await runAxeWcagAudit(container);
     expect(violations).toEqual([]);
+
+    // Render idle FrontDeskView (no active session), open Start Today's Session modal, and verify default 3-hour session length (Issue #42)
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/frontdesk']}>
+          <UnsavedWorkProvider>
+            <FrontDeskView
+              session={null}
+              systemSettings={{ activeSessionId: null, allowRegistration: false }}
+            />
+          </UnsavedWorkProvider>
+        </MemoryRouter>
+      );
+    });
+
+    const startSessionBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes("Start Today's Session")
+    );
+    expect(startSessionBtn).toBeDefined();
+    await act(async () => {
+      startSessionBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const durationInput = container.querySelector<HTMLInputElement>('#start-session-duration');
+    expect(durationInput).not.toBeNull();
+    expect(durationInput?.value).toBe('3');
+
+    const startModalViolations = await runAxeWcagAudit(container);
+    expect(startModalViolations).toEqual([]);
   });
 
   it('Station 3: PatStationView (with active Mains Class I item loaded) passes axe WCAG 2.2 AA audit', async () => {
@@ -466,7 +496,7 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
     expect(violations).toEqual([]);
   });
 
-  it('Station 5: ReportsView (with KPI cards, category progressbars, and session archive table) passes axe WCAG 2.2 AA audit', async () => {
+  it('Station 5: ReportsView displays both Total Volunteer Hours and Repair Hours and passes axe WCAG 2.2 AA audit (Issue #42)', async () => {
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={['/reports']}>
@@ -476,6 +506,12 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
         </MemoryRouter>
       );
     });
+
+    // SAMPLE_ANALYTICS has volunteerCount: 14 (legacy default 3h -> 42 Total Volunteer Hours) and 540 repair mins (9 Repair Hours)
+    expect(container.textContent).toContain('Total Volunteer Hours');
+    expect(container.textContent).toContain('42');
+    expect(container.textContent).toContain('Repair Hours');
+    expect(container.textContent).toContain('9');
 
     const violations = await runAxeWcagAudit(container);
     expect(violations).toEqual([]);
@@ -586,5 +622,77 @@ describe('Automated axe-core WCAG 2.2 Level AA Audits across Stations & Modals',
     // Verify modal dialog passes axe-core WCAG 2.2 Level AA audit
     const modalViolations = await runAxeWcagAudit(container);
     expect(modalViolations).toEqual([]);
+  });
+
+  it('Station 2 VolunteerRegisterPanel and Add New Volunteer modal render mobile-safe scroll container without top clipping and pass axe WCAG 2.2 AA audit (Issue #45)', async () => {
+    await act(async () => {
+      root.render(
+        <UnsavedWorkProvider>
+          <VolunteerRegisterPanel
+            volunteers={[SAMPLE_VOLUNTEER]}
+            loading={false}
+            activeSessionId={SAMPLE_SESSION.id}
+            currentUserEmail={MOCK_ADMIN_USER.email}
+            onRefresh={vi.fn().mockResolvedValue(undefined)}
+            onOpenPolicies={vi.fn()}
+          />
+        </UnsavedWorkProvider>
+      );
+    });
+
+    // Audit the Volunteer Register table view
+    const registerViolations = await runAxeWcagAudit(container);
+    expect(registerViolations).toEqual([]);
+
+    // Open the Add New Volunteer modal
+    const addVolunteerBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Add Volunteer')
+    );
+    expect(addVolunteerBtn).toBeDefined();
+    await act(async () => {
+      addVolunteerBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    // Verify mobile-safe scroll container and top-to-bottom form structure (Issue #45)
+    const scrollContainer = container.querySelector<HTMLElement>(
+      '[data-modal-scroll-container="true"]'
+    );
+    expect(scrollContainer).not.toBeNull();
+    expect(scrollContainer?.className).toContain('overflow-y-auto');
+    expect(scrollContainer?.className).not.toContain('items-center');
+
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog?.className).toContain('my-auto');
+
+    const modalHeading = container.querySelector('#volunteer-form-modal-title');
+    expect(modalHeading?.textContent).toBe('Add New Volunteer');
+
+    const closeBtn = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Close volunteer form"]'
+    );
+    expect(closeBtn).not.toBeNull();
+    // Initial focus lands on the top header close button so mobile iOS stays at scrollTop=0
+    expect(document.activeElement).toBe(closeBtn);
+
+    // Verify Full Name and Contact Phone appear before Email Address in DOM order
+    const formControlIds = Array.from(
+      dialog!.querySelectorAll<HTMLInputElement>('input[id^="volunteer-form-"]')
+    ).map((el) => el.id);
+    expect(formControlIds.slice(0, 3)).toEqual([
+      'volunteer-form-name',
+      'volunteer-form-phone',
+      'volunteer-form-email',
+    ]);
+
+    // Verify open Add Volunteer modal passes axe-core WCAG 2.2 Level AA audit
+    const addModalViolations = await runAxeWcagAudit(container);
+    expect(addModalViolations).toEqual([]);
+
+    // Verify top-right close button dismisses the modal cleanly
+    await act(async () => {
+      closeBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import {
   Search,
   HeartPulse,
   Phone,
+  X,
 } from 'lucide-react';
 import { Session, Volunteer } from '../../types';
 import {
@@ -20,6 +21,7 @@ import {
 } from '../../services/volunteerService';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface SessionAttendanceBarProps {
   session: Session;
@@ -325,31 +327,43 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
 
       {/* Modal: Emergency Contact Quick-View Card from active session badge */}
       {emergencyVolunteer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <ModalBackdrop>
           <div
             ref={emergencyModalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="session-emergency-contact-title"
             tabIndex={-1}
-            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left"
+            className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left"
           >
             {/* Modal header identifying the volunteer */}
-            <h3
-              id="session-emergency-contact-title"
-              className="flex items-center gap-2 text-rose-700 font-black text-base mb-1"
-            >
-              <HeartPulse className="h-5 w-5" />
-              Emergency Contact Card
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Attending Volunteer: <strong>{emergencyVolunteer.name}</strong>
-            </p>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3
+                  id="session-emergency-contact-title"
+                  className="flex items-center gap-2 text-rose-700 font-black text-base mb-1"
+                >
+                  <HeartPulse className="h-5 w-5" aria-hidden="true" />
+                  Emergency Contact Card
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Attending Volunteer: <strong>{emergencyVolunteer.name}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmergencyVolunteer(null)}
+                aria-label="Close emergency contact card"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
 
             {/* Emergency contact name, relationship, and clickable tel: link */}
             <div className="space-y-3 bg-rose-50/70 p-4 rounded-xl border border-rose-200 text-sm">
               <div>
-                <span className="text-xs text-slate-500 block">
+                <span className="text-xs text-slate-600 block">
                   Emergency Contact Name
                 </span>
                 <span className="font-bold text-slate-900">
@@ -361,14 +375,14 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
               </div>
               {/* Emergency contact phone number link */}
               <div>
-                <span className="text-xs text-slate-500 block">
+                <span className="text-xs text-slate-600 block">
                   Emergency Phone Number
                 </span>
                 <a
                   href={`tel:${emergencyVolunteer.emergencyContactPhone}`}
                   className="font-bold text-rose-700 underline flex items-center gap-1 mt-0.5"
                 >
-                  <Phone className="h-3.5 w-3.5" />
+                  <Phone className="h-3.5 w-3.5" aria-hidden="true" />
                   {emergencyVolunteer.emergencyContactPhone}
                 </a>
               </div>
@@ -383,31 +397,44 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
               Close
             </button>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Modal: Edit Attending Volunteers during an active session */}
       {showAttendanceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <ModalBackdrop>
           <div
             ref={attendanceModalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="update-attendance-modal-title"
             tabIndex={-1}
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200"
+            className="my-auto w-full max-w-lg rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200"
           >
-            {/* Modal title and instructions */}
-            <h3
-              id="update-attendance-modal-title"
-              className="text-lg font-black text-slate-900"
-            >
-              Update Session Attendance
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Select all volunteers present at {session.name} today. Late arrivals
-              can be added at any time.
-            </p>
+            {/* Modal title, instructions, and top-right close button */}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3
+                  id="update-attendance-modal-title"
+                  className="text-lg font-black text-slate-900"
+                >
+                  Update Session Attendance
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Select all volunteers present at {session.name} today. Late arrivals
+                  can be added at any time.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={savingAttendance}
+                onClick={() => setShowAttendanceModal(false)}
+                aria-label="Close session attendance dialog"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
 
             {/* Filter input inside modal */}
             <div className="relative mt-4">
@@ -509,7 +536,7 @@ export const SessionAttendanceBar: React.FC<SessionAttendanceBarProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
     </div>
   );

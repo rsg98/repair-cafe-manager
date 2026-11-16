@@ -80,18 +80,32 @@ describe('Analytics and CSV Export Utilities', () => {
   it('correctly generates CSV impact reports with all required fields', () => {
     const csv = exportAnalyticsToCsv(sampleAnalytics);
     expect(csv).toContain('Session ID,Session Name,Date,Total Items');
-    expect(csv).toContain('Attending Volunteers');
-    expect(csv).toContain('"202610-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%,0');
+    expect(csv).toContain('Attending Volunteers,Session Length (hrs),Total Volunteer Hours');
+    expect(csv).toContain(
+      '"202610-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%,0,3,0'
+    );
   });
 
-  it('exports non-zero volunteerCount in the 17th CSV column', () => {
+  it('exports non-zero volunteerCount, Session Length (hrs), and Total Volunteer Hours in CSV columns 17–19', () => {
     const csv = exportAnalyticsToCsv([
       {
         ...sampleAnalytics[0],
         volunteerCount: 11,
       },
+      {
+        ...sampleAnalytics[0],
+        sessionId: '202611-seears',
+        volunteerCount: 8,
+        sessionDurationHours: 2.5,
+        totalVolunteerHours: 20,
+      },
     ]);
-    expect(csv).toContain('"202610-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%,11');
+    expect(csv).toContain(
+      '"202610-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%,11,3,33'
+    );
+    expect(csv).toContain(
+      '"202611-seears","October 2026 - Seears Park","2026-10-09",42,31,5,4,2,0,74%,68.4,1140,32,22,22,9%,8,2.5,20'
+    );
   });
 
   it('handles empty analytics lists gracefully', () => {

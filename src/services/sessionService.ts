@@ -174,9 +174,41 @@ async function activateSessionInSystemSettings(sessionId: string): Promise<void>
   );
 }
 
+/** Minimum permitted length of a Repair Café session in hours (Issue #42). */
+export const MIN_SESSION_DURATION_HOURS = 0.5;
+
+/** Maximum permitted length of a Repair Café session in hours (Issue #42). */
+export const MAX_SESSION_DURATION_HOURS = 24;
+
 /**
- * Creates and starts a new Repair Café session, including any initial attending volunteers
- * and optional `isTest` rehearsal/training flag (Issue #24).
+ * Validates and normalises a session duration in hours, defaulting to
+ * `cafeConfig.defaultSessionDurationHours` when omitted (Issue #42).
+ */
+export function normalizeSessionDurationHours(
+  durationHours?: number,
+  defaultHours: number = cafeConfig.defaultSessionDurationHours
+): number {
+  // Fall back to configured default session duration when omitted
+  if (durationHours === undefined) {
+    return Math.round(defaultHours * 100) / 100;
+  }
+  // Reject non-finite values or durations outside the valid [0.5, 24] hour window
+  if (
+    typeof durationHours !== 'number' ||
+    !Number.isFinite(durationHours) ||
+    durationHours < MIN_SESSION_DURATION_HOURS ||
+    durationHours > MAX_SESSION_DURATION_HOURS
+  ) {
+    throw new Error(
+      `Session length must be between ${MIN_SESSION_DURATION_HOURS} and ${MAX_SESSION_DURATION_HOURS} hours.`
+    );
+  }
+  return Math.round(durationHours * 100) / 100;
+}
+
+/**
+ * Creates and starts a new Repair Café session, including any initial attending volunteers,
+ * configurable `sessionDurationHours` (Issue #42), and optional `isTest` flag (Issue #24).
  */
 export async function createSession(params: {
   id: string;
@@ -185,23 +217,26 @@ export async function createSession(params: {
   volunteerPin: string;
   cardRangeStart: number;
   cardRangeEnd: number;
+  sessionDurationHours?: number;
   attendingVolunteers?: SessionVolunteerSummary[];
   isTest?: boolean;
 }): Promise<Session> {
-  // Hash the daily volunteer PIN and sort attending volunteers alphabetically
+  // Validate session duration, hash the daily volunteer PIN, and sort attending volunteers alphabetically
+  const sessionDurationHours = normalizeSessionDurationHours(params.sessionDurationHours);
   const volunteerPinHash = await hashPin(params.volunteerPin);
   const summaries = [...(params.attendingVolunteers || [])].sort((a, b) =>
     a.name.localeCompare(b.name)
   );
   const attendingVolunteerIds = summaries.map((v) => v.id);
 
-  // Build the Session document payload including the normalized boolean isTest flag
+  // Build the Session document payload including sessionDurationHours and normalized boolean isTest flag
   const sessionData: Session = removeUndefined({
     id: params.id,
     name: params.name,
     date: params.date,
     status: 'ACTIVE',
     isTest: Boolean(params.isTest),
+    sessionDurationHours,
     volunteerPinHash,
     cardRangeStart: params.cardRangeStart,
     // Store card range upper bound, volunteer roster, and creation timestamp
@@ -291,7 +326,8 @@ function tallyRepairItemForAnalytics(acc: AnalyticsAccumulator, item: RepairItem
 
 /**
  * Pure helper function to compute session analytics from repair records,
- * propagating the optional `isTest` flag (Issue #24).
+ * propagating `isTest` (Issue #24) and computing `totalVolunteerHours` from
+ * `volunteerCount * sessionDurationHours` (Issue #42).
  */
 export function calculateSessionAnalytics(
   sessionId: string,
@@ -300,7 +336,8 @@ export function calculateSessionAnalytics(
   repairs: RepairItem[],
   now: number = Date.now(),
   volunteerCount: number = 0,
-  isTest: boolean = false
+  isTest: boolean = false,
+  sessionDurationHours: number = cafeConfig.defaultSessionDurationHours
 ): SessionAnalytics {
   // Initialize zeroed outcome, weight, duration, and PAT counters
   const acc: AnalyticsAccumulator = {
@@ -324,7 +361,7 @@ export function calculateSessionAnalytics(
     tallyRepairItemForAnalytics(acc, item);
   }
 
-  // Compute success rate, average repair duration, and PAT failure rate percentages
+  // Compute success rate, average repair duration, PAT failure rate, and total volunteer hours
   const successRatePercent =
     acc.totalItems > 0 ? Math.round(((acc.repairedCount + acc.partialCount) / acc.totalItems) * 100) : 0;
   const totalAssessed = acc.repairedCount + acc.partialCount + acc.unfixableCount + acc.adviceCount;
@@ -332,8 +369,17 @@ export function calculateSessionAnalytics(
     totalAssessed > 0 ? Math.round(acc.totalRepairTimeMinutes / totalAssessed) : 0;
   const patFailureRatePercent =
     acc.patTestedCount > 0 ? Math.round((acc.patFailedCount / acc.patTestedCount) * 100) : 0;
+  const resolvedDurationHours =
+    typeof sessionDurationHours === 'number' &&
+    Number.isFinite(sessionDurationHours) &&
+    sessionDurationHours > 0
+      ? Math.round(sessionDurationHours * 100) / 100
+      : cafeConfig.defaultSessionDurationHours;
+  const normalizedVolunteerCount = Math.max(0, volunteerCount || 0);
+  const totalVolunteerHours =
+    Math.round(normalizedVolunteerCount * resolvedDurationHours * 10) / 10;
 
-  // Return the structured SessionAnalytics object including the normalized isTest flag
+  // Return the structured SessionAnalytics object including isTest and totalVolunteerHours
   return {
     sessionId,
     sessionName,
@@ -351,11 +397,13 @@ export function calculateSessionAnalytics(
     successRatePercent,
     totalWeightDivertedKg: Math.round(acc.totalWeightKg * 10) / 10,
     categoryBreakdown: acc.categoryBreakdown,
-    // Populate electrical PAT safety counters, volunteer count, and finalization timestamp
+    // Populate electrical PAT safety counters, volunteer hours, and finalization timestamp
     mainsItemsCount: acc.mainsCount,
     patTestedCount: acc.patTestedCount,
     patFailureRatePercent,
-    volunteerCount,
+    volunteerCount: normalizedVolunteerCount,
+    sessionDurationHours: resolvedDurationHours,
+    totalVolunteerHours,
     finalizedAt: now,
   };
 }
@@ -519,6 +567,10 @@ export async function recalculateSessionAnalytics(
     volunteerCount = sessionData.attendingVolunteerIds.length;
   }
   const isTest = Boolean(sessionData?.isTest ?? existingAnalytics?.isTest);
+  const sessionDurationHours =
+    sessionData?.sessionDurationHours ??
+    existingAnalytics?.sessionDurationHours ??
+    cafeConfig.defaultSessionDurationHours;
 
   // Preserve original numeric finalizedAt timestamp (or convert Firestore Timestamp.toMillis())
   const rawFinalizedAt = (existingAnalytics?.finalizedAt ?? sessionData?.finalizedAt) as
@@ -540,7 +592,8 @@ export async function recalculateSessionAnalytics(
     repairs,
     preservedFinalizedAt,
     volunteerCount,
-    isTest
+    isTest,
+    sessionDurationHours
   );
   // Persist updated analytics snapshot and return it to caller
   await setDoc(analyticsRef, updatedAnalytics);
@@ -582,7 +635,7 @@ export async function finalizeSessionDirectly(sessionId: string): Promise<void> 
       ? sessionData.attendingVolunteerIds.length
       : 0;
 
-  // Compute session analytics (including isTest) and redact customer PII across all repairs
+  // Compute session analytics (including isTest and sessionDurationHours) and redact customer PII
   const analyticsDoc = calculateSessionAnalytics(
     sessionId,
     sessionData.name,
@@ -590,7 +643,8 @@ export async function finalizeSessionDirectly(sessionId: string): Promise<void> 
     repairs,
     now,
     volunteerCount,
-    Boolean(sessionData.isTest)
+    Boolean(sessionData.isTest),
+    sessionData.sessionDurationHours ?? cafeConfig.defaultSessionDurationHours
   );
   await redactSessionRepairsPii(sessionId, repairsSnap.docs, now);
 

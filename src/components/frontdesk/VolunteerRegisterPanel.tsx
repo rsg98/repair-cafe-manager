@@ -17,6 +17,7 @@ import {
   MessageCircle,
   ExternalLink,
   Copy,
+  X,
 } from 'lucide-react';
 import { Volunteer, WhatsAppSyncStatus } from '../../types';
 import {
@@ -37,6 +38,7 @@ import {
 } from '../../services/volunteerService';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface VolunteerRegisterPanelProps {
   volunteers: Volunteer[];
@@ -134,8 +136,10 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
   const formModalRef = useDialogFocusTrap({
     isOpen: showFormModal,
     onClose: () => {
-      setIsRestoringVolunteer(false);
-      setShowFormModal(false);
+      if (!saving) {
+        setIsRestoringVolunteer(false);
+        setShowFormModal(false);
+      }
     },
   });
   const archiveModalRef = useDialogFocusTrap({
@@ -921,31 +925,43 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
 
       {/* Modal: Emergency Contact Quick-View Card */}
       {selectedEmergencyVolunteer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <ModalBackdrop>
           <div
             ref={emergencyModalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="volunteer-emergency-contact-title"
             tabIndex={-1}
-            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left"
+            className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-rose-200 text-left"
           >
-            {/* Modal title and volunteer name */}
-            <h3
-              id="volunteer-emergency-contact-title"
-              className="flex items-center gap-2 text-rose-700 font-black text-base mb-1"
-            >
-              <HeartPulse className="h-5 w-5" />
-              Emergency Contact Card
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Volunteer: <strong>{selectedEmergencyVolunteer.name}</strong>
-            </p>
+            {/* Modal title, volunteer name, and top-right close button */}
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3
+                  id="volunteer-emergency-contact-title"
+                  className="flex items-center gap-2 text-rose-700 font-black text-base mb-1"
+                >
+                  <HeartPulse className="h-5 w-5" aria-hidden="true" />
+                  Emergency Contact Card
+                </h3>
+                <p className="text-xs text-slate-600">
+                  Volunteer: <strong>{selectedEmergencyVolunteer.name}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEmergencyVolunteer(null)}
+                aria-label="Close emergency contact card"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
 
             {/* Emergency contact name and clickable telephone link */}
             <div className="space-y-3 bg-rose-50/70 p-4 rounded-xl border border-rose-200 text-sm">
               <div>
-                <span className="text-xs text-slate-500 block">
+                <span className="text-xs text-slate-600 block">
                   Emergency Contact Name
                 </span>
                 <span className="font-bold text-slate-900">
@@ -957,14 +973,14 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               </div>
               {/* Emergency phone link */}
               <div>
-                <span className="text-xs text-slate-500 block">
+                <span className="text-xs text-slate-600 block">
                   Emergency Phone Number
                 </span>
                 <a
                   href={`tel:${selectedEmergencyVolunteer.emergencyContactPhone}`}
                   className="font-bold text-rose-700 underline flex items-center gap-1 mt-0.5"
                 >
-                  <Phone className="h-3.5 w-3.5" />
+                  <Phone className="h-3.5 w-3.5" aria-hidden="true" />
                   {selectedEmergencyVolunteer.emergencyContactPhone}
                 </a>
               </div>
@@ -979,35 +995,51 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               Close
             </button>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Modal: Archive Volunteer Confirmation & GDPR Redaction Guard */}
       {archivingVolunteer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <ModalBackdrop>
           <div
             ref={archiveModalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="archive-volunteer-modal-title"
             tabIndex={-1}
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-amber-200 my-8"
+            className="my-auto w-full max-w-lg rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-amber-200"
           >
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-              <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0">
-                <Archive className="h-5 w-5" />
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0">
+                  <Archive className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3
+                    id="archive-volunteer-modal-title"
+                    className="text-lg font-black text-slate-900"
+                  >
+                    Archive Volunteer Record
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Volunteer: <strong>{archivingVolunteer.name}</strong>
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3
-                  id="archive-volunteer-modal-title"
-                  className="text-lg font-black text-slate-900"
-                >
-                  Archive Volunteer Record
-                </h3>
-                <p className="text-xs text-slate-600">
-                  Volunteer: <strong>{archivingVolunteer.name}</strong>
-                </p>
-              </div>
+              <button
+                type="button"
+                disabled={archiving}
+                onClick={() => {
+                  setArchivingVolunteer(null);
+                  setArchiveConfirmName('');
+                  setArchiveWhatsappDisposition(null);
+                  setArchiveError(null);
+                }}
+                aria-label="Close archive volunteer dialog"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
             </div>
 
             {!canArchiveVolunteer(archivingVolunteer).allowed ? (
@@ -1221,33 +1253,52 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               </form>
             )}
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Modal: Add, Edit, or Restore Volunteer */}
       {showFormModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <ModalBackdrop>
           <div
             ref={formModalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="volunteer-form-modal-title"
             tabIndex={-1}
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8"
+            className="my-auto w-full max-w-lg rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200"
           >
-            {/* Modal header and mandatory emergency contact subtitle */}
-            <h3 id="volunteer-form-modal-title" className="text-lg font-black text-slate-900">
-              {isRestoringVolunteer
-                ? 'Restore Archived Volunteer'
-                : editingVolunteerId
-                  ? 'Edit Volunteer Record'
-                  : 'Add New Volunteer'}
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isRestoringVolunteer
-                ? 'Re-enter the volunteer\u2019s full name and mandatory emergency contact details to restore them to the active register.'
-                : 'Emergency contact details are mandatory for all volunteers.'}
-            </p>
+            {/* Modal header, mandatory emergency contact subtitle, and top-right close button */}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3
+                  id="volunteer-form-modal-title"
+                  className="text-lg font-black text-slate-900"
+                >
+                  {isRestoringVolunteer
+                    ? 'Restore Archived Volunteer'
+                    : editingVolunteerId
+                      ? 'Edit Volunteer Record'
+                      : 'Add New Volunteer'}
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {isRestoringVolunteer
+                    ? 'Re-enter the volunteer\u2019s full name and mandatory emergency contact details to restore them to the active register.'
+                    : 'Emergency contact details are mandatory for all volunteers.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setIsRestoringVolunteer(false);
+                  setShowFormModal(false);
+                }}
+                aria-label="Close volunteer form"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
 
             {/* Validation error banner if submission fails */}
             {formError && (
@@ -1420,7 +1471,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                     <span className="font-bold text-slate-900 block">
                       Session Organiser (Front Desk Admin Access)
                     </span>
-                    <span className="text-slate-500">
+                    <span className="text-slate-600">
                       Grants Google Sign-In access to the Front Desk using their
                       email address.
                     </span>
@@ -1443,7 +1494,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
                     <span className="font-bold text-slate-900 block">
                       PAT Electrical Safety Trained
                     </span>
-                    <span className="text-slate-500">
+                    <span className="text-slate-600">
                       Authorises this volunteer to appear in the Tester Name
                       dropdown at the PAT Station.
                     </span>
@@ -1555,11 +1606,12 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               <div className="pt-2 flex gap-3">
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() => {
                     setIsRestoringVolunteer(false);
                     setShowFormModal(false);
                   }}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1579,36 +1631,49 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Modal: Alternative Channel Communications for Non-WhatsApp Volunteers (Approach C) */}
       {showAltCommsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <ModalBackdrop>
           <div
             ref={altCommsModalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="alt-comms-modal-title"
             tabIndex={-1}
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 my-8"
+            className="my-auto w-full max-w-lg rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-slate-200"
           >
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-              <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
-                <Mail className="h-5 w-5" />
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center flex-shrink-0">
+                  <Mail className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3
+                    id="alt-comms-modal-title"
+                    className="text-lg font-black text-slate-900"
+                  >
+                    Alternative Channel Communications ({nonWhatsAppVolunteers.length})
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Active volunteers who have not opted into the WhatsApp group
+                    and need key updates via email or SMS.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3
-                  id="alt-comms-modal-title"
-                  className="text-lg font-black text-slate-900"
-                >
-                  Alternative Channel Communications ({nonWhatsAppVolunteers.length})
-                </h3>
-                <p className="text-xs text-slate-600">
-                  Active volunteers who have not opted into the WhatsApp group
-                  and need key updates via email or SMS.
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAltCommsModal(false);
+                  setAltCommsCopyFeedback(null);
+                }}
+                aria-label="Close alternative communications dialog"
+                className="p-1.5 rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
             </div>
 
             {altCommsCopyFeedback && (
@@ -1712,7 +1777,7 @@ export const VolunteerRegisterPanel: React.FC<VolunteerRegisterPanelProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
     </div>
   );

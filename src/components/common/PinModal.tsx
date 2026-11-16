@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { KeyRound, X } from 'lucide-react';
 import { useRegisterUnsavedWork } from '../../context/UnsavedWorkContext';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
+import { ModalBackdrop } from './ModalBackdrop';
 
 export interface PinKeyAction {
   type: 'DIGIT' | 'BACKSPACE' | 'CLEAR' | 'SUBMIT' | 'CLOSE' | 'IGNORE';
@@ -166,14 +167,14 @@ export const PinModal: React.FC<PinModalProps> = ({
 
   return (
     // Full-screen translucent backdrop locking interaction with the underlying station view
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <ModalBackdrop>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="pin-modal-title"
         tabIndex={-1}
-        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200"
+        className="my-auto w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-200"
       >
         {/* Modal Header with key icon and optional close button */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -270,6 +271,6 @@ export const PinModal: React.FC<PinModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };

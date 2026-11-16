@@ -338,6 +338,7 @@ async function main(): Promise<void> {
       ref: db.collection('analytics').doc(aUpdate.sessionId),
       data: {
         volunteerCount: aUpdate.volunteerCount,
+        totalVolunteerHours: aUpdate.totalVolunteerHours,
       },
     });
   }

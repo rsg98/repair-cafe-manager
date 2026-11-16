@@ -451,6 +451,10 @@ describe('historicalIngestParser — End-to-End Ingestion Plan, Collisions, & GD
     expect(sessionPlan.session.id).toBe('20241109-yourspace');
     expect(sessionPlan.session.name).toBe('November 2024 - YourSpace');
     expect(sessionPlan.session.status).toBe('FINALIZED');
+    expect(sessionPlan.session.sessionDurationHours).toBe(3);
+    expect(sessionPlan.analytics.volunteerCount).toBe(3);
+    expect(sessionPlan.analytics.sessionDurationHours).toBe(3);
+    expect(sessionPlan.analytics.totalVolunteerHours).toBe(9);
     expect(sessionPlan.repairs).toHaveLength(2);
 
     const card101 = sessionPlan.repairs.find((r) => r.repairItem.cardNumber === 101)!;
